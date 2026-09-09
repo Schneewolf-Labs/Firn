@@ -35,6 +35,7 @@ add_executable(firn
   src/ui/AdjustmentLayer.cpp
   src/ui/ImageMenu.cpp
   src/ui/Toolbar.cpp
+  src/ui/Icons.cpp
   src/tools/Tools.cpp
   src/tools/VectorTools.cpp
   src/tools/DeformTools.cpp

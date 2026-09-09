@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "App.h"
+#include "Icons.h"
 #include "firn/vector.h"
 #include "imgui.h"
 
@@ -20,10 +21,18 @@ static void draw_tools(App& app) {
             last_cat = t.category();
             ImGui::SeparatorText(last_cat);
         }
-        char label[64];
+        char label[64], id[16];
         if (t.shortcut()) std::snprintf(label, sizeof(label), "%s (%s)", t.name(), t.shortcut());
         else std::snprintf(label, sizeof(label), "%s", t.name());
-        if (ImGui::Selectable(label, app.tool_index == static_cast<int>(i))) app.select_tool(static_cast<int>(i));
+        std::snprintf(id, sizeof(id), "##tool%zu", i);
+        // Icon at the left, drawn over the selectable's rect; the label follows it.
+        const float row = ImGui::GetTextLineHeight() + 4.0f;
+        if (ImGui::Selectable(id, app.tool_index == static_cast<int>(i), 0, ImVec2(0, row))) app.select_tool(static_cast<int>(i));
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", label);
+        const ImVec2 r0 = ImGui::GetItemRectMin();
+        const ImU32 col = ImGui::GetColorU32(ImGuiCol_Text);
+        draw_tool_icon(ImGui::GetWindowDrawList(), t.name(), ImVec2(r0.x + 3.0f, r0.y + 2.0f), row - 4.0f, col);
+        ImGui::GetWindowDrawList()->AddText(ImVec2(r0.x + row + 6.0f, r0.y + 2.0f), col, label);
     }
     ImGui::End();
 }
