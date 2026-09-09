@@ -145,7 +145,9 @@ python3 scripts/drive.py $WID ctrl:o type:grad.png key:Return   # dialogs too
 
 Needs `python3-xlib`, `xwininfo`, and ImageMagick `import`. Coordinates are
 window-relative. **Always run `python3 scripts/drive.py --kill` before
-launching and again when done** (it is `pkill -x firn`; never `pkill -f`,
-which matches your own shell). An instance left on the unsaved-changes prompt
-stays open on the user's desktop otherwise. Do not launch the app maximized;
+launching and again when done** (it is `pkill -9 -x firn`; never `pkill -f`,
+which matches your own shell). SIGTERM used to be turned into a quit request
+by SDL, leaving instances parked on the unsaved-changes prompt; the app now
+disables SDL's signal handlers and the helper uses SIGKILL, and it also kills
+the app if any step fails. Do not launch the app maximized;
 the user's screen is 3440 px wide.

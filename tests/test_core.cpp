@@ -1118,7 +1118,33 @@ static void test_composite_region_and_speed() {
                 std::chrono::duration<double, std::milli>(t1 - t0).count(), std::chrono::duration<double, std::milli>(t2 - t1).count());
 }
 
+static void test_photo_fixes() {
+    // Fade correction stretches a low-contrast pair and boosts saturation.
+    Image faded(2, 1);
+    faded.set(0, 0, {110, 100, 100, 255});
+    faded.set(1, 0, {150, 140, 140, 255});
+    adjust::fade_correction(faded, 100);
+    CHECK(faded.get(0, 0).r < 80 && faded.get(1, 0).r > 200 && faded.get(0, 0).g < faded.get(0, 0).r);
+    Image same(2, 1, {120, 120, 120, 255});
+    Image before = same;
+    adjust::fade_correction(same, 0);
+    CHECK(same.get(0, 0).r == before.get(0, 0).r);
+    // Red-eye: a red pupil turns dark grey; skin tones outside the circle and
+    // non-red pixels inside are untouched.
+    Image eye(20, 20, {220, 180, 160, 255});
+    for (int y = 6; y < 14; ++y) for (int x = 6; x < 14; ++x) eye.set(x, y, {230, 40, 40, 255});
+    eye.set(10, 10, {40, 200, 40, 255});
+    adjust::red_eye(eye, 10, 10, 5, 1.0f);
+    CHECK(eye.get(9, 9).r <= 60 && eye.get(9, 9).g == 40);
+    CHECK(eye.get(10, 10).g == 200 && eye.get(10, 10).r == 40);
+    CHECK(eye.get(2, 2).r == 220);
+    Image skin(20, 20, {220, 180, 160, 255});
+    adjust::red_eye(skin, 10, 10, 5, 1.0f);
+    CHECK(skin.get(10, 10).r > 200);  // mild redness of skin barely changes
+}
+
 int main() {
+    test_photo_fixes();
     test_composite_region_and_speed();
     test_effects_round3();
     test_square_brush();

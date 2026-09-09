@@ -160,7 +160,7 @@ void App::draw_adjust_dialogs() {
                                     "Posterize", "Solarize", "Unsharp Mask", "Median", "Motion Blur", "Mosaic",
                                     "Add Noise", "Drop Shadow", "Color Balance", "Sepia Toning", "Hue Map", "Wave",
                                     "Pinch", "Twirl", "Buttonize", "Inner Bevel", "Cutout", "Ripple", "Spherize",
-                                    "Lens Distortion", "Halftone", "Chrome", "Outer Bevel"};
+                                    "Lens Distortion", "Halftone", "Chrome", "Outer Bevel", "Fade Correction"};
     if (open_adjust != Adj::None) {
         if (doc && active_layer() >= 0) ImGui::OpenPopup(kTitles[static_cast<int>(open_adjust)]);
         open_adjust = Adj::None;
@@ -180,8 +180,19 @@ void App::draw_adjust_dialogs() {
         [&](Image& img) { adjust::apply_lut(img, adjust::curve_lut(curve_points)); });
 
     adjust_modal(*this, "Gamma Correction",
-        [&] { return ImGui::SliderFloat("Gamma", &gamma_value, 0.1f, 5.0f, "%.2f", ImGuiSliderFlags_Logarithmic); },
-        [&](Image& img) { adjust::apply_lut(img, adjust::gamma_lut(gamma_value)); });
+        [&] {
+            bool c = ImGui::Checkbox("Link channels", &gamma_link);
+            static const char* names[3] = {"Red", "Green", "Blue"};
+            for (int i = 0; i < 3; ++i) {
+                if (ImGui::SliderFloat(gamma_link ? (i == 0 ? "Gamma" : "##g") : names[i], &gamma_rgb[i], 0.1f, 5.0f, "%.2f", ImGuiSliderFlags_Logarithmic)) {
+                    if (gamma_link) gamma_rgb[0] = gamma_rgb[1] = gamma_rgb[2] = gamma_rgb[i];
+                    c = true;
+                }
+                if (gamma_link) break;
+            }
+            return c;
+        },
+        [&](Image& img) { adjust::apply_luts(img, adjust::gamma_lut(gamma_rgb[0]), adjust::gamma_lut(gamma_rgb[1]), adjust::gamma_lut(gamma_rgb[2])); });
 
     adjust_modal(*this, "Levels",
         [&] {
@@ -461,4 +472,8 @@ void App::draw_adjust_dialogs() {
             effects::outer_bevel(img, doc && doc->has_selection() ? doc->selection().data() : nullptr, obevel_width, obevel_angle, obevel_depth,
                                  {c8(obevel_color[0]), c8(obevel_color[1]), c8(obevel_color[2]), 255});
         });
+
+    adjust_modal(*this, "Fade Correction",
+        [&] { return ImGui::SliderInt("Amount of correction", &fade_amount, 1, 100); },
+        [&](Image& img) { adjust::fade_correction(img, fade_amount); });
 }

@@ -253,6 +253,41 @@ void hue_map(Image& img, const HueMap& m) {
     }
 }
 
+void fade_correction(Image& img, int amount) {
+    const float t = std::clamp(amount, 0, 100) / 100.0f;
+    // Stretch the luma histogram (ignoring 0.5% outliers) and boost saturation.
+    Image stretched = img;
+    auto_contrast(stretched, 0.5f);
+    uint8_t* p = img.data();
+    const uint8_t* q = stretched.data();
+    for (size_t i = 0; i < img.size_bytes(); i += 4) {
+        uint8_t r = clamp8(p[i] + (q[i] - p[i]) * t), g = clamp8(p[i + 1] + (q[i + 1] - p[i + 1]) * t), b = clamp8(p[i + 2] + (q[i + 2] - p[i + 2]) * t);
+        HSL c = rgb_to_hsl(r, g, b);
+        c.s = c.s + (1 - c.s) * 0.35f * t;
+        hsl_to_rgb(c, p + i, p + i + 1, p + i + 2);
+    }
+}
+
+void red_eye(Image& img, float cx, float cy, float radius, float strength) {
+    const int w = img.width(), h = img.height();
+    const float k = std::clamp(strength, 0.0f, 1.0f);
+    const int x0 = std::max(0, static_cast<int>(cx - radius - 1)), x1 = std::min(w, static_cast<int>(cx + radius + 2));
+    const int y0 = std::max(0, static_cast<int>(cy - radius - 1)), y1 = std::min(h, static_cast<int>(cy + radius + 2));
+    for (int y = y0; y < y1; ++y)
+        for (int x = x0; x < x1; ++x) {
+            const float d = std::hypot(x + 0.5f - cx, y + 0.5f - cy);
+            if (d > radius) continue;
+            uint8_t* p = img.data() + (static_cast<size_t>(y) * w + x) * 4;
+            const int r = p[0], g = p[1], b = p[2];
+            const float redness = (r - std::max(g, b)) / 255.0f;  // how much red exceeds the other channels
+            if (redness <= 0.2f) continue;                          // skin is only mildly red-dominant
+            const float edge = std::clamp((radius - d), 0.0f, 1.0f);           // soft rim
+            const float amount = std::min(1.0f, (redness - 0.2f) * 2.5f) * k * edge;
+            const int target = (g + b) / 2;
+            p[0] = clamp8(r + (target - r) * amount);
+        }
+}
+
 std::array<int, 256> histogram_luma(const Image& img) {
     std::array<int, 256> h{};
     const uint8_t* p = img.data();

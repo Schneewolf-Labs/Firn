@@ -448,6 +448,39 @@ private:
     float last_x_ = 0, last_y_ = 0;
 };
 
+// --- Red-eye Removal ---------------------------------------------------
+
+class RedEyeTool : public Tool {
+public:
+    const char* category() const override { return "Retouch"; }
+    const char* name() const override { return "Red-eye Removal"; }
+    void on_press(App& app, const ToolInput& in, ImGuiMouseButton) override {
+        if (!in.inside || !app.active_is_raster()) return;
+        const size_t layer = app.active_layer();
+        Image& target = app.paint_pixels(layer);
+        Image before = target;
+        adjust::red_eye(target, in.img_x, in.img_y, app.brush.size * 0.5f, app.redeye_strength);
+        const int r = static_cast<int>(app.brush.size * 0.5f) + 2;
+        const raster::Rect rect{static_cast<int>(in.img_x) - r, static_cast<int>(in.img_y) - r, static_cast<int>(in.img_x) + r, static_cast<int>(in.img_y) + r};
+        app.paint_touched(layer, &rect);
+        app.commit_pixels(layer, name(), std::move(before), target);
+    }
+    void draw_overlay(App& app, const ToolInput& in) override {
+        const float r = app.brush.size * 0.5f * in.zoom;
+        in.dl->AddCircle(in.screen, r, IM_COL32(255, 60, 60, 220), 0, 1.5f);
+    }
+    void draw_options(App& app) override {
+        ImGui::SetNextItemWidth(140);
+        ImGui::SliderFloat("Size", &app.brush.size, 2.0f, 200.0f, "%.0f", ImGuiSliderFlags_Logarithmic);
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(100);
+        float st = app.redeye_strength * 100.0f;
+        if (ImGui::SliderFloat("Strength", &st, 10.0f, 100.0f, "%.0f%%")) app.redeye_strength = st / 100.0f;
+        ImGui::SameLine();
+        ImGui::TextDisabled("Click on the pupil.");
+    }
+};
+
 // --- Move --------------------------------------------------------------
 // Left drag moves the active layer's pixels; right drag moves the selection
 // marquee, as the original's Mover does.
@@ -933,6 +966,7 @@ std::vector<std::unique_ptr<Tool>> make_default_tools() {
     t.push_back(std::make_unique<BrushTool>(BrushTool::Kind::Sharpen));
     t.push_back(std::make_unique<BrushTool>(BrushTool::Kind::Saturation));
     t.push_back(std::make_unique<BrushTool>(BrushTool::Kind::Hue));
+    t.push_back(std::make_unique<RedEyeTool>());
     t.push_back(std::make_unique<BrushTool>(BrushTool::Kind::Clone));
     t.push_back(std::make_unique<BrushTool>(BrushTool::Kind::ColorReplacer));
     t.push_back(std::make_unique<BrushTool>(BrushTool::Kind::Eraser));

@@ -35,7 +35,7 @@ what to work on next.
 - [x] Auto contrast, histogram equalize/stretch
 - [x] Brightness/Contrast and the blurs move onto the preview framework
 - [x] Color Balance (shadows/midtones/highlights), Hue Map, Sepia Toning
-- [ ] Gamma per channel, Red-eye removal, Fade Correction
+- [x] Gamma per channel, Red-eye removal (tool), Fade Correction
 
 ## 4. Effects
 

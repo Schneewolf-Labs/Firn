@@ -66,6 +66,14 @@ struct HueMap {
 };
 void hue_map(Image& img, const HueMap& m);
 
+// Fade Correction: restores contrast and saturation lost in faded prints.
+// `amount` 1..100.
+void fade_correction(Image& img, int amount);
+
+// Red-eye: within the circle (cx, cy, radius), pixels whose red dominates
+// are pulled to the average of green and blue; `strength` 0..1.
+void red_eye(Image& img, float cx, float cy, float radius, float strength);
+
 // Histogram helpers and auto adjustments.
 std::array<int, 256> histogram_luma(const Image& img);
 void histogram_stretch(Image& img);                       // per-channel min/max to full range

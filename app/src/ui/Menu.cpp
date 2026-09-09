@@ -138,6 +138,11 @@ void App::draw_menu() {
             if (ImGui::MenuItem("Soften More")) run(std::make_unique<AdjustCommand>(layer, "Soften More", effects::soften_more));
             ImGui::EndMenu();
         }
+        if (ImGui::BeginMenu("Photo Fix", has_layer)) {
+            if (ImGui::MenuItem("Fade Correction...")) open_adjust = Adj::FadeCorrection;
+            ImGui::TextDisabled("Red-eye: use the Red-eye Removal tool.");
+            ImGui::EndMenu();
+        }
         ImGui::Separator();
         if (ImGui::MenuItem("Automatic Contrast Enhancement", nullptr, false, has_layer))
             run(std::make_unique<AdjustCommand>(layer, "Automatic Contrast Enhancement", [](Image& img) { adjust::auto_contrast(img); }));

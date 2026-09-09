@@ -52,6 +52,10 @@ int main(int argc, char** argv) {
 #ifdef SDL_MAIN_HANDLED
     SDL_SetMainReady();
 #endif
+    // Leave SIGINT/SIGTERM to the OS: SDL would otherwise convert them into a
+    // quit request, and a modified document would sit on the unsaved-changes
+    // prompt instead of the process ending.
+    SDL_SetHint(SDL_HINT_NO_SIGNAL_HANDLERS, "1");
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) != 0) {
         std::fprintf(stderr, "SDL_Init: %s\n", SDL_GetError());
         return 1;
