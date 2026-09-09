@@ -116,7 +116,7 @@ Rect Stroke::render(Image& dst) {
                     blend_over(dst, x, y, clone_->get(sx, sy), m);
             } else if (mode_ == StrokeMode::Filter) {
                 const Color before{b[0], b[1], b[2], b[3]};
-                const Color after = filter_ ? filter_(before) : before;
+                const Color after = area_filter_ ? area_filter_(base_, x, y) : filter_ ? filter_(before) : before;
                 d[0] = static_cast<uint8_t>(b[0] + (after.r - b[0]) * m + 0.5f);
                 d[1] = static_cast<uint8_t>(b[1] + (after.g - b[1]) * m + 0.5f);
                 d[2] = static_cast<uint8_t>(b[2] + (after.b - b[2]) * m + 0.5f);

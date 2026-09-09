@@ -52,6 +52,8 @@ public:
     // takes src(x + ox, y + oy).
     void set_clone_source(const Image* src, int ox, int oy) { clone_ = src; clone_ox_ = ox; clone_oy_ = oy; }
     void set_filter(std::function<Color(Color)> f) { filter_ = std::move(f); }
+    // Filter with access to the untouched base image around the pixel.
+    void set_area_filter(std::function<Color(const Image&, int, int)> f) { area_filter_ = std::move(f); }
 
     // Write everything touched since the last render into `dst`, which must
     // be a copy of `base` (or the previous render target). Returns the rect
@@ -70,6 +72,7 @@ private:
     const Image* clone_ = nullptr;
     int clone_ox_ = 0, clone_oy_ = 0;
     std::function<Color(Color)> filter_;
+    std::function<Color(const Image&, int, int)> area_filter_;
     std::vector<float> mask_;
     Rect pending_;
     bool has_last_ = false;

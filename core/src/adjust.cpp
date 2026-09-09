@@ -189,6 +189,70 @@ void channel_mixer(Image& img, const ChannelMix& mx) {
     }
 }
 
+void color_balance(Image& img, const ColorBalance& cb) {
+    // Transfer weights per input level (GIMP's classic tables).
+    float shadows_w[256], midtones_w[256], highlights_w[256];
+    for (int i = 0; i < 256; ++i) {
+        shadows_w[i] = 1.075f - 1.0f / (i / 16.0f + 1.0f);
+        midtones_w[i] = 0.667f * (1.0f - ((i - 127.0f) / 127.0f) * ((i - 127.0f) / 127.0f));
+        highlights_w[i] = 1.075f - 1.0f / ((255 - i) / 16.0f + 1.0f);
+    }
+    Lut luts[3];
+    for (int c = 0; c < 3; ++c) {
+        for (int i = 0; i < 256; ++i) {
+            float v = static_cast<float>(i);
+            // Positive values push towards the channel; negative pull away.
+            v += cb.shadows[c] * (cb.shadows[c] > 0 ? shadows_w[i] : highlights_w[i]);
+            v += cb.midtones[c] * midtones_w[i];
+            v += cb.highlights[c] * (cb.highlights[c] > 0 ? highlights_w[i] : shadows_w[i]);
+            luts[c][i] = clamp8(v);
+        }
+    }
+    uint8_t* p = img.data();
+    for (size_t i = 0; i < img.size_bytes(); i += 4) {
+        const uint8_t r = luts[0][p[i]], g = luts[1][p[i + 1]], b = luts[2][p[i + 2]];
+        if (cb.preserve_luminosity) {
+            HSL before = rgb_to_hsl(p[i], p[i + 1], p[i + 2]);
+            HSL after = rgb_to_hsl(r, g, b);
+            after.l = before.l;
+            hsl_to_rgb(after, p + i, p + i + 1, p + i + 2);
+        } else {
+            p[i] = r; p[i + 1] = g; p[i + 2] = b;
+        }
+    }
+}
+
+void sepia(Image& img, int amount) {
+    const float t = std::clamp(amount, 0, 100) / 100.0f;
+    uint8_t* p = img.data();
+    for (size_t i = 0; i < img.size_bytes(); i += 4) {
+        const float y = luma(p + i);
+        const float sr = std::min(255.0f, y * 1.15f), sg = y * 0.95f, sb = y * 0.72f;
+        p[i] = clamp8(p[i] + (sr - p[i]) * t);
+        p[i + 1] = clamp8(p[i + 1] + (sg - p[i + 1]) * t);
+        p[i + 2] = clamp8(p[i + 2] + (sb - p[i + 2]) * t);
+    }
+}
+
+void hue_map(Image& img, const HueMap& m) {
+    uint8_t* p = img.data();
+    const float sat = std::clamp(m.saturation, -100, 100) / 100.0f;
+    const float lig = std::clamp(m.lightness, -100, 100) / 100.0f;
+    for (size_t i = 0; i < img.size_bytes(); i += 4) {
+        HSL c = rgb_to_hsl(p[i], p[i + 1], p[i + 2]);
+        if (c.s > 0.0f) {
+            // Interpolate the shift between the two nearest band centres (0, 36, 72, ...).
+            const float pos = c.h / 36.0f;
+            const int b0 = static_cast<int>(std::floor(pos)) % 10, b1 = (b0 + 1) % 10;
+            const float t = pos - std::floor(pos);
+            c.h += m.shift[b0] * (1 - t) + m.shift[b1] * t;
+        }
+        c.s = sat >= 0 ? c.s + (1 - c.s) * sat : c.s * (1 + sat);
+        c.l = lig >= 0 ? c.l + (1 - c.l) * lig : c.l * (1 + lig);
+        hsl_to_rgb(c, p + i, p + i + 1, p + i + 2);
+    }
+}
+
 std::array<int, 256> histogram_luma(const Image& img) {
     std::array<int, 256> h{};
     const uint8_t* p = img.data();

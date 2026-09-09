@@ -46,6 +46,26 @@ struct ChannelMix {
 };
 void channel_mixer(Image& img, const ChannelMix& m);
 
+// Color Balance: per tonal range, cyan-red / magenta-green / yellow-blue in
+// -100..100. Weights follow the classic shadows/midtones/highlights curves.
+struct ColorBalance {
+    int shadows[3] = {0, 0, 0}, midtones[3] = {0, 0, 0}, highlights[3] = {0, 0, 0};
+    bool preserve_luminosity = true;
+};
+void color_balance(Image& img, const ColorBalance& cb);
+
+// Sepia Toning: `amount` 0..100 blends from the original towards a sepia tint.
+void sepia(Image& img, int amount);
+
+// Hue Map: ten 36-degree bands starting at red; each band's hue is shifted
+// by `shift[band]` degrees (-180..180), interpolated between band centres.
+// Saturation and lightness shifts apply to every pixel (-100..100).
+struct HueMap {
+    int shift[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+    int saturation = 0, lightness = 0;
+};
+void hue_map(Image& img, const HueMap& m);
+
 // Histogram helpers and auto adjustments.
 std::array<int, 256> histogram_luma(const Image& img);
 void histogram_stretch(Image& img);                       // per-channel min/max to full range

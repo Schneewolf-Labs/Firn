@@ -1,7 +1,9 @@
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 #include <functional>
 #include <memory>
+#include <vector>
 
 #include "App.h"
 #include "firn/adjust.h"
@@ -75,7 +77,7 @@ private:
 
 class BrushTool : public Tool {
 public:
-    enum class Kind { Paint, Eraser, Airbrush, Clone, LightenDarken, Saturation, Hue, ColorReplacer };
+    enum class Kind { Paint, Eraser, Airbrush, Clone, LightenDarken, DodgeBurn, Saturation, Hue, ColorReplacer, Soften, Sharpen };
     explicit BrushTool(Kind k) : kind_(k) {}
 
     const char* name() const override {
@@ -85,6 +87,9 @@ public:
             case Kind::Airbrush: return "Airbrush";
             case Kind::Clone: return "Clone Brush";
             case Kind::LightenDarken: return "Lighten/Darken";
+            case Kind::DodgeBurn: return "Dodge/Burn";
+            case Kind::Soften: return "Soften Brush";
+            case Kind::Sharpen: return "Sharpen Brush";
             case Kind::Saturation: return "Saturation Up/Down";
             case Kind::Hue: return "Hue Up/Down";
             default: return "Color Replacer";
@@ -115,6 +120,7 @@ public:
         Color color = to_color(b == ImGuiMouseButton_Left ? app.fg_color : app.bg_color);
         raster::StrokeMode mode = raster::StrokeMode::Paint;
         std::function<Color(Color)> filter;
+        std::function<Color(const Image&, int, int)> area_filter;
         const float amount = app.retouch_amount / 100.0f;
         const bool primary = b == ImGuiMouseButton_Left;
 
@@ -142,6 +148,14 @@ public:
                     return c;
                 };
                 break;
+            case Kind::DodgeBurn:
+                mode = raster::StrokeMode::Filter;
+                filter = [amount, primary](Color c) {
+                    const float k = primary ? 1.0f + amount : 1.0f - amount;
+                    auto m = [&](uint8_t v) { return static_cast<uint8_t>(std::clamp(v * k, 0.0f, 255.0f) + 0.5f); };
+                    return Color{m(c.r), m(c.g), m(c.b), c.a};
+                };
+                break;
             case Kind::Saturation:
                 mode = raster::StrokeMode::Filter;
                 filter = [amount, primary](Color c) {
@@ -151,6 +165,29 @@ public:
                     return c;
                 };
                 break;
+            case Kind::Soften:
+            case Kind::Sharpen: {
+                mode = raster::StrokeMode::Filter;
+                const bool soften = kind_ == Kind::Soften;
+                area_filter = [amount, soften](const Image& im, int x, int y) {
+                    float acc[3] = {0, 0, 0};
+                    int n = 0;
+                    for (int j = -1; j <= 1; ++j)
+                        for (int i = -1; i <= 1; ++i) {
+                            const int px = std::clamp(x + i, 0, im.width() - 1), py = std::clamp(y + j, 0, im.height() - 1);
+                            const Color s = im.get(px, py);
+                            acc[0] += s.r; acc[1] += s.g; acc[2] += s.b; ++n;
+                        }
+                    const Color c = im.get(x, y);
+                    auto mix = [&](uint8_t v, float avg) {
+                        // Soften moves towards the neighbourhood mean; sharpen away from it.
+                        const float out = soften ? v + (avg - v) * amount : v + (v - avg) * amount * 2.0f;
+                        return static_cast<uint8_t>(std::clamp(out, 0.0f, 255.0f) + 0.5f);
+                    };
+                    return Color{mix(c.r, acc[0] / n), mix(c.g, acc[1] / n), mix(c.b, acc[2] / n), c.a};
+                };
+                break;
+            }
             case Kind::Hue:
                 mode = raster::StrokeMode::Filter;
                 filter = [amount, primary](Color c) {
@@ -178,6 +215,7 @@ public:
         stroke_ = std::make_unique<raster::Stroke>(L.pixels, brush, color, mode, &app.doc->selection());
         if (mode == raster::StrokeMode::Clone) stroke_->set_clone_source(&clone_src_, off_x_, off_y_);
         if (filter) stroke_->set_filter(std::move(filter));
+        if (area_filter) stroke_->set_area_filter(std::move(area_filter));
         last_x_ = in.img_x; last_y_ = in.img_y;
         stroke_->add_point(in.img_x, in.img_y);
         flush(app);
@@ -250,13 +288,15 @@ public:
                 ImGui::SameLine();
                 ImGui::TextDisabled(has_src_ ? "Right-click to move the source." : "Right-click to set the source.");
                 break;
-            case Kind::LightenDarken: case Kind::Saturation: case Kind::Hue:
+            case Kind::LightenDarken: case Kind::DodgeBurn: case Kind::Saturation: case Kind::Hue: case Kind::Soften: case Kind::Sharpen:
                 ImGui::SameLine();
                 ImGui::SetNextItemWidth(100);
                 ImGui::SliderInt("Amount", &app.retouch_amount, 1, 100, "%d%%");
                 ImGui::SameLine();
                 ImGui::TextDisabled(kind_ == Kind::LightenDarken ? "Left lightens, right darkens." :
-                                    kind_ == Kind::Saturation ? "Left saturates, right desaturates." : "Left shifts hue up, right down.");
+                                    kind_ == Kind::DodgeBurn ? "Left dodges (lightens), right burns." :
+                                    kind_ == Kind::Saturation ? "Left saturates, right desaturates." :
+                                    kind_ == Kind::Hue ? "Left shifts hue up, right down." : "Either button.");
                 break;
             case Kind::ColorReplacer:
                 ImGui::SameLine();
@@ -283,6 +323,109 @@ private:
     float src_x_ = 0, src_y_ = 0;
     int off_x_ = 0, off_y_ = 0;
     Image clone_src_;
+};
+
+// --- Smudge / Push -----------------------------------------------------
+// Carries the pixels under the brush along the stroke: each stamp blends
+// the previous stamp's pixels over the current ones (Smudge), or copies
+// them without fading (Push, right button).
+
+class SmudgeTool : public Tool {
+public:
+    const char* name() const override { return "Smudge"; }
+    const char* shortcut() const override { return "U"; }
+    void on_press(App& app, const ToolInput& in, ImGuiMouseButton b) override {
+        if (!app.doc || app.active_layer() < 0) return;
+        layer_ = app.active_layer();
+        before_ = app.doc->layer(layer_).pixels;
+        push_ = b == ImGuiMouseButton_Right;
+        grab(app, in.img_x, in.img_y);
+        last_x_ = in.img_x; last_y_ = in.img_y;
+        active_ = true;
+    }
+    void on_drag(App& app, const ToolInput& in, ImGuiMouseButton) override {
+        if (!active_) return;
+        const float spacing = std::max(app.brush.size * 0.15f, 1.0f);
+        const float dx = in.img_x - last_x_, dy = in.img_y - last_y_;
+        const float len = std::hypot(dx, dy);
+        for (float t = spacing; t <= len; t += spacing) stamp(app, last_x_ + dx * t / len, last_y_ + dy * t / len);
+        if (len >= spacing) { last_x_ = in.img_x; last_y_ = in.img_y; }
+        app.doc->touch();
+    }
+    void on_release(App& app, const ToolInput&, ImGuiMouseButton) override {
+        if (!active_) return;
+        active_ = false;
+        app.commit(std::make_unique<LayerSnapshotCommand>(layer_, push_ ? "Push" : "Smudge", before_, app.doc->layer(layer_).pixels));
+    }
+    void cancel(App& app) override {
+        if (active_ && app.doc && layer_ < app.doc->layer_count()) { app.doc->layer(layer_).pixels = before_; app.doc->touch(); }
+        active_ = false;
+    }
+    void draw_overlay(App& app, const ToolInput& in) override {
+        const float r = app.brush.size * 0.5f * in.zoom;
+        in.dl->AddCircle(in.screen, r, IM_COL32(0, 0, 0, 200), 0, 1.0f);
+        in.dl->AddCircle(in.screen, r + 1.0f, IM_COL32(255, 255, 255, 160), 0, 1.0f);
+    }
+    void draw_options(App& app) override {
+        ImGui::SetNextItemWidth(140);
+        ImGui::SliderFloat("Size", &app.brush.size, 1.0f, 500.0f, "%.0f", ImGuiSliderFlags_Logarithmic);
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(100);
+        float hard = app.brush.hardness * 100.0f;
+        if (ImGui::SliderFloat("Hardness", &hard, 0.0f, 100.0f, "%.0f")) app.brush.hardness = hard / 100.0f;
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(100);
+        ImGui::SliderInt("Amount", &app.retouch_amount, 1, 100, "%d%%");
+        ImGui::SameLine();
+        ImGui::TextDisabled("Left smudges, right pushes.");
+    }
+
+private:
+    float coverage(App& app, float dx, float dy) const {
+        const float r = std::max(app.brush.size * 0.5f, 0.5f), inner = r * app.brush.hardness;
+        const float d = std::hypot(dx, dy);
+        if (d <= inner) return 1.0f;
+        if (app.brush.hardness >= 1.0f || r - inner < 1.0f) return std::clamp(r + 0.5f - d, 0.0f, 1.0f);
+        return std::clamp((r - d) / (r - inner), 0.0f, 1.0f);
+    }
+    void grab(App& app, float cx, float cy) {
+        const Image& px = app.doc->layer(layer_).pixels;
+        const int r = static_cast<int>(std::ceil(app.brush.size * 0.5f)) + 1;
+        rad_ = r;
+        buf_.assign(static_cast<size_t>(2 * r + 1) * (2 * r + 1) * 4, 0);
+        const int ox = static_cast<int>(std::floor(cx)) - r, oy = static_cast<int>(std::floor(cy)) - r;
+        for (int y = 0; y <= 2 * r; ++y)
+            for (int x = 0; x <= 2 * r; ++x) {
+                const int sx = ox + x, sy = oy + y;
+                if (sx < 0 || sy < 0 || sx >= px.width() || sy >= px.height()) continue;
+                std::memcpy(&buf_[(static_cast<size_t>(y) * (2 * r + 1) + x) * 4], px.data() + (static_cast<size_t>(sy) * px.width() + sx) * 4, 4);
+            }
+    }
+    void stamp(App& app, float cx, float cy) {
+        Image& px = app.doc->layer(layer_).pixels;
+        const int r = rad_, W = 2 * r + 1;
+        const int ox = static_cast<int>(std::floor(cx)) - r, oy = static_cast<int>(std::floor(cy)) - r;
+        const float strength = push_ ? 1.0f : app.retouch_amount / 100.0f;
+        const Mask& clip = app.doc->selection();
+        for (int y = 0; y < W; ++y)
+            for (int x = 0; x < W; ++x) {
+                const int dx = ox + x, dy = oy + y;
+                if (dx < 0 || dy < 0 || dx >= px.width() || dy >= px.height()) continue;
+                float cov = coverage(app, (dx + 0.5f) - cx, (dy + 0.5f) - cy) * strength;
+                if (!clip.empty()) cov *= clip.at(dx, dy) / 255.0f;
+                if (cov <= 0.0f) continue;
+                uint8_t* d = px.data() + (static_cast<size_t>(dy) * px.width() + dx) * 4;
+                const uint8_t* s = &buf_[(static_cast<size_t>(y) * W + x) * 4];
+                for (int c = 0; c < 4; ++c) d[c] = static_cast<uint8_t>(d[c] + (s[c] - d[c]) * cov + 0.5f);
+            }
+        grab(app, cx, cy);
+    }
+    bool active_ = false, push_ = false;
+    size_t layer_ = 0;
+    Image before_;
+    std::vector<uint8_t> buf_;
+    int rad_ = 0;
+    float last_x_ = 0, last_y_ = 0;
 };
 
 // --- Move --------------------------------------------------------------
@@ -739,6 +882,10 @@ std::vector<std::unique_ptr<Tool>> make_default_tools() {
     t.push_back(std::make_unique<BrushTool>(BrushTool::Kind::Eraser));
     t.push_back(std::make_unique<BrushTool>(BrushTool::Kind::Clone));
     t.push_back(std::make_unique<BrushTool>(BrushTool::Kind::LightenDarken));
+    t.push_back(std::make_unique<BrushTool>(BrushTool::Kind::DodgeBurn));
+    t.push_back(std::make_unique<SmudgeTool>());
+    t.push_back(std::make_unique<BrushTool>(BrushTool::Kind::Soften));
+    t.push_back(std::make_unique<BrushTool>(BrushTool::Kind::Sharpen));
     t.push_back(std::make_unique<BrushTool>(BrushTool::Kind::Saturation));
     t.push_back(std::make_unique<BrushTool>(BrushTool::Kind::Hue));
     t.push_back(std::make_unique<BrushTool>(BrushTool::Kind::ColorReplacer));

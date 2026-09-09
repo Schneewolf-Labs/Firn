@@ -158,7 +158,7 @@ void App::draw_adjust_dialogs() {
     static const char* kTitles[] = {nullptr, "Brightness/Contrast", "Curves", "Gamma Correction", "Levels", "Threshold",
                                     "Channel Mixer", "Colorize", "Hue/Saturation/Lightness", "Average", "Gaussian Blur",
                                     "Posterize", "Solarize", "Unsharp Mask", "Median", "Motion Blur", "Mosaic",
-                                    "Add Noise", "Drop Shadow"};
+                                    "Add Noise", "Drop Shadow", "Color Balance", "Sepia Toning", "Hue Map"};
     if (open_adjust != Adj::None) {
         if (doc && active_layer() >= 0) ImGui::OpenPopup(kTitles[static_cast<int>(open_adjust)]);
         open_adjust = Adj::None;
@@ -305,4 +305,42 @@ void App::draw_adjust_dialogs() {
             auto c8 = [](float f) { return static_cast<uint8_t>(f * 255.0f + 0.5f); };
             effects::drop_shadow(img, shadow_x, shadow_y, shadow_opacity, shadow_blur, {c8(shadow_color[0]), c8(shadow_color[1]), c8(shadow_color[2]), 255});
         });
+
+    adjust_modal(*this, "Color Balance",
+        [&] {
+            bool c = false;
+            ImGui::RadioButton("Shadows", &cb_range, 0); ImGui::SameLine();
+            ImGui::RadioButton("Midtones", &cb_range, 1); ImGui::SameLine();
+            ImGui::RadioButton("Highlights", &cb_range, 2);
+            int* v = cb_range == 0 ? color_balance.shadows : cb_range == 1 ? color_balance.midtones : color_balance.highlights;
+            c |= ImGui::SliderInt("Cyan - Red", &v[0], -100, 100);
+            c |= ImGui::SliderInt("Magenta - Green", &v[1], -100, 100);
+            c |= ImGui::SliderInt("Yellow - Blue", &v[2], -100, 100);
+            c |= ImGui::Checkbox("Preserve luminosity", &color_balance.preserve_luminosity);
+            if (ImGui::SmallButton("Reset")) { color_balance = adjust::ColorBalance{}; c = true; }
+            return c;
+        },
+        [&](Image& img) { adjust::color_balance(img, color_balance); });
+
+    adjust_modal(*this, "Sepia Toning",
+        [&] { return ImGui::SliderInt("Amount to age", &sepia_amount, 1, 100); },
+        [&](Image& img) { adjust::sepia(img, sepia_amount); });
+
+    adjust_modal(*this, "Hue Map",
+        [&] {
+            bool c = false;
+            static const char* bands[10] = {"Red", "Orange", "Yellow", "Chartreuse", "Green", "Spring", "Cyan", "Azure", "Blue", "Magenta"};
+            for (int i = 0; i < 10; ++i) {
+                ImGui::PushID(i);
+                ImGui::SetNextItemWidth(220);
+                c |= ImGui::SliderInt(bands[i], &hue_map_params.shift[i], -180, 180);
+                ImGui::PopID();
+            }
+            ImGui::Separator();
+            c |= ImGui::SliderInt("Saturation shift", &hue_map_params.saturation, -100, 100);
+            c |= ImGui::SliderInt("Lightness shift", &hue_map_params.lightness, -100, 100);
+            if (ImGui::SmallButton("Reset")) { hue_map_params = adjust::HueMap{}; c = true; }
+            return c;
+        },
+        [&](Image& img) { adjust::hue_map(img, hue_map_params); });
 }

@@ -34,7 +34,8 @@ what to work on next.
 - [x] Posterize, Solarize, Threshold, Channel Mixer
 - [x] Auto contrast, histogram equalize/stretch
 - [x] Brightness/Contrast and the blurs move onto the preview framework
-- [ ] Gamma per channel, Color Balance (shadows/midtones/highlights), Hue Map
+- [x] Color Balance (shadows/midtones/highlights), Hue Map, Sepia Toning
+- [ ] Gamma per channel, Red-eye removal, Fade Correction
 
 ## 4. Effects
 
@@ -48,7 +49,7 @@ what to work on next.
 
 - [x] Move tool (layer offset), Clone brush
 - [x] Airbrush, Lighten/Darken, Saturation, Hue, Color Replacer
-- [ ] Smudge / Push, Dodge / Burn, Soften / Sharpen brushes
+- [x] Smudge / Push, Dodge / Burn, Soften / Sharpen brushes
 - [ ] Brush shapes and stamp textures
 
 ## 6. Text and shapes

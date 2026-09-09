@@ -826,7 +826,47 @@ static void test_text_and_polyline() {
     CHECK(text::Font::load("/nonexistent.ttf") == nullptr);
 }
 
+static void test_adjust_round2() {
+    // Color balance: midtone red pushes a grey towards red; preserve keeps lightness.
+    Image g(1, 1, {128, 128, 128, 255});
+    adjust::ColorBalance cb;
+    cb.midtones[0] = 60;
+    adjust::color_balance(g, cb);
+    Color c = g.get(0, 0);
+    CHECK(c.r > c.g && c.g == c.b);
+    adjust::HSL before = adjust::rgb_to_hsl(128, 128, 128), after = adjust::rgb_to_hsl(c.r, c.g, c.b);
+    CHECK(std::abs(before.l - after.l) < 0.02f);
+    Image g2(1, 1, {128, 128, 128, 255});
+    cb.preserve_luminosity = false;
+    adjust::color_balance(g2, cb);
+    CHECK(g2.get(0, 0).r > 128 && g2.get(0, 0).g == 128);
+    // Sepia at 100 tints, at 0 is identity.
+    Image s0(1, 1, {50, 100, 150, 255}), s1 = s0;
+    adjust::sepia(s0, 0);
+    adjust::sepia(s1, 100);
+    CHECK(s0.get(0, 0).b == 150 && s1.get(0, 0).r > s1.get(0, 0).b);
+    // Hue map: shifting the red band by 120 turns pure red green; blue untouched.
+    Image hm(2, 1);
+    hm.set(0, 0, {255, 0, 0, 255});
+    hm.set(1, 0, {0, 0, 255, 255});
+    adjust::HueMap map;
+    map.shift[0] = 120;
+    adjust::hue_map(hm, map);
+    CHECK(hm.get(0, 0).g == 255 && hm.get(0, 0).r == 0 && hm.get(1, 0).b == 255);
+    // Area filter sees the base image.
+    Image base(3, 1, {0, 0, 0, 255});
+    base.set(2, 0, {255, 255, 255, 255});
+    raster::Brush b; b.size = 1.5f; b.hardness = 1;
+    raster::Stroke st(base, b, {}, raster::StrokeMode::Filter);
+    st.set_area_filter([](const Image& im, int x, int) { return im.get(std::min(x + 1, im.width() - 1), 0); });
+    Image out = base;
+    st.add_point(1.5f, 0.5f);
+    st.render(out);
+    CHECK(out.get(1, 0).r == 255 && out.get(0, 0).r == 0);
+}
+
 int main() {
+    test_adjust_round2();
     test_text_and_polyline();
     test_stroke_modes();
     test_effects();

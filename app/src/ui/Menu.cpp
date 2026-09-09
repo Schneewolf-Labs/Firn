@@ -96,10 +96,12 @@ void App::draw_menu() {
         }
         if (ImGui::BeginMenu("Color Balance", has_layer)) {
             if (ImGui::MenuItem("Channel Mixer...")) open_adjust = Adj::ChannelMixer;
+            if (ImGui::MenuItem("Color Balance...")) open_adjust = Adj::ColorBalance;
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("Hue and Saturation", has_layer)) {
             if (ImGui::MenuItem("Colorize...")) open_adjust = Adj::Colorize;
+            if (ImGui::MenuItem("Hue Map...")) open_adjust = Adj::HueMap;
             if (ImGui::MenuItem("Hue/Saturation/Lightness...")) open_adjust = Adj::HSL;
             ImGui::EndMenu();
         }
@@ -143,6 +145,7 @@ void App::draw_menu() {
         }
         if (ImGui::BeginMenu("Artistic Effects", has_layer)) {
             if (ImGui::MenuItem("Posterize...")) open_adjust = Adj::Posterize;
+            if (ImGui::MenuItem("Sepia Toning...")) open_adjust = Adj::Sepia;
             if (ImGui::MenuItem("Solarize...")) open_adjust = Adj::Solarize;
             ImGui::EndMenu();
         }
