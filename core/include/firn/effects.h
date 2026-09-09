@@ -97,4 +97,40 @@ void pattern(Image& img, float angle, float cx_percent, float cy_percent, float 
 void offset(Image& img, int dx, int dy, Edge edge);
 void seamless_tiling(Image& img, int method /*0 edge, 1 corner, 2 mirror*/, int direction /*0 both, 1 horizontal, 2 vertical*/, int transition);
 void page_curl(Image& img, int corner /*0 top-left .. 3 bottom-right*/, float width_percent, float height_percent, int radius, Color back, Color fill, bool transparent_fill);
+
+// --- Artistic, illumination, texture and art media effects (effects_art.cpp) ---
+void aged_newspaper(Image& img, int amount /*1..100*/);
+void balls_and_bubbles(Image& img, int count, int min_size, int max_size, int opacity, bool bubbles, Color color, uint32_t seed);
+void colored_edges(Image& img, int luminance, int blur, Color color);
+void colored_foil(Image& img, int blur, int detail, Color color, float angle);
+void contours(Image& img, int luminance, int blur, int detail, Color color);
+void enamel(Image& img, int blur, int detail, int density, float angle, Color color);
+void glowing_edges(Image& img, int intensity, int sharpness);
+void hot_wax(Image& img, Color wax);
+void magnifying_lens(Image& img, float cx_percent, float cy_percent, float size_percent, int refraction, int shading);
+void neon_glow(Image& img, int detail, int opacity);
+void topography(Image& img, int width, int density, float angle, Color color);
+// Lights: up to five, each {x %, y %, direction degrees, cone degrees, intensity, color}.
+struct Light { bool on = false; float x = 50, y = 50, direction = 270, cone = 60; int intensity = 50; Color color{255, 255, 255, 255}; };
+void lights(Image& img, const Light* lights, int count, int darkness);
+void blinds(Image& img, int width, int opacity, bool horizontal, bool light_from_left, Color color);
+void leather(Image& img, bool rough, int color_amount, float angle, int blur, int transparency, Color color, uint32_t seed);
+void fur(Image& img, int blur, int density, int length, int transparency, uint32_t seed);
+void mosaic_antique(Image& img, int columns, int rows, int symmetric, int diffusion, int grout_width, int grout_transparency);
+void mosaic_glass(Image& img, int columns, int rows, int curvature, int edge_width, int grout_transparency);
+void polished_stone(Image& img, int blur, int detail, float angle, int color_amount, Color color);
+void sandstone(Image& img, int blur, int detail, float angle, Color color, uint32_t seed);
+void sculpture(Image& img, int smoothness, int depth, float angle, Color color);
+void soft_plastic(Image& img, int blur, int detail, int density, float angle, Color color);
+void straw_wall(Image& img, int blur, int detail, int density, float angle, Color color, uint32_t seed);
+void texture(Image& img, const Image& bump, int size_percent, int smoothness, int depth, float angle, Color color);
+void tiles(Image& img, int shape /*0 square, 1 hexagon, 2 triangle*/, int size, int border, int smoothness, int depth, float angle, Color color);
+void weave(Image& img, int gap, int width, int opacity, Color gap_color, Color weave_color, bool fill_gaps);
+void black_pencil(Image& img, int detail, int opacity);
+void brush_strokes(Image& img, int length, int density, int width, int opacity, uint32_t seed);
+void charcoal(Image& img, int detail, int opacity);
+void colored_chalk(Image& img, int detail, int opacity);
+void colored_pencil(Image& img, int detail, int opacity);
+void pencil(Image& img, int luminance, int blur, Color color);
+void user_defined_filter(Image& img, const float kernel[25], float divisor, float bias);
 }  // namespace firn::effects

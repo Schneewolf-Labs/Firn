@@ -208,7 +208,13 @@ static const char* kTitles[] = {nullptr, "Brightness/Contrast", "Curves", "Gamma
                                     "Digital Camera Noise Removal",
                                     "Curlicues", "Displacement Map", "Polar Coordinates", "Spiky Halo", "Warp", "Wind",
                                     "Circle", "Cylinder", "Pentagon", "Perspective", "Skew", "Feedback", "Pattern",
-                                    "Rotating Mirror", "Offset", "Seamless Tiling", "Page Curl"};
+                                    "Rotating Mirror", "Offset", "Seamless Tiling", "Page Curl",
+                                    "Aged Newspaper", "Balls and Bubbles", "Colored Edges", "Colored Foil", "Contours", "Enamel",
+                                    "Glowing Edges", "Hot Wax Coating", "Magnifying Lens", "Neon Glow", "Topography", "Lights",
+                                    "Blinds", "Fine Leather", "Rough Leather", "Fur", "Mosaic - Antique", "Mosaic - Glass",
+                                    "Polished Stone", "Sandstone", "Sculpture", "Soft Plastic", "Straw Wall", "Texture", "Tiles",
+                                    "Weave", "Black Pencil", "Brush Strokes", "Charcoal", "Colored Chalk", "Colored Pencil", "Pencil",
+                                    "User Defined Filter"};
 
 bool App::open_adjust_by_title(const char* title) {
     for (size_t i = 1; i < sizeof(kTitles) / sizeof(kTitles[0]); ++i)
@@ -672,6 +678,106 @@ void App::draw_adjust_dialogs() {
             auto col = [](const float* f) { return Color{static_cast<uint8_t>(f[0] * 255 + 0.5f), static_cast<uint8_t>(f[1] * 255 + 0.5f), static_cast<uint8_t>(f[2] * 255 + 0.5f), 255}; };
             effects::page_curl(img, curl_corner, curl_w, curl_h, curl_r, col(curl_back), col(curl_fill), curl_transparent);
         });
+
+    auto col = [](const float* f) { return Color{static_cast<uint8_t>(f[0] * 255 + 0.5f), static_cast<uint8_t>(f[1] * 255 + 0.5f), static_cast<uint8_t>(f[2] * 255 + 0.5f), 255}; };
+    auto angle_color = [&] { bool c = ImGui::SliderFloat("Angle", &fx_angle, 0.0f, 360.0f, "%.0f"); ImGui::SameLine(); c |= ImGui::ColorEdit3("Color", fx_color, ImGuiColorEditFlags_NoInputs); return c; };
+    auto blur_detail = [&] { bool c = ImGui::SliderInt("Blur", &fx_blur, 0, 50); c |= ImGui::SliderInt("Detail", &fx_detail, 1, 100); return c; };
+    adjust_modal(*this, "Aged Newspaper", [&] { return ImGui::SliderInt("Amount to age", &fx_amount, 1, 100); }, [&](Image& img) { effects::aged_newspaper(img, fx_amount); });
+    adjust_modal(*this, "Balls and Bubbles",
+        [&] { bool c = ImGui::SliderInt("Count", &fx_count, 1, 300); c |= ImGui::SliderInt("Minimum size", &fx_min, 2, 300); c |= ImGui::SliderInt("Maximum size", &fx_max, 2, 400); c |= ImGui::SliderInt("Opacity", &fx_opacity, 0, 100); c |= ImGui::Checkbox("Bubbles (else balls)", &fx_bubbles); ImGui::SameLine(); c |= ImGui::ColorEdit3("Ball color", fx_color, ImGuiColorEditFlags_NoInputs); return c; },
+        [&](Image& img) { effects::balls_and_bubbles(img, fx_count, fx_min, fx_max, fx_opacity, fx_bubbles, col(fx_color), 7); });
+    adjust_modal(*this, "Colored Edges", [&] { bool c = ImGui::SliderInt("Luminance", &fx_luminance, 0, 100); c |= ImGui::SliderInt("Blur", &fx_blur, 0, 20); c |= ImGui::ColorEdit3("Color", fx_color, ImGuiColorEditFlags_NoInputs); return c; }, [&](Image& img) { effects::colored_edges(img, fx_luminance, fx_blur, col(fx_color)); });
+    adjust_modal(*this, "Colored Foil", [&] { bool c = blur_detail(); c |= angle_color(); return c; }, [&](Image& img) { effects::colored_foil(img, fx_blur, fx_detail, col(fx_color), fx_angle); });
+    adjust_modal(*this, "Contours", [&] { bool c = ImGui::SliderInt("Luminance", &fx_luminance, 0, 100); c |= ImGui::SliderInt("Blur", &fx_blur, 0, 20); c |= ImGui::SliderInt("Detail", &fx_detail, 2, 20); c |= ImGui::ColorEdit3("Color", fx_color2, ImGuiColorEditFlags_NoInputs); return c; }, [&](Image& img) { effects::contours(img, fx_luminance, fx_blur, fx_detail, col(fx_color2)); });
+    adjust_modal(*this, "Enamel", [&] { bool c = blur_detail(); c |= ImGui::SliderInt("Density", &fx_density, 0, 100); c |= angle_color(); return c; }, [&](Image& img) { effects::enamel(img, fx_blur, fx_detail, fx_density, fx_angle, col(fx_color)); });
+    adjust_modal(*this, "Glowing Edges", [&] { bool c = ImGui::SliderInt("Intensity", &fx_intensity, 1, 100); c |= ImGui::SliderInt("Sharpness", &fx_sharpness, 1, 100); return c; }, [&](Image& img) { effects::glowing_edges(img, fx_intensity, fx_sharpness); });
+    adjust_modal(*this, "Hot Wax Coating", [&] { return ImGui::ColorEdit3("Wax (foreground material)", fg_color, ImGuiColorEditFlags_NoInputs); }, [&](Image& img) { effects::hot_wax(img, col(fg_color)); });
+    adjust_modal(*this, "Magnifying Lens", [&] { bool c = ImGui::SliderFloat("Center X %", &fx_cx, 0, 100, "%.0f"); c |= ImGui::SliderFloat("Center Y %", &fx_cy, 0, 100, "%.0f"); c |= ImGui::SliderFloat("Size %", &fx_size_pct, 1, 100, "%.0f"); c |= ImGui::SliderInt("Refraction", &fx_refraction, 0, 100); c |= ImGui::SliderInt("Shading", &fx_shading, 0, 100); return c; }, [&](Image& img) { effects::magnifying_lens(img, fx_cx, fx_cy, fx_size_pct, fx_refraction, fx_shading); });
+    adjust_modal(*this, "Neon Glow", [&] { bool c = ImGui::SliderInt("Detail", &fx_detail, 1, 100); c |= ImGui::SliderInt("Opacity", &fx_opacity, 0, 100); return c; }, [&](Image& img) { effects::neon_glow(img, fx_detail, fx_opacity); });
+    adjust_modal(*this, "Topography", [&] { bool c = ImGui::SliderInt("Width", &fx_width, 1, 100); c |= ImGui::SliderInt("Density", &fx_density, 2, 32); c |= angle_color(); return c; }, [&](Image& img) { effects::topography(img, fx_width, fx_density, fx_angle, col(fx_color)); });
+    adjust_modal(*this, "Lights",
+        [&] {
+            bool c = ImGui::SliderInt("Darkness", &fx_darkness, 0, 100);
+            if (!fx_lights[0].on && !fx_lights[1].on && !fx_lights[2].on && !fx_lights[3].on && !fx_lights[4].on) { fx_lights[0].on = true; c = true; }
+            for (int i = 0; i < 5; ++i) {
+                ImGui::PushID(i);
+                effects::Light& L = fx_lights[i];
+                char label[16]; std::snprintf(label, sizeof(label), "Light %d", i + 1);
+                c |= ImGui::Checkbox(label, &L.on);
+                if (L.on) {
+                    ImGui::SameLine(); ImGui::SetNextItemWidth(70); c |= ImGui::SliderFloat("X", &L.x, 0, 100, "%.0f");
+                    ImGui::SameLine(); ImGui::SetNextItemWidth(70); c |= ImGui::SliderFloat("Y", &L.y, 0, 100, "%.0f");
+                    ImGui::SameLine(); ImGui::SetNextItemWidth(70); c |= ImGui::SliderFloat("Dir", &L.direction, 0, 360, "%.0f");
+                    ImGui::SameLine(); ImGui::SetNextItemWidth(70); c |= ImGui::SliderFloat("Cone", &L.cone, 1, 360, "%.0f");
+                    ImGui::SameLine(); ImGui::SetNextItemWidth(70); c |= ImGui::SliderInt("Int", &L.intensity, 0, 100);
+                    float lc[3] = {L.color.r / 255.0f, L.color.g / 255.0f, L.color.b / 255.0f};
+                    ImGui::SameLine(); if (ImGui::ColorEdit3("##lc", lc, ImGuiColorEditFlags_NoInputs)) { L.color = col(lc); c = true; }
+                }
+                ImGui::PopID();
+            }
+            return c;
+        },
+        [&](Image& img) { effects::lights(img, fx_lights, 5, fx_darkness); });
+    adjust_modal(*this, "Blinds", [&] { bool c = ImGui::SliderInt("Width", &fx_width, 2, 200); c |= ImGui::SliderInt("Opacity", &fx_opacity, 0, 100); c |= ImGui::Checkbox("Horizontal", &fx_horizontal); ImGui::SameLine(); c |= ImGui::Checkbox("Light from left/top", &fx_from_left); ImGui::SameLine(); c |= ImGui::ColorEdit3("Color", fx_color2, ImGuiColorEditFlags_NoInputs); return c; }, [&](Image& img) { effects::blinds(img, fx_width, fx_opacity, fx_horizontal, fx_from_left, col(fx_color2)); });
+    adjust_modal(*this, "Fine Leather", [&] { bool c = ImGui::SliderInt("Color amount", &fx_amount, 0, 100); c |= ImGui::SliderInt("Blur", &fx_blur, 0, 20); c |= ImGui::SliderInt("Transparency", &fx_opacity, 0, 100); c |= angle_color(); return c; }, [&](Image& img) { effects::leather(img, false, fx_amount, fx_angle, fx_blur, fx_opacity, col(fx_color), 3); });
+    adjust_modal(*this, "Rough Leather", [&] { bool c = ImGui::SliderInt("Color amount", &fx_amount, 0, 100); c |= ImGui::SliderInt("Blur", &fx_blur, 0, 20); c |= ImGui::SliderInt("Transparency", &fx_opacity, 0, 100); c |= angle_color(); return c; }, [&](Image& img) { effects::leather(img, true, fx_amount, fx_angle, fx_blur, fx_opacity, col(fx_color), 4); });
+    adjust_modal(*this, "Fur", [&] { bool c = ImGui::SliderInt("Blur", &fx_blur, 0, 20); c |= ImGui::SliderInt("Density", &fx_density, 1, 100); c |= ImGui::SliderInt("Length", &fx_length, 2, 100); c |= ImGui::SliderInt("Transparency", &fx_opacity, 0, 100); return c; }, [&](Image& img) { effects::fur(img, fx_blur, fx_density, fx_length, fx_opacity, 5); });
+    adjust_modal(*this, "Mosaic - Antique", [&] { bool c = ImGui::SliderInt("Columns", &fx_columns, 1, 100); c |= ImGui::SliderInt("Rows", &fx_rows, 1, 100); c |= ImGui::SliderInt("Diffusion", &fx_diffusion, 0, 100); c |= ImGui::SliderInt("Grout width", &fx_grout, 0, 100); c |= ImGui::SliderInt("Grout transparency", &fx_grout_alpha, 0, 100); return c; }, [&](Image& img) { effects::mosaic_antique(img, fx_columns, fx_rows, 0, fx_diffusion, fx_grout, fx_grout_alpha); });
+    adjust_modal(*this, "Mosaic - Glass", [&] { bool c = ImGui::SliderInt("Columns", &fx_columns, 1, 100); c |= ImGui::SliderInt("Rows", &fx_rows, 1, 100); c |= ImGui::SliderInt("Curvature", &fx_curvature, 0, 100); c |= ImGui::SliderInt("Edge width", &fx_grout, 0, 100); c |= ImGui::SliderInt("Grout transparency", &fx_grout_alpha, 0, 100); return c; }, [&](Image& img) { effects::mosaic_glass(img, fx_columns, fx_rows, fx_curvature, fx_grout, fx_grout_alpha); });
+    adjust_modal(*this, "Polished Stone", [&] { bool c = blur_detail(); c |= ImGui::SliderInt("Color amount", &fx_amount, 0, 100); c |= angle_color(); return c; }, [&](Image& img) { effects::polished_stone(img, fx_blur, fx_detail, fx_angle, fx_amount, col(fx_color)); });
+    adjust_modal(*this, "Sandstone", [&] { bool c = blur_detail(); c |= angle_color(); return c; }, [&](Image& img) { effects::sandstone(img, fx_blur, fx_detail, fx_angle, col(fx_color), 2); });
+    adjust_modal(*this, "Sculpture", [&] { bool c = ImGui::SliderInt("Smoothness", &fx_smooth, 0, 100); c |= ImGui::SliderInt("Depth", &fx_depth, 1, 100); c |= angle_color(); return c; }, [&](Image& img) { effects::sculpture(img, fx_smooth, fx_depth, fx_angle, col(fx_color)); });
+    adjust_modal(*this, "Soft Plastic", [&] { bool c = blur_detail(); c |= ImGui::SliderInt("Density", &fx_density, 0, 100); c |= angle_color(); return c; }, [&](Image& img) { effects::soft_plastic(img, fx_blur, fx_detail, fx_density, fx_angle, col(fx_color)); });
+    adjust_modal(*this, "Straw Wall", [&] { bool c = blur_detail(); c |= ImGui::SliderInt("Density", &fx_density, 1, 100); c |= angle_color(); return c; }, [&](Image& img) { effects::straw_wall(img, fx_blur, fx_detail, fx_density, fx_angle, col(fx_color), 6); });
+    adjust_modal(*this, "Texture",
+        [&] {
+            ensure_textures();
+            const char* cur = texture_index >= 0 && texture_index < static_cast<int>(textures.size()) ? textures[static_cast<size_t>(texture_index)].name.c_str() : "(noise)";
+            bool c = false;
+            ImGui::SetNextItemWidth(200);
+            if (ImGui::BeginCombo("Texture", cur)) {
+                if (ImGui::Selectable("(noise)", texture_index < 0)) { select_texture(-1); c = true; }
+                for (size_t i = 0; i < textures.size(); ++i) { ImGui::PushID(static_cast<int>(i)); if (ImGui::Selectable(textures[i].name.c_str(), static_cast<int>(i) == texture_index)) { select_texture(static_cast<int>(i)); c = true; } ImGui::PopID(); }
+                ImGui::EndCombo();
+            }
+            c |= ImGui::SliderInt("Size %", &fx_size, 10, 400); c |= ImGui::SliderInt("Smoothness", &fx_smooth, 0, 100); c |= ImGui::SliderInt("Depth", &fx_depth, 1, 100); c |= angle_color();
+            return c;
+        },
+        [&](Image& img) {
+            Image bump;
+            if (texture_index >= 0 && texture_index < static_cast<int>(textures.size()) && textures[static_cast<size_t>(texture_index)].texture) {
+                const auto& t = *textures[static_cast<size_t>(texture_index)].texture;
+                bump = Image(t.width, t.height);
+                for (int i = 0; i < t.width * t.height; ++i) { uint8_t* p = bump.data() + static_cast<size_t>(i) * 4; p[0] = p[1] = p[2] = t.coverage[static_cast<size_t>(i)]; p[3] = 255; }
+            }
+            effects::texture(img, bump, fx_size, fx_smooth, fx_depth, fx_angle, col(fx_color));
+        });
+    adjust_modal(*this, "Tiles", [&] { bool c = ImGui::Combo("Shape", &fx_shape, "Square\0Hexagon\0Triangle\0"); c |= ImGui::SliderInt("Size", &fx_size, 4, 200); c |= ImGui::SliderInt("Border", &fx_border, 0, 100); c |= ImGui::SliderInt("Smoothness", &fx_smooth, 0, 100); c |= ImGui::SliderInt("Depth", &fx_depth, 1, 100); c |= angle_color(); return c; }, [&](Image& img) { effects::tiles(img, fx_shape, fx_size, fx_border, fx_smooth, fx_depth, fx_angle, col(fx_color)); });
+    adjust_modal(*this, "Weave", [&] { bool c = ImGui::SliderInt("Gap", &fx_gap, 0, 100); c |= ImGui::SliderInt("Width", &fx_stroke_width, 1, 100); c |= ImGui::SliderInt("Opacity", &fx_opacity, 0, 100); c |= ImGui::ColorEdit3("Gap color", fx_color2, ImGuiColorEditFlags_NoInputs); ImGui::SameLine(); c |= ImGui::ColorEdit3("Weave color", fx_color, ImGuiColorEditFlags_NoInputs); c |= ImGui::Checkbox("Fill gaps", &fx_fill_gaps); return c; }, [&](Image& img) { effects::weave(img, fx_gap, fx_stroke_width, fx_opacity, col(fx_color2), col(fx_color), fx_fill_gaps); });
+    adjust_modal(*this, "Black Pencil", [&] { bool c = ImGui::SliderInt("Detail", &fx_detail, 1, 100); c |= ImGui::SliderInt("Opacity", &fx_opacity, 0, 100); return c; }, [&](Image& img) { effects::black_pencil(img, fx_detail, fx_opacity); });
+    adjust_modal(*this, "Brush Strokes", [&] { bool c = ImGui::SliderInt("Length", &fx_length, 2, 100); c |= ImGui::SliderInt("Density", &fx_density, 1, 100); c |= ImGui::SliderInt("Width", &fx_stroke_width, 1, 30); c |= ImGui::SliderInt("Opacity", &fx_opacity, 0, 100); return c; }, [&](Image& img) { effects::brush_strokes(img, fx_length, fx_density, fx_stroke_width, fx_opacity, 8); });
+    adjust_modal(*this, "Charcoal", [&] { bool c = ImGui::SliderInt("Detail", &fx_detail, 1, 100); c |= ImGui::SliderInt("Opacity", &fx_opacity, 0, 100); return c; }, [&](Image& img) { effects::charcoal(img, fx_detail, fx_opacity); });
+    adjust_modal(*this, "Colored Chalk", [&] { bool c = ImGui::SliderInt("Detail", &fx_detail, 1, 100); c |= ImGui::SliderInt("Opacity", &fx_opacity, 0, 100); return c; }, [&](Image& img) { effects::colored_chalk(img, fx_detail, fx_opacity); });
+    adjust_modal(*this, "Colored Pencil", [&] { bool c = ImGui::SliderInt("Detail", &fx_detail, 1, 100); c |= ImGui::SliderInt("Opacity", &fx_opacity, 0, 100); return c; }, [&](Image& img) { effects::colored_pencil(img, fx_detail, fx_opacity); });
+    adjust_modal(*this, "Pencil", [&] { bool c = ImGui::SliderInt("Luminance", &fx_luminance, 0, 100); c |= ImGui::SliderInt("Blur", &fx_blur, 0, 20); c |= ImGui::ColorEdit3("Color", fx_color2, ImGuiColorEditFlags_NoInputs); return c; }, [&](Image& img) { effects::pencil(img, fx_luminance, fx_blur, col(fx_color2)); });
+    adjust_modal(*this, "User Defined Filter",
+        [&] {
+            bool c = false;
+            for (int j = 0; j < 5; ++j) {
+                for (int i = 0; i < 5; ++i) {
+                    ImGui::PushID(j * 5 + i);
+                    ImGui::SetNextItemWidth(48);
+                    c |= ImGui::InputFloat("##k", &fx_kernel[j * 5 + i], 0.0f, 0.0f, "%.0f");
+                    ImGui::PopID();
+                    if (i < 4) ImGui::SameLine();
+                }
+            }
+            ImGui::SetNextItemWidth(100); c |= ImGui::InputFloat("Divisor", &fx_divisor, 0.0f, 0.0f, "%.1f");
+            ImGui::SameLine(); ImGui::SetNextItemWidth(100); c |= ImGui::InputFloat("Bias", &fx_bias, 0.0f, 0.0f, "%.0f");
+            if (ImGui::SmallButton("Compute divisor")) { float sum = 0; for (float k : fx_kernel) sum += k; fx_divisor = sum != 0.0f ? sum : 1.0f; c = true; }
+            return c;
+        },
+        [&](Image& img) { effects::user_defined_filter(img, fx_kernel, fx_divisor, fx_bias); });
 
     adjust_modal(*this, "Kaleidoscope",
         [&] {

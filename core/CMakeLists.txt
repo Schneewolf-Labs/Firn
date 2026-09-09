@@ -12,6 +12,7 @@ add_library(firncore STATIC
   src/adjustment.cpp
   src/photo.cpp
   src/effects_geo.cpp
+  src/effects_art.cpp
   src/io.cpp
   src/io_psp.cpp
 )

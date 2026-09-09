@@ -1713,7 +1713,55 @@ static void test_geo_effects() {
     CHECK(e.get(31, 31).g == 255 && e.get(31, 31).r == 0 && e.get(2, 2).r == 200);   // corner shows the fill, far corner untouched
 }
 
+static void test_art_effects() {
+    Image img(40, 40, {30, 60, 90, 255});
+    for (int y = 0; y < 40; ++y) for (int x = 0; x < 20; ++x) img.set(x, y, {200, 100, 50, 255});
+    auto ok = [](const Image& i) { for (int y = 0; y < i.height(); y += 5) for (int x = 0; x < i.width(); x += 5) if (i.get(x, y).a != 255) return false; return i.width() == 40 && i.height() == 40; };
+    const Color white{255, 255, 255, 255};
+    Image e;
+    e = img; effects::aged_newspaper(e, 60); CHECK(ok(e));
+    e = img; effects::balls_and_bubbles(e, 10, 4, 12, 80, true, white, 1); CHECK(ok(e));
+    e = img; effects::balls_and_bubbles(e, 10, 4, 12, 80, false, white, 1); CHECK(ok(e));
+    e = img; effects::colored_edges(e, 30, 0, white); CHECK(ok(e) && e.get(20, 20).r > e.get(5, 20).r);   // the edge lights up
+    e = img; effects::colored_foil(e, 2, 40, white, 315); CHECK(ok(e));
+    e = img; effects::contours(e, 30, 0, 4, {255, 0, 0, 255}); CHECK(ok(e));
+    e = img; effects::enamel(e, 2, 40, 50, 315, white); CHECK(ok(e));
+    e = img; effects::glowing_edges(e, 50, 50); CHECK(ok(e) && e.get(5, 20).r < 30 && e.get(20, 20).r > 0);
+    e = img; effects::hot_wax(e, {200, 180, 120, 255}); CHECK(ok(e));
+    e = img; effects::magnifying_lens(e, 50, 50, 40, 60, 50); CHECK(ok(e));
+    e = img; effects::neon_glow(e, 50, 100); CHECK(ok(e));
+    e = img; effects::topography(e, 8, 6, 315, white); CHECK(ok(e));
+    effects::Light L[1]; L[0].on = true; L[0].x = 50; L[0].y = 50; L[0].cone = 360;
+    e = img; effects::lights(e, L, 1, 60); CHECK(ok(e) && e.get(21, 20).b >= e.get(39, 39).b);
+    e = img; effects::blinds(e, 8, 60, false, true, {0, 0, 0, 255}); CHECK(ok(e));
+    e = img; effects::leather(e, false, 40, 315, 1, 0, {120, 80, 40, 255}, 3); CHECK(ok(e));
+    e = img; effects::leather(e, true, 40, 315, 1, 0, {120, 80, 40, 255}, 3); CHECK(ok(e));
+    e = img; effects::fur(e, 0, 50, 8, 30, 5); CHECK(ok(e));
+    e = img; effects::mosaic_antique(e, 4, 4, 0, 30, 20, 30); CHECK(ok(e));
+    e = img; effects::mosaic_glass(e, 4, 4, 50, 20, 30); CHECK(ok(e));
+    e = img; effects::polished_stone(e, 2, 40, 315, 30, white); CHECK(ok(e));
+    e = img; effects::sandstone(e, 2, 40, 315, white, 2); CHECK(ok(e));
+    e = img; effects::sculpture(e, 20, 30, 315, white); CHECK(ok(e));
+    e = img; effects::soft_plastic(e, 2, 40, 50, 315, white); CHECK(ok(e));
+    e = img; effects::straw_wall(e, 1, 40, 50, 315, white, 6); CHECK(ok(e));
+    e = img; effects::texture(e, Image(), 100, 20, 30, 315, white); CHECK(ok(e));
+    e = img; effects::tiles(e, 0, 10, 20, 20, 30, 315, white); CHECK(ok(e));
+    e = img; effects::tiles(e, 1, 10, 20, 20, 30, 315, white); CHECK(ok(e));
+    e = img; effects::weave(e, 3, 4, 70, {0, 0, 0, 255}, white, true); CHECK(ok(e));
+    e = img; effects::black_pencil(e, 40, 100); CHECK(ok(e) && e.get(5, 20).r > 100);   // flat areas stay light
+    e = img; effects::brush_strokes(e, 12, 50, 4, 70, 8); CHECK(ok(e));
+    e = img; effects::charcoal(e, 40, 100); CHECK(ok(e));
+    e = img; effects::colored_chalk(e, 40, 70); CHECK(ok(e));
+    e = img; effects::colored_pencil(e, 40, 70); CHECK(ok(e));
+    e = img; effects::pencil(e, 100, 0, {0, 0, 0, 255}); CHECK(ok(e) && e.get(5, 20).r == 255 && e.get(20, 20).r < 255);
+    const float ident[25] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+    e = img; effects::user_defined_filter(e, ident, 1, 0); CHECK(e.get(5, 5).r == 200 && e.get(30, 30).b == 90);
+    float box[25]; for (float& k : box) k = 1.0f;
+    e = img; effects::user_defined_filter(e, box, 25, 0); CHECK(e.get(20, 20).r > 90 && e.get(20, 20).r < 160);
+}
+
 int main() {
+    test_art_effects();
     test_geo_effects();
     test_mesh_and_displace();
     test_photo_fix_suite();

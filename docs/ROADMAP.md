@@ -114,16 +114,9 @@ for. Ranked by value per effort; work top to bottom, tick as they land.
       Chromatic Aberration Removal, Digital Camera Noise Removal (bilateral)
 - [x] Warp Brush (push, expand, contract, twirl, noise, iron out) and Mesh Warp;
       Scratch Remover, Object Remover (selection + source rectangle, feathered)
-- [ ] Effects long tail (distortion, geometric, reflection and image effects done;
-      artistic, illumination, texture and art media pending): Page Curl, Lights, Fur, Weave, Pattern, Balls and
-      Bubbles, Neon Glow, Glowing Edges, Colored Edges/Foil, Hot Wax, Enamel,
-      Aged Newspaper, Contours, Topography, Magnifying Lens, Curlicues,
-      Displacement Map, Polar Coordinates, Pixelate, Spiky Halo, Warp, Wind,
-      Circle/Cylinder/Pentagon/Perspective/Skew, Feedback, Rotating Mirror,
-      Offset, Seamless Tiling, Blinds, Fine/Rough Leather, Mosaic Antique/Glass,
-      Polished Stone, Sandstone, Sculpture, Soft Plastic, Straw Wall, Texture,
-      Tiles, Black Pencil, Brush Strokes, Charcoal, Colored Chalk, Colored
-      Pencil, Pencil, User Defined Filter
+- [x] Effects long tail: every entry of the original's Effects menu now has a
+      live-preview dialog (distortion, geometric, reflection, image, artistic,
+      illumination, texture, art media, User Defined Filter)
 - [ ] Materials palette parity: swatches, recent colors, "all tools" lock
 - [ ] Scripting: the original's Python command API for the top commands in
       docs/COMMANDS.md, so bundled scripts run

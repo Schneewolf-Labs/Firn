@@ -9,6 +9,7 @@
 
 #include "imgui.h"
 #include "firn/adjust.h"
+#include "firn/effects.h"
 #include "firn/commands.h"
 #include "firn/io_psp.h"
 #include "firn/document.h"
@@ -121,7 +122,11 @@ struct App {
                      AutoColor, AutoContrast, AutoSaturation, Clarify, BlackWhitePoints, HistogramAdjust, SaltPepper,
                      JpegArtifacts, FillFlash, Backlighting, ChromaticAberration, NoiseRemoval,
                      Curlicues, DisplacementMap, PolarCoordinates, SpikyHalo, Warp, Wind, Circle, Cylinder, Pentagon,
-                     Perspective, Skew, Feedback, Pattern, RotatingMirror, Offset, SeamlessTiling, PageCurl };
+                     Perspective, Skew, Feedback, Pattern, RotatingMirror, Offset, SeamlessTiling, PageCurl,
+                     AgedNewspaper, BallsBubbles, ColoredEdges, ColoredFoil, Contours, Enamel, GlowingEdges, HotWax,
+                     MagnifyingLens, NeonGlow, Topography, Lights, Blinds, FineLeather, RoughLeather, Fur, MosaicAntique,
+                     MosaicGlass, PolishedStone, Sandstone, Sculpture, SoftPlastic, StrawWall, Texture, Tiles, Weave,
+                     BlackPencil, BrushStrokes, Charcoal, ColoredChalk, ColoredPencil, Pencil, UserFilter };
     Adj open_adjust = Adj::None;
     struct Preview {
         bool active = false;
@@ -175,6 +180,17 @@ struct App {
     float mirror_angle = 0.0f, mirror_cx = 50.0f, mirror_cy = 50.0f;
     int offset_x = 0, offset_y = 0;
     int tile_method = 0, tile_direction = 0, tile_transition = 50;
+    // Artistic / texture / art media effects
+    int fx_amount = 50, fx_detail = 40, fx_blur = 2, fx_density = 50, fx_opacity = 70, fx_luminance = 30, fx_width = 8, fx_depth = 30, fx_smooth = 20, fx_size = 24, fx_border = 20;
+    float fx_angle = 315.0f, fx_cx = 50.0f, fx_cy = 50.0f, fx_size_pct = 40.0f;
+    float fx_color[3] = {1, 1, 1}, fx_color2[3] = {0, 0, 0};
+    int fx_count = 20, fx_min = 10, fx_max = 60; bool fx_bubbles = true;
+    int fx_refraction = 60, fx_shading = 50, fx_intensity = 50, fx_sharpness = 50;
+    int fx_shape = 0, fx_columns = 12, fx_rows = 12, fx_grout = 20, fx_grout_alpha = 30, fx_curvature = 50, fx_diffusion = 30;
+    int fx_length = 12, fx_gap = 3, fx_stroke_width = 4;
+    bool fx_horizontal = false, fx_from_left = true, fx_fill_gaps = true;
+    firn::effects::Light fx_lights[5]; int fx_darkness = 40;
+    float fx_kernel[25] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}; float fx_divisor = 1.0f, fx_bias = 0.0f;
     int curl_corner = 3; float curl_w = 40.0f, curl_h = 40.0f; int curl_r = 30; float curl_back[3] = {0.9f, 0.9f, 0.9f}, curl_fill[3] = {1, 1, 1}; bool curl_transparent = false;
     float redeye_strength = 1.0f;
     int kal_petals = 6; float kal_angle = 0, kal_radius = 50;

@@ -245,12 +245,32 @@ void App::draw_menu() {
             if (ImGui::MenuItem("Seamless Tiling...")) open_adjust = Adj::SeamlessTiling;
             ImGui::EndMenu();
         }
+        if (ImGui::BeginMenu("Art Media Effects", has_layer)) {
+            if (ImGui::MenuItem("Black Pencil...")) open_adjust = Adj::BlackPencil;
+            if (ImGui::MenuItem("Brush Strokes...")) open_adjust = Adj::BrushStrokes;
+            if (ImGui::MenuItem("Charcoal...")) open_adjust = Adj::Charcoal;
+            if (ImGui::MenuItem("Colored Chalk...")) open_adjust = Adj::ColoredChalk;
+            if (ImGui::MenuItem("Colored Pencil...")) open_adjust = Adj::ColoredPencil;
+            if (ImGui::MenuItem("Pencil...")) open_adjust = Adj::Pencil;
+            ImGui::EndMenu();
+        }
         if (ImGui::BeginMenu("Artistic Effects", has_layer)) {
+            if (ImGui::MenuItem("Aged Newspaper...")) open_adjust = Adj::AgedNewspaper;
+            if (ImGui::MenuItem("Balls and Bubbles...")) open_adjust = Adj::BallsBubbles;
             if (ImGui::MenuItem("Chrome...")) open_adjust = Adj::Chrome;
+            if (ImGui::MenuItem("Colored Edges...")) open_adjust = Adj::ColoredEdges;
+            if (ImGui::MenuItem("Colored Foil...")) open_adjust = Adj::ColoredFoil;
+            if (ImGui::MenuItem("Contours...")) open_adjust = Adj::Contours;
+            if (ImGui::MenuItem("Enamel...")) open_adjust = Adj::Enamel;
+            if (ImGui::MenuItem("Glowing Edges...")) open_adjust = Adj::GlowingEdges;
             if (ImGui::MenuItem("Halftone...")) open_adjust = Adj::Halftone;
+            if (ImGui::MenuItem("Hot Wax Coating...")) open_adjust = Adj::HotWax;
+            if (ImGui::MenuItem("Magnifying Lens...")) open_adjust = Adj::MagnifyingLens;
+            if (ImGui::MenuItem("Neon Glow...")) open_adjust = Adj::NeonGlow;
             if (ImGui::MenuItem("Posterize...")) open_adjust = Adj::Posterize;
             if (ImGui::MenuItem("Sepia Toning...")) open_adjust = Adj::Sepia;
             if (ImGui::MenuItem("Solarize...")) open_adjust = Adj::Solarize;
+            if (ImGui::MenuItem("Topography...")) open_adjust = Adj::Topography;
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("Edge Effects", has_layer)) {
@@ -260,6 +280,7 @@ void App::draw_menu() {
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("Illumination Effects", has_layer)) {
+            if (ImGui::MenuItem("Lights...")) open_adjust = Adj::Lights;
             if (ImGui::MenuItem("Sunburst...")) open_adjust = Adj::Sunburst;
             ImGui::EndMenu();
         }
@@ -271,10 +292,25 @@ void App::draw_menu() {
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("Texture Effects", has_layer)) {
+            if (ImGui::MenuItem("Blinds...")) open_adjust = Adj::Blinds;
             if (ImGui::MenuItem("Emboss")) run(std::make_unique<AdjustCommand>(layer, "Emboss", effects::emboss));
-            if (ImGui::MenuItem("Mosaic...")) open_adjust = Adj::Mosaic;
+            if (ImGui::MenuItem("Fine Leather...")) open_adjust = Adj::FineLeather;
+            if (ImGui::MenuItem("Fur...")) open_adjust = Adj::Fur;
+            if (ImGui::MenuItem("Mosaic - Antique...")) open_adjust = Adj::MosaicAntique;
+            if (ImGui::MenuItem("Mosaic - Glass...")) open_adjust = Adj::MosaicGlass;
+            if (ImGui::MenuItem("Pixelate (Mosaic)...")) open_adjust = Adj::Mosaic;
+            if (ImGui::MenuItem("Polished Stone...")) open_adjust = Adj::PolishedStone;
+            if (ImGui::MenuItem("Rough Leather...")) open_adjust = Adj::RoughLeather;
+            if (ImGui::MenuItem("Sandstone...")) open_adjust = Adj::Sandstone;
+            if (ImGui::MenuItem("Sculpture...")) open_adjust = Adj::Sculpture;
+            if (ImGui::MenuItem("Soft Plastic...")) open_adjust = Adj::SoftPlastic;
+            if (ImGui::MenuItem("Straw Wall...")) open_adjust = Adj::StrawWall;
+            if (ImGui::MenuItem("Texture...")) open_adjust = Adj::Texture;
+            if (ImGui::MenuItem("Tiles...")) open_adjust = Adj::Tiles;
+            if (ImGui::MenuItem("Weave...")) open_adjust = Adj::Weave;
             ImGui::EndMenu();
         }
+        if (ImGui::MenuItem("User Defined Filter...", nullptr, false, has_layer)) open_adjust = Adj::UserFilter;
         ImGui::EndMenu();
     }
     if (ImGui::BeginMenu("Selections")) {
