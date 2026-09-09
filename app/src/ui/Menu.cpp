@@ -3,6 +3,7 @@
 
 #include "App.h"
 #include "firn/adjust.h"
+#include "firn/effects.h"
 #include "firn/mask.h"
 #include "imgui.h"
 
@@ -86,9 +87,30 @@ void App::draw_menu() {
             if (ImGui::MenuItem("Hue/Saturation/Lightness...")) open_adjust = Adj::HSL;
             ImGui::EndMenu();
         }
+        if (ImGui::BeginMenu("Add/Remove Noise", has_layer)) {
+            if (ImGui::MenuItem("Add Noise...")) open_adjust = Adj::AddNoise;
+            if (ImGui::MenuItem("Median Filter...")) open_adjust = Adj::Median;
+            if (ImGui::MenuItem("Despeckle")) run(std::make_unique<AdjustCommand>(layer, "Despeckle", [](Image& i) { effects::median(i, 1); }));
+            if (ImGui::MenuItem("Erode")) run(std::make_unique<AdjustCommand>(layer, "Erode", effects::erode));
+            if (ImGui::MenuItem("Dilate")) run(std::make_unique<AdjustCommand>(layer, "Dilate", effects::dilate));
+            ImGui::EndMenu();
+        }
         if (ImGui::BeginMenu("Blur", has_layer)) {
             if (ImGui::MenuItem("Average...")) open_adjust = Adj::Average;
+            if (ImGui::MenuItem("Blur More")) run(std::make_unique<AdjustCommand>(layer, "Blur More", effects::blur_more));
             if (ImGui::MenuItem("Gaussian Blur...")) open_adjust = Adj::Gaussian;
+            if (ImGui::MenuItem("Motion Blur...")) open_adjust = Adj::MotionBlur;
+            ImGui::EndMenu();
+        }
+        if (ImGui::BeginMenu("Sharpness", has_layer)) {
+            if (ImGui::MenuItem("Sharpen")) run(std::make_unique<AdjustCommand>(layer, "Sharpen", effects::sharpen));
+            if (ImGui::MenuItem("Sharpen More")) run(std::make_unique<AdjustCommand>(layer, "Sharpen More", effects::sharpen_more));
+            if (ImGui::MenuItem("Unsharp Mask...")) open_adjust = Adj::UnsharpMask;
+            ImGui::EndMenu();
+        }
+        if (ImGui::BeginMenu("Softness", has_layer)) {
+            if (ImGui::MenuItem("Soften")) run(std::make_unique<AdjustCommand>(layer, "Soften", effects::soften));
+            if (ImGui::MenuItem("Soften More")) run(std::make_unique<AdjustCommand>(layer, "Soften More", effects::soften_more));
             ImGui::EndMenu();
         }
         ImGui::Separator();
@@ -99,9 +121,24 @@ void App::draw_menu() {
         ImGui::EndMenu();
     }
     if (ImGui::BeginMenu("Effects")) {
+        if (ImGui::BeginMenu("3D Effects", has_layer)) {
+            if (ImGui::MenuItem("Drop Shadow...")) open_adjust = Adj::DropShadow;
+            ImGui::EndMenu();
+        }
         if (ImGui::BeginMenu("Artistic Effects", has_layer)) {
             if (ImGui::MenuItem("Posterize...")) open_adjust = Adj::Posterize;
             if (ImGui::MenuItem("Solarize...")) open_adjust = Adj::Solarize;
+            ImGui::EndMenu();
+        }
+        if (ImGui::BeginMenu("Edge Effects", has_layer)) {
+            if (ImGui::MenuItem("Enhance")) run(std::make_unique<AdjustCommand>(layer, "Enhance Edges", effects::enhance_edges));
+            if (ImGui::MenuItem("Enhance More")) run(std::make_unique<AdjustCommand>(layer, "Enhance Edges More", effects::enhance_edges_more));
+            if (ImGui::MenuItem("Find All")) run(std::make_unique<AdjustCommand>(layer, "Find Edges", effects::find_edges));
+            ImGui::EndMenu();
+        }
+        if (ImGui::BeginMenu("Texture Effects", has_layer)) {
+            if (ImGui::MenuItem("Emboss")) run(std::make_unique<AdjustCommand>(layer, "Emboss", effects::emboss));
+            if (ImGui::MenuItem("Mosaic...")) open_adjust = Adj::Mosaic;
             ImGui::EndMenu();
         }
         ImGui::EndMenu();

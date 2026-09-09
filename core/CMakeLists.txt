@@ -6,6 +6,7 @@ add_library(firncore STATIC
   src/mask.cpp
   src/blend.cpp
   src/adjust.cpp
+  src/effects.cpp
   src/io.cpp
   src/io_psp.cpp
 )

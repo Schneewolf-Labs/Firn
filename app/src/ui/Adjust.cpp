@@ -6,6 +6,7 @@
 
 #include "App.h"
 #include "firn/adjust.h"
+#include "firn/effects.h"
 #include "firn/raster.h"
 #include "imgui.h"
 
@@ -156,7 +157,8 @@ bool curve_editor(App& app, const ImVec2 size) {
 void App::draw_adjust_dialogs() {
     static const char* kTitles[] = {nullptr, "Brightness/Contrast", "Curves", "Gamma Correction", "Levels", "Threshold",
                                     "Channel Mixer", "Colorize", "Hue/Saturation/Lightness", "Average", "Gaussian Blur",
-                                    "Posterize", "Solarize"};
+                                    "Posterize", "Solarize", "Unsharp Mask", "Median", "Motion Blur", "Mosaic",
+                                    "Add Noise", "Drop Shadow"};
     if (open_adjust != Adj::None) {
         if (doc && active_layer() >= 0) ImGui::OpenPopup(kTitles[static_cast<int>(open_adjust)]);
         open_adjust = Adj::None;
@@ -246,4 +248,61 @@ void App::draw_adjust_dialogs() {
     adjust_modal(*this, "Solarize",
         [&] { return ImGui::SliderInt("Threshold", &solarize_threshold, 1, 254); },
         [&](Image& img) { adjust::apply_lut(img, adjust::solarize_lut(solarize_threshold)); });
+
+    adjust_modal(*this, "Unsharp Mask",
+        [&] {
+            bool c = ImGui::SliderFloat("Radius", &usm_radius, 0.1f, 50.0f, "%.1f", ImGuiSliderFlags_Logarithmic);
+            c |= ImGui::SliderInt("Strength", &usm_strength, 1, 500, "%d%%");
+            c |= ImGui::SliderInt("Clipping", &usm_clipping, 0, 100);
+            return c;
+        },
+        [&](Image& img) { effects::unsharp_mask(img, usm_radius, usm_strength, usm_clipping); });
+
+    adjust_modal(*this, "Median",
+        [&] { return ImGui::SliderInt("Filter aperture", &median_radius, 1, 10, "%d px radius"); },
+        [&](Image& img) { effects::median(img, median_radius); });
+
+    adjust_modal(*this, "Motion Blur",
+        [&] {
+            bool c = ImGui::SliderFloat("Angle", &motion_angle, 0.0f, 359.0f, "%.0f");
+            c |= ImGui::SliderInt("Strength", &motion_strength, 1, 100, "%d px");
+            return c;
+        },
+        [&](Image& img) { effects::motion_blur(img, motion_angle, motion_strength); });
+
+    adjust_modal(*this, "Mosaic",
+        [&] {
+            bool c = ImGui::SliderInt("Block width", &mosaic_w, 1, 100);
+            if (mosaic_square) mosaic_h = mosaic_w;
+            else c |= ImGui::SliderInt("Block height", &mosaic_h, 1, 100);
+            if (ImGui::Checkbox("Symmetric", &mosaic_square)) { mosaic_h = mosaic_w; c = true; }
+            return c;
+        },
+        [&](Image& img) { effects::mosaic(img, mosaic_w, mosaic_h); });
+
+    adjust_modal(*this, "Add Noise",
+        [&] {
+            bool c = ImGui::SliderInt("Noise", &noise_percent, 0, 100, "%d%%");
+            c |= ImGui::Checkbox("Gaussian", &noise_gaussian);
+            ImGui::SameLine();
+            c |= ImGui::Checkbox("Monochrome", &noise_mono);
+            return c;
+        },
+        [&](Image& img) { effects::add_noise(img, noise_percent, noise_gaussian, noise_mono, 12345); });
+
+    adjust_modal(*this, "Drop Shadow",
+        [&] {
+            bool c = ImGui::SliderInt("Vertical offset", &shadow_y, -100, 100);
+            c |= ImGui::SliderInt("Horizontal offset", &shadow_x, -100, 100);
+            float op = shadow_opacity * 100.0f;
+            if (ImGui::SliderFloat("Opacity", &op, 0.0f, 100.0f, "%.0f%%")) { shadow_opacity = op / 100.0f; c = true; }
+            c |= ImGui::SliderFloat("Blur", &shadow_blur, 0.0f, 100.0f, "%.1f");
+            c |= ImGui::ColorEdit3("Color", shadow_color, ImGuiColorEditFlags_NoInputs);
+            if (doc && doc->layer(active_layer()).background) ImGui::TextDisabled("On a Background layer only the selection casts a shadow.");
+            return c;
+        },
+        [&](Image& img) {
+            auto c8 = [](float f) { return static_cast<uint8_t>(f * 255.0f + 0.5f); };
+            effects::drop_shadow(img, shadow_x, shadow_y, shadow_opacity, shadow_blur, {c8(shadow_color[0]), c8(shadow_color[1]), c8(shadow_color[2]), 255});
+        });
 }

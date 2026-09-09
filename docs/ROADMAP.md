@@ -38,10 +38,11 @@ what to work on next.
 
 ## 4. Effects
 
-- [ ] Add Noise, Sharpen / Sharpen More / Unsharp Mask
-- [ ] Median, Motion Blur, Blur More, Soften
-- [ ] Find Edges, Enhance Edges, Emboss, Erode / Dilate
-- [ ] Drop Shadow, Mosaic (pixelate)
+- [x] Add Noise, Sharpen / Sharpen More / Unsharp Mask
+- [x] Median, Motion Blur, Blur More, Soften
+- [x] Find Edges, Enhance Edges, Emboss, Erode / Dilate
+- [x] Drop Shadow, Mosaic (pixelate)
+- [ ] Inner/Outer Bevel, Cutout, Buttonize, Sepia, Wave, Pinch/Punch, Twirl
 
 ## 5. Retouch and paint tools
 

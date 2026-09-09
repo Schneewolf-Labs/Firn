@@ -5,6 +5,7 @@
 #include <string>
 
 #include "firn/adjust.h"
+#include "firn/effects.h"
 #include "firn/commands.h"
 #include "firn/document.h"
 #include "firn/io.h"
@@ -680,7 +681,79 @@ static void test_adjust_module() {
     CHECK(adjust::histogram_luma(lowc)[100] == 1 && adjust::histogram_luma(lowc)[150] == 1);
 }
 
+static void test_effects() {
+    // Solid images are fixed points of the local filters.
+    for (auto fn : {effects::sharpen, effects::sharpen_more, effects::blur_more, effects::soften, effects::soften_more,
+                    effects::enhance_edges, effects::enhance_edges_more, effects::erode, effects::dilate}) {
+        Image s(5, 5, {40, 90, 140, 255});
+        fn(s);
+        Color c = s.get(2, 2);
+        CHECK(c.r == 40 && c.g == 90 && c.b == 140 && c.a == 255);
+    }
+    // Edge detection: flat is black, a step edge lights up.
+    Image flat(5, 5, {100, 100, 100, 255});
+    effects::find_edges(flat);
+    CHECK(flat.get(2, 2).r == 0);
+    Image step(6, 3, {0, 0, 0, 255});
+    for (int y = 0; y < 3; ++y) for (int x = 3; x < 6; ++x) step.set(x, y, {255, 255, 255, 255});
+    Image e = step;
+    effects::find_edges(e);
+    CHECK(e.get(2, 1).r > 200 && e.get(0, 1).r == 0);
+    // Emboss is grey and mid-grey on flat areas.
+    Image em(5, 5, {200, 50, 50, 255});
+    effects::emboss(em);
+    CHECK(em.get(2, 2).r == 128 && em.get(2, 2).g == 128);
+    // Erode/dilate on a single bright pixel.
+    Image dot(5, 5, {0, 0, 0, 255});
+    dot.set(2, 2, {255, 255, 255, 255});
+    Image di = dot; effects::dilate(di);
+    CHECK(di.get(1, 1).r == 255 && di.get(0, 0).r == 0);
+    Image er = dot; effects::erode(er);
+    CHECK(er.get(2, 2).r == 0);
+    // Median removes a lone outlier.
+    Image md = dot; effects::median(md, 1);
+    CHECK(md.get(2, 2).r == 0);
+    // Sharpen increases the contrast of a step.
+    Image sh = step; effects::sharpen(sh);
+    CHECK(sh.get(2, 1).r == 0 && sh.get(3, 1).r == 255);
+    Image soft(6, 3, {0, 0, 0, 255});
+    for (int y = 0; y < 3; ++y) for (int x = 3; x < 6; ++x) soft.set(x, y, {200, 200, 200, 255});
+    Image um = soft; effects::unsharp_mask(um, 1.0f, 100, 0);
+    CHECK(um.get(3, 1).r > 200 && um.get(2, 1).r == 0);
+    // Mosaic averages blocks.
+    Image mo(4, 2);
+    for (int x = 0; x < 4; ++x) { mo.set(x, 0, {0, 0, 0, 255}); mo.set(x, 1, {200, 200, 200, 255}); }
+    effects::mosaic(mo, 2, 2);
+    CHECK(mo.get(0, 0).r == 100 && mo.get(3, 1).r == 100);
+    // Motion blur along x smears a dot; transparent surroundings keep colour.
+    Image mb(7, 1, {0, 0, 0, 0});
+    mb.set(3, 0, {255, 0, 0, 255});
+    effects::motion_blur(mb, 180.0f, 3);  // samples to the left: pixels 3,4,5 see it
+    CHECK(mb.get(4, 0).a > 0 && mb.get(4, 0).r == 255 && mb.get(0, 0).a == 0);
+    // Noise changes pixels, monochrome keeps them grey, amplitude bounded.
+    Image nz(16, 16, {128, 128, 128, 255});
+    effects::add_noise(nz, 20, false, true, 7);
+    int changed = 0;
+    for (int y = 0; y < 16; ++y) for (int x = 0; x < 16; ++x) {
+        Color c = nz.get(x, y);
+        CHECK(c.r == c.g && c.g == c.b && c.r >= 128 - 51 && c.r <= 128 + 51);
+        changed += c.r != 128;
+    }
+    CHECK(changed > 200);
+    Image nz2(16, 16, {128, 128, 128, 255});
+    effects::add_noise(nz2, 20, true, false, 7);
+    CHECK(nz2.get(3, 3).r != nz2.get(3, 3).g || nz2.get(5, 5).r != nz2.get(5, 5).b);
+    // Drop shadow: opaque square on transparent gets shadow below-right.
+    Image ds(8, 8, {0, 0, 0, 0});
+    for (int y = 1; y < 4; ++y) for (int x = 1; x < 4; ++x) ds.set(x, y, {255, 255, 255, 255});
+    effects::drop_shadow(ds, 2, 2, 1.0f, 0.0f, {0, 0, 0, 255});
+    CHECK(ds.get(2, 2).r == 255 && ds.get(2, 2).a == 255);  // original kept
+    CHECK(ds.get(5, 5).a == 255 && ds.get(5, 5).r == 0);    // shadow
+    CHECK(ds.get(7, 7).a == 0);
+}
+
 int main() {
+    test_effects();
     test_adjust_module();
     test_psp_writer_roundtrip();
     test_geometry();

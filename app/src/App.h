@@ -68,7 +68,7 @@ struct App {
     bool show_new_dialog = false;
     // Adjustment / effect dialogs with live preview (ui/Adjust.cpp)
     enum class Adj { None, BrightnessContrast, Curves, Gamma, Levels, Threshold, ChannelMixer, Colorize, HSL,
-                     Average, Gaussian, Posterize, Solarize };
+                     Average, Gaussian, Posterize, Solarize, UnsharpMask, Median, MotionBlur, Mosaic, AddNoise, DropShadow };
     Adj open_adjust = Adj::None;
     struct Preview {
         bool active = false;
@@ -94,6 +94,12 @@ struct App {
     int mixer_row = 0;
     std::vector<std::pair<float, float>> curve_points{{0, 0}, {255, 255}};
     int curve_drag = -1;
+    float usm_radius = 2.0f; int usm_strength = 100, usm_clipping = 0;
+    int median_radius = 1;
+    float motion_angle = 0.0f; int motion_strength = 10;
+    int mosaic_w = 8, mosaic_h = 8; bool mosaic_square = true;
+    int noise_percent = 20; bool noise_gaussian = false, noise_mono = false;
+    int shadow_x = 5, shadow_y = 5; float shadow_opacity = 0.5f, shadow_blur = 5.0f; float shadow_color[3] = {0, 0, 0};
     int show_sel_dialog = 0;            // 1 expand, 2 contract, 3 feather
     bool show_layer_props_dialog = false;
     bool show_resize_dialog = false;
