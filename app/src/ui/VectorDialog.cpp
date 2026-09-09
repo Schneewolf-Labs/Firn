@@ -52,7 +52,7 @@ bool gradient_library_combo(App& app, const char* label, int& index, vec::Gradie
     app.ensure_gradients();
     bool changed = false;
     const char* current = index >= 0 && index < static_cast<int>(app.gradient_library.size()) ? app.gradient_library[index].name.c_str()
-                          : fallback ? fallback->name.c_str() : "Foreground-Background";
+                          : fallback ? fallback->name.c_str() : g.name.empty() ? "(object's gradient)" : g.name.c_str();
     ImGui::SetNextItemWidth(200);
     if (ImGui::BeginCombo(label, current)) {
         if (fallback && ImGui::Selectable(fallback->name.c_str(), index < 0)) { index = -1; g = *fallback; changed = true; }

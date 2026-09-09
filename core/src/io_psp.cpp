@@ -310,10 +310,12 @@ bool read_shape(const Reader& r, const Block& sb, vec::Object& o) {
                     if (o.linestyle_raw.size() >= 40) {
                         const uint8_t* d = o.linestyle_raw.data();
                         auto f64at = [&](size_t off) { double v; std::memcpy(&v, d + off, 8); return static_cast<float>(v); };
-                        auto u32at = [&](size_t off) { uint32_t v; std::memcpy(&v, d + off, 4); return v; };
-                        o.line.seg_start_cap = u32at(0); o.line.seg_start_w = f64at(4); o.line.seg_start_h = f64at(12);
-                        o.line.seg_end_cap = u32at(20); o.line.seg_end_w = f64at(24); o.line.seg_end_h = f64at(32);
-                        o.line.seg_caps_on = d[40];
+                        // u16 cap, f64 w, f64 h, u16 cap, f64 w, f64 h, u8 on, 4 bytes.
+                        // (Not the u32 framing of .PspStyledLine files: the original
+                        // hangs on a block that puts the 1.0 sizes at the wrong offsets.)
+                        o.line.seg_start_cap = static_cast<uint32_t>(d[0] | (d[1] << 8)); o.line.seg_start_w = f64at(2); o.line.seg_start_h = f64at(10);
+                        o.line.seg_end_cap = static_cast<uint32_t>(d[18] | (d[19] << 8)); o.line.seg_end_w = f64at(20); o.line.seg_end_h = f64at(28);
+                        o.line.seg_caps_on = d[36];
                     }
                 }
             }
@@ -325,18 +327,26 @@ bool read_shape(const Reader& r, const Block& sb, vec::Object& o) {
         if (cl == 8) {  // path with node count
             const uint32_t n = r.u32(p + 4);
             p += 8;
+            // One node list per shape; a node with bit 0 of its first flag
+            // byte starts a new subpath, bit 7 of the second closes one.
             vec::Path path;
+            auto flush = [&]() {
+                if (path.nodes.empty()) return;
+                path.closed = (path.nodes.back().flags[1] & 0x80) != 0;
+                o.paths.push_back(std::move(path));
+                path = vec::Path{};
+            };
             for (uint32_t i = 0; i < n && r.ok(p, 55) && r.u32(p) == 55; ++i) {
                 vec::Node nd;
                 nd.x = rd_f64(r, p + 4); nd.y = rd_f64(r, p + 12);
                 nd.in_x = rd_f64(r, p + 20); nd.in_y = rd_f64(r, p + 28);
                 nd.out_x = rd_f64(r, p + 36); nd.out_y = rd_f64(r, p + 44);
                 nd.flags[0] = r.u8(p + 52); nd.flags[1] = r.u8(p + 53); nd.flags[2] = r.u8(p + 54);
+                if (nd.flags[0] & 1) flush();
                 path.nodes.push_back(nd);
                 p += 55;
             }
-            path.closed = !path.nodes.empty() && (path.nodes.back().flags[1] & 0x80);
-            o.paths.push_back(std::move(path));
+            flush();
             continue;
         }
         if (cl < 4 || p + cl > sb.end) break;
@@ -949,9 +959,9 @@ std::vector<uint8_t> write_line_style(const vec::LineStyle& l, const std::vector
     Writer w;
     if (raw.size() == 41) w.bytes(raw);
     else {
-        w.u32(l.seg_start_cap); w.f64(l.seg_start_w); w.f64(l.seg_start_h);
-        w.u32(l.seg_end_cap); w.f64(l.seg_end_w); w.f64(l.seg_end_h);
-        w.u8(static_cast<uint8_t>(l.seg_caps_on));
+        w.u16(static_cast<int>(l.seg_start_cap)); w.f64(l.seg_start_w); w.f64(l.seg_start_h);
+        w.u16(static_cast<int>(l.seg_end_cap)); w.f64(l.seg_end_w); w.f64(l.seg_end_h);
+        w.u8(static_cast<uint8_t>(l.seg_caps_on)); w.u32(0);
     }
     Writer c;
     c.u32(static_cast<uint32_t>(w.out.size() + 4));
@@ -998,15 +1008,20 @@ std::vector<uint8_t> write_shape(const vec::Object& o) {
     w.bytes(write_paint_style(o.stroke));
     w.bytes(write_paint_style(o.fill));
     w.bytes(write_line_style(o.line, o.linestyle_raw));
+    // All subpaths go into one node list (the original reads a single one);
+    // the start and close flags delimit them.
+    size_t total = 0;
+    for (const vec::Path& p : o.paths) total += p.nodes.size();
+    w.u32(8); w.u32(static_cast<uint32_t>(total));
     for (const vec::Path& p : o.paths) {
-        w.u32(8); w.u32(static_cast<uint32_t>(p.nodes.size()));
         for (size_t i = 0; i < p.nodes.size(); ++i) {
             const vec::Node& n = p.nodes[i];
             w.u32(55);
             w.f64(n.x); w.f64(n.y); w.f64(n.in_x); w.f64(n.in_y); w.f64(n.out_x); w.f64(n.out_y);
             uint8_t f0 = n.flags[0], f1 = n.flags[1];
-            if (i == 0) f0 |= 1;
+            if (i == 0) f0 |= 1; else f0 &= static_cast<uint8_t>(~1);
             if (i + 1 == p.nodes.size()) { if (p.closed) f1 |= 0x80; else f1 &= static_cast<uint8_t>(~0x80); }
+            else f1 &= static_cast<uint8_t>(~0x80);
             w.u8(f0); w.u8(f1); w.u8(n.flags[2]);
         }
     }

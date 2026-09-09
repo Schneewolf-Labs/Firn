@@ -2,6 +2,8 @@
 #include <chrono>
 #include <cstdio>
 #include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <cstdlib>
 #include <memory>
 #include <string>
@@ -1390,6 +1392,37 @@ static void test_vector_roundtrip() {
     }
 }
 
+// A fresh object must serialize with the same attribute and line style
+// bytes the original writes for its own defaults: the original hangs on a
+// line style block whose sizes sit at the wrong offsets.
+static void test_vector_default_bytes() {
+    Document doc(64, 64);
+    Layer& L = doc.add_layer("Vector 1");
+    L.type = LayerType::Vector;
+    L.pixels = Image(64, 64, {0, 0, 0, 0});
+    vec::Object o = vec::make_rectangle(10, 10, 40, 30);
+    o.stroke.kind = vec::PaintStyle::Kind::Solid;
+    o.fill.kind = vec::PaintStyle::Kind::Solid;
+    L.objects.push_back(o);
+    const std::string tmp = "/tmp/firn_test_defaults.pspimage";
+    CHECK(io::save_psp(doc, tmp, nullptr));
+    std::ifstream f(tmp, std::ios::binary);
+    std::vector<uint8_t> d((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+    std::remove(tmp.c_str());
+    // Attribute chunk: length 60, flags 1 1 1, width 1.0, then the cap records
+    // (01 00 1.0 1.0) x2, 00, miter 10.0 as in the shipped preset shapes.
+    const std::vector<uint8_t> attr = {0x3c, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0xf0, 0x3f,
+                                       0, 0, 0, 0, 0, 0, 0, 0, 0xf0, 0x3f, 0, 0, 0, 0, 0, 0, 0xf0, 0x3f,
+                                       0, 0, 0, 0, 0, 0, 0, 0, 0xf0, 0x3f, 0, 0, 0, 0, 0, 0, 0xf0, 0x3f,
+                                       0, 0, 0, 0, 0, 0, 0, 0x24, 0x40};
+    CHECK(std::search(d.begin(), d.end(), attr.begin(), attr.end()) != d.end());
+    // Line style chunk (45): u16 0, f64 1.0, f64 1.0, u16 0, f64 1.0, f64 1.0, 5 x 00.
+    const std::vector<uint8_t> line = {0x2d, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xf0, 0x3f, 0, 0, 0, 0, 0, 0, 0xf0, 0x3f,
+                                       0, 0, 0, 0, 0, 0, 0, 0, 0xf0, 0x3f, 0, 0, 0, 0, 0, 0, 0xf0, 0x3f, 0, 0, 0, 0, 0};
+    CHECK(line.size() == 45);
+    CHECK(std::search(d.begin(), d.end(), line.begin(), line.end()) != d.end());
+}
+
 static void test_vector_queries() {
     using namespace vec;
     Object r = make_rectangle(10, 10, 50, 30);
@@ -1428,6 +1461,7 @@ static void test_vector_queries() {
 }
 
 int main() {
+    test_vector_default_bytes();
     test_vector_queries();
     test_vector_roundtrip();
     test_vector_core();

@@ -143,14 +143,18 @@ A shape block is a sequence of chunks and sub-blocks:
    Style 0 is linear; 1 rectangular, 2 sunburst, 3 radial are assumed from
    the dialog order. A disabled stroke or fill still has its style block
    (kind 0) and its attribute flag clear.
-4. Line style block (id 19), chunk length 45: `u32 first cap, f64 width,
-   f64 height, u32 last cap, f64 width, f64 height, u8`. Every sample has
-   caps 0 and sizes 1.0 (or all zeros in preset shapes).
-5. Per path: chunk `{8, node count}` then 55-byte node chunks: `f64 x, y,
-   in x, in y, out x, out y` (handles are absolute image coordinates) and
-   three flag bytes: byte 0 bit 0 marks the first node of a path, byte 1
-   bit 7 closes the path, bits 0x40/0x43/0xc0 in byte 1 encode the node
-   type (corner, smooth, symmetric; only 0x40 is relied on).
+4. Line style block (id 19), chunk length 45: `u16 cap, f64 width, f64
+   height, u16 cap, f64 width, f64 height, u8, 4 bytes` (the segment caps;
+   note the u16 framing, unlike the styled-line files). Every sample has
+   caps 0 and sizes 1.0 (or all zeros in preset shapes). The original hangs
+   while reading a file whose sizes sit at the wrong offsets.
+5. One chunk `{8, node count}` then 55-byte node chunks: `f64 x, y, in x,
+   in y, out x, out y` (handles are absolute image coordinates) and three
+   flag bytes: byte 0 bit 0 starts a subpath (a shape with several
+   contours, such as text, keeps them all in this one list; the original
+   reads only the first list, so never write one per path), byte 1 bit 7
+   closes the subpath at that node, bits 0x40/0x43/0xc0 in byte 1 encode
+   the node type (corner, smooth, symmetric; only 0x40 is relied on).
 
 Linear gradient parameter, verified against the stored composite of
 `Vector balloon.PspImage` (mean error 0.8/255): with `(dx, dy)` the pixel
