@@ -28,6 +28,7 @@ struct Brush {
     float step = 0.25f;      // stamp spacing as a fraction of size
     bool accumulate = false; // airbrush: coverage builds up per stamp by `flow`
     float flow = 0.1f;
+    bool square = false;     // square stamp instead of round
 };
 
 // Paint: colour. Erase: clear alpha. Clone: pixels from a source image at an

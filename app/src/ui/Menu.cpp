@@ -216,6 +216,8 @@ void App::draw_menu() {
         if (ImGui::BeginMenu("Mask", has_any_layer && doc->layer(layer).has_mask())) {
             bool on = doc->layer(layer).mask_enabled;
             if (ImGui::MenuItem("Enable Mask", nullptr, &on)) layer_set_mask(on ? "Enable Mask" : "Disable Mask", doc->layer(layer).mask, on);
+            bool editing = mask_edit && static_cast<int>(mask_proxy_layer) == layer;
+            if (ImGui::MenuItem("Edit Mask", nullptr, &editing)) set_mask_edit(editing);
             if (ImGui::MenuItem("Invert Mask")) { Mask m = doc->layer(layer).mask; mask::invert(m); layer_set_mask("Invert Mask", std::move(m), doc->layer(layer).mask_enabled); }
             if (ImGui::MenuItem("Delete Mask")) layer_set_mask("Delete Mask", Mask());
             if (ImGui::MenuItem("Load Selection From Mask")) set_selection("Load Selection From Mask", doc->layer(layer).mask);

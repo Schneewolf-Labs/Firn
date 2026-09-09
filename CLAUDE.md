@@ -90,6 +90,11 @@ docs/    notes on the original: command inventory, module mapping, FORMAT.md
   whole stack (`Document::State`). A layer's optional `mask` multiplies its
   alpha (or the group's composite) during compositing. Tools and pixel
   commands must check `Layer::is_raster()` / `App::active_is_raster()`.
+- **Mask edit mode**: tools never touch `layer.pixels` directly; they use
+  `App::paint_pixels(layer)` (the pixels, or a greyscale proxy of the mask
+  while editing it), `App::paint_touched(layer)` after live edits, and
+  `App::commit_pixels(...)` to record the gesture. That is what makes every
+  painting tool work on masks for free.
 - New tools go in `app/src/tools/Tools.cpp` and register in
   `make_default_tools()`; give them a single-letter `shortcut()` matching the
   original where one exists (A pan, Z zoom, S selection, E dropper, B brush,

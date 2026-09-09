@@ -137,7 +137,8 @@ static void draw_layers(App& app) {
         std::snprintf(label, sizeof(label), "%s%s%s%s", L.type == LayerType::Group ? "[Group] " : "", L.name.c_str(),
                       L.blend != BlendMode::Normal ? "  [" : "", L.blend != BlendMode::Normal ? blend_mode_name(L.blend) : "");
         if (L.blend != BlendMode::Normal) std::strncat(label, "]", sizeof(label) - std::strlen(label) - 1);
-        if (ImGui::Selectable(label, active == i, ImGuiSelectableFlags_AllowDoubleClick)) {
+        // Size the selectable to its label so the controls after it stay clickable.
+        if (ImGui::Selectable(label, active == i, ImGuiSelectableFlags_AllowDoubleClick, ImVec2(ImGui::CalcTextSize(label).x + 8.0f, 0))) {
             doc.set_active_layer(i);
             if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) app.open_layer_properties();
         }
@@ -145,6 +146,11 @@ static void draw_layers(App& app) {
             ImGui::SameLine();
             bool on = L.mask_enabled;
             if (ImGui::Checkbox("Mask", &on)) { doc.set_active_layer(i); app.layer_set_mask(on ? "Enable Mask" : "Disable Mask", L.mask, on); }
+            ImGui::SameLine();
+            const bool editing = app.mask_edit && static_cast<int>(app.mask_proxy_layer) == i;
+            if (editing) ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyle().Colors[ImGuiCol_ButtonActive]);
+            if (ImGui::SmallButton("Edit")) { doc.set_active_layer(i); app.set_mask_edit(!editing); }
+            if (editing) ImGui::PopStyleColor();
         }
         if (L.background) { ImGui::SameLine(); ImGui::TextDisabled("(background)"); }
         else if (L.opacity < 1.0f) { ImGui::SameLine(); ImGui::TextDisabled("%.0f%%", L.opacity * 100.0f); }

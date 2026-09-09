@@ -54,7 +54,7 @@ void Stroke::stamp(float cx, float cy) {
     for (int y = box.y0; y < box.y1; ++y) {
         for (int x = box.x0; x < box.x1; ++x) {
             const float dx = (x + 0.5f) - cx, dy = (y + 0.5f) - cy;
-            const float d = std::sqrt(dx * dx + dy * dy);
+            const float d = brush_.square ? std::max(std::abs(dx), std::abs(dy)) : std::sqrt(dx * dx + dy * dy);
             float cov;
             if (d <= inner) cov = 1.0f;
             else if (brush_.hardness >= 1.0f || r - inner < 1.0f) cov = std::clamp(r + 0.5f - d, 0.0f, 1.0f);

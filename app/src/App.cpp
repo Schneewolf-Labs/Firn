@@ -12,6 +12,8 @@
 
 using namespace firn;
 
+static Image mask_to_image(const Mask& m);
+
 App::App() : tools(make_default_tools()) {
     config.load();
     file_dialog.set_directory(config.last_directory);
@@ -52,6 +54,7 @@ void App::snap_point(float& x, float& y) const {
 
 void App::activate_document(int index) {
     if (index < 0 || index >= static_cast<int>(docs.size()) || index == current_doc) return;
+    set_mask_edit(false);
     tool().cancel(*this);
     preview_cancel();
     stash_current();
@@ -71,6 +74,7 @@ void App::activate_document(int index) {
 }
 
 void App::add_document(std::unique_ptr<Document> d, const std::string& path) {
+    set_mask_edit(false);
     tool().cancel(*this);
     preview_cancel();
     stash_current();
@@ -240,6 +244,7 @@ void App::undo() {
     if (doc && history.can_undo()) {
         status = "Undo " + history.at(history.cursor() - 1).name();
         history.undo(*doc);
+        refresh_mask_proxy();
     }
 }
 
@@ -248,7 +253,16 @@ void App::redo() {
     if (doc && history.can_redo()) {
         status = "Redo " + history.at(history.cursor()).name();
         history.redo(*doc);
+        refresh_mask_proxy();
     }
+}
+
+// The mask proxy mirrors the document; anything that changes the mask
+// outside a stroke (undo, redo, mask commands) must rebuild it.
+void App::refresh_mask_proxy() {
+    if (!mask_edit) return;
+    if (!doc || mask_proxy_layer >= doc->layer_count() || !doc->layer(mask_proxy_layer).has_mask()) { set_mask_edit(false); return; }
+    mask_proxy = mask_to_image(doc->layer(mask_proxy_layer).mask);
 }
 
 int App::active_layer() const { return doc ? doc->active_layer() : -1; }
@@ -387,6 +401,7 @@ void App::layer_ungroup() {
 
 void App::layer_set_mask(const char* name, Mask m, bool enabled) {
     if (doc && active_layer() >= 0) run(std::make_unique<SetMaskCommand>(active_layer(), name, std::move(m), enabled));
+    refresh_mask_proxy();
 }
 
 void App::layer_mask_from_selection() {
@@ -405,6 +420,66 @@ void App::layer_mask_from_image() {
             m.at(x, y) = static_cast<uint8_t>((c.r * 299 + c.g * 587 + c.b * 114 + 500) / 1000 * c.a / 255);
         }
     layer_set_mask("New Mask Layer", std::move(m));
+}
+
+// --- Mask editing ----------------------------------------------------------
+
+namespace {
+Image mask_to_image_impl(const Mask& m) {
+    Image img(m.width(), m.height());
+    for (size_t i = 0; i < m.size(); ++i) {
+        uint8_t* p = img.data() + i * 4;
+        p[0] = p[1] = p[2] = m.data()[i];
+        p[3] = 255;
+    }
+    return img;
+}
+Mask image_to_mask(const Image& img) {
+    Mask m(img.width(), img.height());
+    for (size_t i = 0; i < m.size(); ++i) {
+        const uint8_t* p = img.data() + i * 4;
+        m.data()[i] = static_cast<uint8_t>((p[0] * 299 + p[1] * 587 + p[2] * 114 + 500) / 1000 * p[3] / 255);
+    }
+    return m;
+}
+}  // namespace
+
+static Image mask_to_image(const Mask& m) { return mask_to_image_impl(m); }
+
+void App::set_mask_edit(bool on) {
+    tool().cancel(*this);
+    if (on && doc && active_layer() >= 0 && doc->layer(active_layer()).has_mask()) {
+        mask_edit = true;
+        mask_proxy_layer = active_layer();
+        mask_proxy = mask_to_image(doc->layer(mask_proxy_layer).mask);
+        status = "Editing the mask of \"" + doc->layer(mask_proxy_layer).name + "\": paint black to hide, white to show.";
+    } else {
+        mask_edit = false;
+        mask_proxy = Image();
+    }
+}
+
+Image& App::paint_pixels(size_t layer) {
+    if (mask_edit && layer == mask_proxy_layer && doc && layer < doc->layer_count() && doc->layer(layer).has_mask()) return mask_proxy;
+    return doc->layer(layer).pixels;
+}
+
+void App::paint_touched(size_t layer) {
+    if (mask_edit && layer == mask_proxy_layer && doc && layer < doc->layer_count() && doc->layer(layer).has_mask())
+        doc->layer(layer).mask = image_to_mask(mask_proxy);
+    doc->touch();
+}
+
+void App::commit_pixels(size_t layer, const std::string& name, Image before, const Image& after) {
+    if (mask_edit && layer == mask_proxy_layer && doc && doc->layer(layer).has_mask()) {
+        // Record the mask change; the proxy already holds `after`.
+        Mask before_mask = image_to_mask(before);
+        Mask after_mask = image_to_mask(after);
+        doc->layer(layer).mask = before_mask;  // command computes the delta from the document state
+        run(std::make_unique<SetMaskCommand>(layer, name + " (Mask)", std::move(after_mask), doc->layer(layer).mask_enabled));
+        return;
+    }
+    commit(std::make_unique<LayerSnapshotCommand>(layer, name, std::move(before), after));
 }
 
 void App::layer_promote_background() {

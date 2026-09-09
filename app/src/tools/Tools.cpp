@@ -223,7 +223,7 @@ public:
             default: break;
         }
         layer_ = app.active_layer();
-        stroke_ = std::make_unique<raster::Stroke>(L.pixels, brush, color, mode, &app.doc->selection());
+        stroke_ = std::make_unique<raster::Stroke>(app.paint_pixels(layer_), brush, color, mode, &app.doc->selection());
         if (mode == raster::StrokeMode::Clone) stroke_->set_clone_source(&clone_src_, off_x_, off_y_);
         if (filter) stroke_->set_filter(std::move(filter));
         if (area_filter) stroke_->set_area_filter(std::move(area_filter));
@@ -239,14 +239,13 @@ public:
     }
     void on_release(App& app, const ToolInput&, ImGuiMouseButton) override {
         if (!stroke_ || !app.doc) return;
-        Layer& L = app.doc->layer(layer_);
-        app.commit(std::make_unique<LayerSnapshotCommand>(layer_, name(), stroke_->base(), L.pixels));
+        app.commit_pixels(layer_, name(), stroke_->base(), app.paint_pixels(layer_));
         stroke_.reset();
     }
     void cancel(App& app) override {
         if (stroke_ && app.doc && layer_ < app.doc->layer_count()) {
-            app.doc->layer(layer_).pixels = stroke_->base();
-            app.doc->touch();
+            app.paint_pixels(layer_) = stroke_->base();
+            app.paint_touched(layer_);
         }
         stroke_.reset();
     }
@@ -258,8 +257,13 @@ public:
             flush(app);
         }
         const float r = app.brush.size * 0.5f * in.zoom;
-        in.dl->AddCircle(in.screen, r, IM_COL32(0, 0, 0, 200), 0, 1.0f);
-        in.dl->AddCircle(in.screen, r + 1.0f, IM_COL32(255, 255, 255, 160), 0, 1.0f);
+        if (app.brush.square) {
+            in.dl->AddRect(ImVec2(in.screen.x - r, in.screen.y - r), ImVec2(in.screen.x + r, in.screen.y + r), IM_COL32(0, 0, 0, 200));
+            in.dl->AddRect(ImVec2(in.screen.x - r - 1, in.screen.y - r - 1), ImVec2(in.screen.x + r + 1, in.screen.y + r + 1), IM_COL32(255, 255, 255, 160));
+        } else {
+            in.dl->AddCircle(in.screen, r, IM_COL32(0, 0, 0, 200), 0, 1.0f);
+            in.dl->AddCircle(in.screen, r + 1.0f, IM_COL32(255, 255, 255, 160), 0, 1.0f);
+        }
         if (kind_ == Kind::Clone && has_src_) {
             const float sx = stroke_ ? in.img_x + off_x_ : src_x_, sy = stroke_ ? in.img_y + off_y_ : src_y_;
             const ImVec2 c(in.origin.x + sx * in.zoom, in.origin.y + sy * in.zoom);
@@ -283,6 +287,10 @@ public:
         ImGui::SetNextItemWidth(100);
         float step = app.brush.step * 100.0f;
         if (ImGui::SliderFloat("Step", &step, 1.0f, 200.0f, "%.0f")) app.brush.step = step / 100.0f;
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(80);
+        int shape = app.brush.square ? 1 : 0;
+        if (ImGui::Combo("Shape", &shape, "Round\0Square\0")) app.brush.square = shape == 1;
         switch (kind_) {
             case Kind::Airbrush: {
                 ImGui::SameLine();
@@ -322,8 +330,7 @@ public:
 
 private:
     void flush(App& app) {
-        Layer& L = app.doc->layer(layer_);
-        if (!stroke_->render(L.pixels).empty()) app.doc->touch();
+        if (!stroke_->render(app.paint_pixels(layer_)).empty()) app.paint_touched(layer_);
     }
     Kind kind_;
     size_t layer_ = 0;
@@ -349,7 +356,7 @@ public:
     void on_press(App& app, const ToolInput& in, ImGuiMouseButton b) override {
         if (!app.active_is_raster()) return;
         layer_ = app.active_layer();
-        before_ = app.doc->layer(layer_).pixels;
+        before_ = app.paint_pixels(layer_);
         push_ = b == ImGuiMouseButton_Right;
         grab(app, in.img_x, in.img_y);
         last_x_ = in.img_x; last_y_ = in.img_y;
@@ -362,15 +369,15 @@ public:
         const float len = std::hypot(dx, dy);
         for (float t = spacing; t <= len; t += spacing) stamp(app, last_x_ + dx * t / len, last_y_ + dy * t / len);
         if (len >= spacing) { last_x_ = in.img_x; last_y_ = in.img_y; }
-        app.doc->touch();
+        app.paint_touched(layer_);
     }
     void on_release(App& app, const ToolInput&, ImGuiMouseButton) override {
         if (!active_) return;
         active_ = false;
-        app.commit(std::make_unique<LayerSnapshotCommand>(layer_, push_ ? "Push" : "Smudge", before_, app.doc->layer(layer_).pixels));
+        app.commit_pixels(layer_, push_ ? "Push" : "Smudge", before_, app.paint_pixels(layer_));
     }
     void cancel(App& app) override {
-        if (active_ && app.doc && layer_ < app.doc->layer_count()) { app.doc->layer(layer_).pixels = before_; app.doc->touch(); }
+        if (active_ && app.doc && layer_ < app.doc->layer_count()) { app.paint_pixels(layer_) = before_; app.paint_touched(layer_); }
         active_ = false;
     }
     void draw_overlay(App& app, const ToolInput& in) override {
@@ -401,7 +408,7 @@ private:
         return std::clamp((r - d) / (r - inner), 0.0f, 1.0f);
     }
     void grab(App& app, float cx, float cy) {
-        const Image& px = app.doc->layer(layer_).pixels;
+        const Image& px = app.paint_pixels(layer_);
         const int r = static_cast<int>(std::ceil(app.brush.size * 0.5f)) + 1;
         rad_ = r;
         buf_.assign(static_cast<size_t>(2 * r + 1) * (2 * r + 1) * 4, 0);
@@ -414,7 +421,7 @@ private:
             }
     }
     void stamp(App& app, float cx, float cy) {
-        Image& px = app.doc->layer(layer_).pixels;
+        Image& px = app.paint_pixels(layer_);
         const int r = rad_, W = 2 * r + 1;
         const int ox = static_cast<int>(std::floor(cx)) - r, oy = static_cast<int>(std::floor(cy)) - r;
         const float strength = push_ ? 1.0f : app.retouch_amount / 100.0f;
@@ -529,15 +536,15 @@ public:
     void on_press(App& app, const ToolInput& in, ImGuiMouseButton b) override {
         if (!in.inside || !app.active_is_raster()) return;
         const size_t layer = app.active_layer();
-        Layer& L = app.doc->layer(layer);
-        Image before = L.pixels;
+        Image& target = app.paint_pixels(layer);
+        Image before = target;
         const Color color = to_color(b == ImGuiMouseButton_Left ? app.fg_color : app.bg_color);
-        const raster::Rect changed = raster::flood_fill(L.pixels, static_cast<int>(std::floor(in.img_x)),
+        const raster::Rect changed = raster::flood_fill(target, static_cast<int>(std::floor(in.img_x)),
                                                         static_cast<int>(std::floor(in.img_y)), color,
                                                         app.fill_tolerance, app.fill_opacity, &app.doc->selection());
         if (changed.empty()) return;
-        app.doc->touch();
-        app.commit(std::make_unique<LayerSnapshotCommand>(layer, name(), std::move(before), L.pixels));
+        app.paint_touched(layer);
+        app.commit_pixels(layer, name(), std::move(before), target);
     }
     void draw_options(App& app) override {
         ImGui::SetNextItemWidth(140);
@@ -798,7 +805,7 @@ public:
     void on_press(App& app, const ToolInput& in, ImGuiMouseButton) override {
         if (!app.active_is_raster()) return;
         layer_ = app.active_layer();
-        before_ = app.doc->layer(layer_).pixels;
+        before_ = app.paint_pixels(layer_);
         x0_ = x1_ = in.img_x; y0_ = y1_ = in.img_y;
         active_ = true;
     }
@@ -807,17 +814,17 @@ public:
         x1_ = in.img_x; y1_ = in.img_y;
         Image work = before_;
         draw(app, work);
-        app.doc->layer(layer_).pixels = std::move(work);
-        app.doc->touch();
+        app.paint_pixels(layer_) = std::move(work);
+        app.paint_touched(layer_);
     }
     void on_release(App& app, const ToolInput& in, ImGuiMouseButton) override {
         if (!active_) return;
         on_drag(app, in, ImGuiMouseButton_Left);
         active_ = false;
-        app.commit(std::make_unique<LayerSnapshotCommand>(layer_, name(), before_, app.doc->layer(layer_).pixels));
+        app.commit_pixels(layer_, name(), before_, app.paint_pixels(layer_));
     }
     void cancel(App& app) override {
-        if (active_ && app.doc && layer_ < app.doc->layer_count()) { app.doc->layer(layer_).pixels = before_; app.doc->touch(); }
+        if (active_ && app.doc && layer_ < app.doc->layer_count()) { app.paint_pixels(layer_) = before_; app.paint_touched(layer_); }
         active_ = false;
     }
 

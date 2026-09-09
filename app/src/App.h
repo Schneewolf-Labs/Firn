@@ -254,6 +254,17 @@ struct App {
     void layer_set_mask(const char* name, firn::Mask m, bool enabled = true);
     void layer_mask_from_selection();
     void layer_mask_from_image();
+
+    // Mask edit mode: tools paint a greyscale proxy of the active layer's
+    // mask instead of its pixels; the mask follows live.
+    bool mask_edit = false;
+    firn::Image mask_proxy;
+    size_t mask_proxy_layer = 0;
+    void set_mask_edit(bool on);
+    void refresh_mask_proxy();
+    firn::Image& paint_pixels(size_t layer);            // layer pixels, or the mask proxy in mask edit mode
+    void paint_touched(size_t layer);                   // call after live edits to paint_pixels()
+    void commit_pixels(size_t layer, const std::string& name, firn::Image before, const firn::Image& after);
     void layer_set_props(const firn::LayerProps& before, const firn::LayerProps& after);
     void open_layer_properties();
 

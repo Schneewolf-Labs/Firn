@@ -51,7 +51,8 @@ what to work on next.
 - [x] Move tool (layer offset), Clone brush
 - [x] Airbrush, Lighten/Darken, Saturation, Hue, Color Replacer
 - [x] Smudge / Push, Dodge / Burn, Soften / Sharpen brushes
-- [ ] Brush shapes and stamp textures
+- [x] Round and square brush shapes
+- [ ] Custom brush tips and stamp textures
 
 ## 6. Text and shapes
 
@@ -74,4 +75,5 @@ what to work on next.
 - [x] Layer groups in the model, palette (indent, collapse) and file round trip
 - [x] Selections: load from / save to disk (.PspSelection or any image)
 - [ ] Alpha channels in files
-- [ ] Painting directly on masks; mask overlay view
+- [x] Painting directly on masks (Edit button / Layers > Mask > Edit Mask)
+- [ ] Mask overlay view (red tint over hidden areas)

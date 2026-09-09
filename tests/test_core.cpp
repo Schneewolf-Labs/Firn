@@ -1010,7 +1010,25 @@ static void test_groups_and_masks() {
     CHECK(doc.layer(1).pixels.empty());
 }
 
+static void test_square_brush() {
+    Image base(21, 21, {0, 0, 0, 255});
+    raster::Brush b; b.size = 10; b.hardness = 1; b.square = true;
+    raster::Stroke st(base, b, {255, 255, 255, 255}, raster::StrokeMode::Paint);
+    Image out = base;
+    st.add_point(10.5f, 10.5f);
+    st.render(out);
+    CHECK(out.get(6, 6).r == 255 && out.get(14, 14).r == 255);  // corners of the square are painted
+    CHECK(out.get(4, 10).r == 0 && out.get(10, 4).r == 0);
+    raster::Brush r = b; r.square = false;
+    raster::Stroke sr(base, r, {255, 255, 255, 255}, raster::StrokeMode::Paint);
+    Image ro = base;
+    sr.add_point(10.5f, 10.5f);
+    sr.render(ro);
+    CHECK(ro.get(6, 6).r == 0);  // round brush misses the corner
+}
+
 int main() {
+    test_square_brush();
     test_groups_and_masks();
     test_more_shapes();
     test_effects_round2();
