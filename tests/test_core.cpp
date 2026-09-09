@@ -906,7 +906,23 @@ static void test_effects_round2() {
     CHECK(co.get(6, 6).r < 50 && co.get(15, 15).r == 200 && co.get(2, 2).r == 200);
 }
 
+static void test_more_shapes() {
+    Mask rr = mask::rounded_rectangle(40, 40, 5, 5, 35, 35, 10, false);
+    CHECK(rr.at(20, 20) == 255 && rr.at(20, 6) == 255);   // inside and mid-edge
+    CHECK(rr.at(5, 5) == 0 && rr.at(34, 34) == 0);         // corners cut off
+    CHECK(rr.at(2, 20) == 0);
+    Mask tri = mask::regular_polygon(40, 40, 20, 20, 15, 15, 3, 0.0f, false);
+    CHECK(tri.at(20, 10) == 255 && tri.at(20, 26) == 255 && tri.at(20, 30) == 0);  // apex at top, base at y=27.5
+    CHECK(tri.at(8, 10) == 0 && tri.at(32, 10) == 0);
+    Mask hex = mask::regular_polygon(40, 40, 20, 20, 15, 15, 6, 0.0f, true);
+    CHECK(hex.at(20, 20) == 255 && hex.at(20, 6) == 255 && hex.at(6, 20) == 0);
+    Mask st = mask::star(40, 40, 20, 20, 18, 18, 5, 0.4f, 0.0f, false);
+    CHECK(st.at(20, 4) == 255 && st.at(20, 20) == 255);     // top point and centre
+    CHECK(st.at(4, 4) == 0 && st.at(20, 36) == 0);           // between points below
+}
+
 int main() {
+    test_more_shapes();
     test_effects_round2();
     test_adjust_round2();
     test_text_and_polyline();

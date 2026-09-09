@@ -175,7 +175,10 @@ struct App {
     // Line / shape tools
     float line_width = 3.0f;
     bool shape_antialias = true, shape_fill = true, shape_stroke = true;
-    int shape_kind = 0;                 // 0 rectangle, 1 ellipse
+    int shape_kind = 0;                 // see kShapeNames in Tools.cpp
+    float shape_radius = 10.0f;         // rounded rectangle corner radius
+    int shape_sides = 6, star_points = 5;
+    float star_inner = 0.5f;
     // Text tool
     std::vector<firn::text::FontInfo> fonts;
     bool fonts_loaded = false;
@@ -185,6 +188,9 @@ struct App {
     float text_size = 48.0f;
     bool text_antialias = true;
     int text_align = 0;
+    float text_stroke = 0.0f;           // outline width in px, foreground material
+    float text_angle = 0.0f;            // degrees clockwise
+    int text_x_offset = 0, text_y_offset = 0;  // placement shift from stroke padding / rotation
     int text_x = 0, text_y = 0;
     bool show_text_dialog = false;
     int text_temp_layer = -1;           // preview layer while the dialog is open

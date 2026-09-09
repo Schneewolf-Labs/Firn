@@ -114,6 +114,50 @@ Mask polygon(int w, int h, const std::vector<std::pair<float, float>>& pts, bool
     return m;
 }
 
+Mask rounded_rectangle(int w, int h, float x0, float y0, float x1, float y1, float radius, bool antialias) {
+    if (x1 < x0) std::swap(x0, x1);
+    if (y1 < y0) std::swap(y0, y1);
+    const float r = std::clamp(radius, 0.0f, std::min(x1 - x0, y1 - y0) * 0.5f);
+    if (r <= 0.0f) return rectangle(w, h, x0, y0, x1, y1, antialias);
+    std::vector<std::pair<float, float>> pts;
+    const int arc = std::max(4, static_cast<int>(r));  // segments per corner
+    auto corner = [&](float cx, float cy, float a0) {
+        for (int i = 0; i <= arc; ++i) {
+            const float a = a0 + (3.14159265f * 0.5f) * i / arc;
+            pts.emplace_back(cx + r * std::cos(a), cy + r * std::sin(a));
+        }
+    };
+    corner(x1 - r, y0 + r, -3.14159265f * 0.5f);  // top-right
+    corner(x1 - r, y1 - r, 0.0f);                  // bottom-right
+    corner(x0 + r, y1 - r, 3.14159265f * 0.5f);   // bottom-left
+    corner(x0 + r, y0 + r, 3.14159265f);          // top-left
+    return polygon(w, h, pts, antialias);
+}
+
+Mask regular_polygon(int w, int h, float cx, float cy, float rx, float ry, int sides, float rotation_degrees, bool antialias) {
+    sides = std::max(3, sides);
+    std::vector<std::pair<float, float>> pts;
+    const float rot = rotation_degrees * 3.14159265f / 180.0f - 3.14159265f * 0.5f;
+    for (int i = 0; i < sides; ++i) {
+        const float a = rot + 2.0f * 3.14159265f * i / sides;
+        pts.emplace_back(cx + rx * std::cos(a), cy + ry * std::sin(a));
+    }
+    return polygon(w, h, pts, antialias);
+}
+
+Mask star(int w, int h, float cx, float cy, float rx, float ry, int points, float inner_ratio, float rotation_degrees, bool antialias) {
+    points = std::max(3, points);
+    inner_ratio = std::clamp(inner_ratio, 0.05f, 1.0f);
+    std::vector<std::pair<float, float>> pts;
+    const float rot = rotation_degrees * 3.14159265f / 180.0f - 3.14159265f * 0.5f;
+    for (int i = 0; i < points * 2; ++i) {
+        const float a = rot + 3.14159265f * i / points;
+        const float k = (i % 2 == 0) ? 1.0f : inner_ratio;
+        pts.emplace_back(cx + rx * k * std::cos(a), cy + ry * k * std::sin(a));
+    }
+    return polygon(w, h, pts, antialias);
+}
+
 Mask polyline(int w, int h, const std::vector<std::pair<float, float>>& pts, float width, bool antialias) {
     Mask m(w, h);
     if (pts.empty()) return m;

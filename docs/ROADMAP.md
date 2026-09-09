@@ -57,7 +57,8 @@ what to work on next.
 
 - [x] Text tool (vendor stb_truetype; rasterised to a new layer)
 - [x] Line and preset shapes drawn as raster
-- [ ] Text stroke/outline, rotation, and editing after placement; more preset shapes
+- [x] Text stroke/outline and rotation; rounded rectangle, polygon and star shapes
+- [ ] Text editing after placement (needs vector text objects)
 
 ## 7. Workspace
 

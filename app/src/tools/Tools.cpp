@@ -855,8 +855,14 @@ public:
     const char* name() const override { return "Preset Shape"; }
     const char* shortcut() const override { return "I"; }
     void draw_options(App& app) override {
-        ImGui::SetNextItemWidth(110);
-        ImGui::Combo("Shape", &app.shape_kind, "Rectangle\0Ellipse\0");
+        ImGui::SetNextItemWidth(150);
+        ImGui::Combo("Shape", &app.shape_kind, "Rectangle\0Rounded Rectangle\0Ellipse\0Triangle\0Polygon\0Star\0");
+        if (app.shape_kind == 1) { ImGui::SameLine(); ImGui::SetNextItemWidth(90); ImGui::SliderFloat("Radius", &app.shape_radius, 1.0f, 200.0f, "%.0f"); }
+        if (app.shape_kind == 4) { ImGui::SameLine(); ImGui::SetNextItemWidth(90); ImGui::SliderInt("Sides", &app.shape_sides, 3, 24); }
+        if (app.shape_kind == 5) {
+            ImGui::SameLine(); ImGui::SetNextItemWidth(90); ImGui::SliderInt("Points", &app.star_points, 3, 24);
+            ImGui::SameLine(); ImGui::SetNextItemWidth(90); ImGui::SliderFloat("Inner", &app.star_inner, 0.1f, 1.0f, "%.2f");
+        }
         ImGui::SameLine();
         ImGui::Checkbox("Stroke", &app.shape_stroke);
         ImGui::SameLine();
@@ -875,10 +881,17 @@ protected:
         const int w = img.width(), h = img.height();
         const float lx = std::min(x0_, x1_), rx = std::max(x0_, x1_), ty = std::min(y0_, y1_), by = std::max(y0_, y1_);
         const float sw = app.shape_stroke ? app.line_width : 0.0f;
+        const float cx = (lx + rx) * 0.5f, cy = (ty + by) * 0.5f;
         auto shape = [&](float inset) {
-            return app.shape_kind == 0
-                ? mask::rectangle(w, h, lx + inset, ty + inset, rx - inset, by - inset, app.shape_antialias)
-                : mask::ellipse(w, h, (lx + rx) * 0.5f, (ty + by) * 0.5f, (rx - lx) * 0.5f - inset, (by - ty) * 0.5f - inset, app.shape_antialias);
+            const float hx = (rx - lx) * 0.5f - inset, hy = (by - ty) * 0.5f - inset;
+            switch (app.shape_kind) {
+                case 1: return mask::rounded_rectangle(w, h, lx + inset, ty + inset, rx - inset, by - inset, std::max(0.0f, app.shape_radius - inset), app.shape_antialias);
+                case 2: return mask::ellipse(w, h, cx, cy, hx, hy, app.shape_antialias);
+                case 3: return mask::regular_polygon(w, h, cx, cy, hx, hy, 3, 0.0f, app.shape_antialias);
+                case 4: return mask::regular_polygon(w, h, cx, cy, hx, hy, app.shape_sides, 0.0f, app.shape_antialias);
+                case 5: return mask::star(w, h, cx, cy, hx, hy, app.star_points, app.star_inner, 0.0f, app.shape_antialias);
+                default: return mask::rectangle(w, h, lx + inset, ty + inset, rx - inset, by - inset, app.shape_antialias);
+            }
         };
         const Mask* clip = &app.doc->selection();
         if (app.shape_fill) raster::paint_mask(img, shape(sw), to_color(app.bg_color), clip);

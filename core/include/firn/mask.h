@@ -43,6 +43,11 @@ enum class Combine { Replace, Add, Subtract, Intersect };
 Mask rectangle(int w, int h, float x0, float y0, float x1, float y1, bool antialias);
 Mask ellipse(int w, int h, float cx, float cy, float rx, float ry, bool antialias);
 Mask polygon(int w, int h, const std::vector<std::pair<float, float>>& pts, bool antialias);
+// Rounded rectangle with corner radius; regular polygon and star centred at
+// (cx, cy) with radii (rx, ry), first vertex pointing up, rotated by degrees.
+Mask rounded_rectangle(int w, int h, float x0, float y0, float x1, float y1, float radius, bool antialias);
+Mask regular_polygon(int w, int h, float cx, float cy, float rx, float ry, int sides, float rotation_degrees, bool antialias);
+Mask star(int w, int h, float cx, float cy, float rx, float ry, int points, float inner_ratio, float rotation_degrees, bool antialias);
 // A polyline stroked with the given width (round joins and caps).
 Mask polyline(int w, int h, const std::vector<std::pair<float, float>>& pts, float width, bool antialias);
 

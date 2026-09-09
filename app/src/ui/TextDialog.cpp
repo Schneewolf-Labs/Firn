@@ -1,6 +1,10 @@
 // Text tool dialog: previews on a temporary layer, commits as a new layer.
 #include <algorithm>
+#include <cmath>
 #include <cstring>
+
+#include "firn/mask.h"
+#include "firn/raster.h"
 
 #include "App.h"
 #include "firn/commands.h"
@@ -30,11 +34,39 @@ void render_preview(App& app) {
     text::Font::Layout lay;
     Image glyphs = app.text_font->render(app.text_buf, app.text_size, fill, app.text_antialias,
                                          static_cast<text::Font::Align>(app.text_align), 1.0f, 0.0f, &lay);
+    // Stroke: the foreground material painted where a dilated glyph mask
+    // extends beyond the glyphs, underneath the fill.
+    if (app.text_stroke > 0.0f) {
+        const int pad = static_cast<int>(std::ceil(app.text_stroke)) + 1;
+        Image padded(glyphs.width() + 2 * pad, glyphs.height() + 2 * pad, {0, 0, 0, 0});
+        for (int y = 0; y < glyphs.height(); ++y)
+            std::memcpy(padded.data() + (static_cast<size_t>(y + pad) * padded.width() + pad) * 4,
+                        glyphs.data() + static_cast<size_t>(y) * glyphs.width() * 4, static_cast<size_t>(glyphs.width()) * 4);
+        Mask m(padded.width(), padded.height());
+        for (size_t i = 0; i < m.size(); ++i) m.data()[i] = padded.data()[i * 4 + 3];
+        Mask ring = m;
+        mask::expand(ring, static_cast<int>(std::lround(app.text_stroke)));
+        const Color stroke{c8(app.fg_color[0]), c8(app.fg_color[1]), c8(app.fg_color[2]), c8(app.fg_color[3])};
+        Image out(padded.width(), padded.height(), {0, 0, 0, 0});
+        raster::paint_mask(out, ring, stroke);
+        for (int y = 0; y < out.height(); ++y)
+            for (int x = 0; x < out.width(); ++x) raster::blend_over(out, x, y, padded.get(x, y), 1.0f);
+        glyphs = std::move(out);
+        app.text_x_offset = -pad; app.text_y_offset = -pad;
+    } else {
+        app.text_x_offset = app.text_y_offset = 0;
+    }
+    if (app.text_angle != 0.0f) {
+        const int ow = glyphs.width(), oh = glyphs.height();
+        glyphs = raster::rotate(glyphs, app.text_angle);
+        app.text_x_offset -= (glyphs.width() - ow) / 2;
+        app.text_y_offset -= (glyphs.height() - oh) / 2;
+    }
     for (int y = 0; y < glyphs.height(); ++y) {
-        const int dy = app.text_y + y;
+        const int dy = app.text_y + app.text_y_offset + y;
         if (dy < 0 || dy >= L.pixels.height()) continue;
         for (int x = 0; x < glyphs.width(); ++x) {
-            const int dx = app.text_x + x;
+            const int dx = app.text_x + app.text_x_offset + x;
             if (dx < 0 || dx >= L.pixels.width()) continue;
             std::memcpy(L.pixels.data() + (static_cast<size_t>(dy) * L.pixels.width() + dx) * 4,
                         glyphs.data() + (static_cast<size_t>(y) * glyphs.width() + x) * 4, 4);
@@ -92,6 +124,12 @@ void App::draw_text_dialog() {
     changed |= ImGui::Checkbox("Anti-alias", &text_antialias);
     ImGui::SameLine();
     changed |= ImGui::ColorEdit4("Fill (background material)", bg_color, ImGuiColorEditFlags_NoInputs);
+    ImGui::SetNextItemWidth(140);
+    changed |= ImGui::SliderFloat("Stroke width", &text_stroke, 0.0f, 50.0f, "%.0f px");
+    ImGui::SameLine();
+    changed |= ImGui::ColorEdit4("Stroke (foreground)", fg_color, ImGuiColorEditFlags_NoInputs);
+    ImGui::SetNextItemWidth(140);
+    changed |= ImGui::SliderFloat("Rotation", &text_angle, -180.0f, 180.0f, "%.0f deg");
     ImGui::SetNextItemWidth(100);
     changed |= ImGui::InputInt("X", &text_x);
     ImGui::SameLine();
