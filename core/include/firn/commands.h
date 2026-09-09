@@ -240,6 +240,9 @@ class VectorEditCommand : public Command {
 public:
     VectorEditCommand(size_t layer, std::string name, std::vector<vec::Object> after)
         : layer_(layer), name_(std::move(name)), after_(std::move(after)) {}
+    // For edits already applied live: records both states, nothing is re-run.
+    VectorEditCommand(size_t layer, std::string name, std::vector<vec::Object> before, std::vector<vec::Object> after)
+        : layer_(layer), name_(std::move(name)), before_(std::move(before)), after_(std::move(after)), has_before_(true) {}
     std::string name() const override { return name_; }
     void execute(Document& doc) override;
     void undo(Document& doc) override;
@@ -247,6 +250,7 @@ private:
     size_t layer_;
     std::string name_;
     std::vector<vec::Object> before_, after_;
+    bool has_before_ = false;
 };
 
 // Adds an empty vector layer above the active layer.

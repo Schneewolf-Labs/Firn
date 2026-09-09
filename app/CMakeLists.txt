@@ -11,6 +11,8 @@ include(${CMAKE_SOURCE_DIR}/cmake/imgui.cmake)
 add_executable(firn
   src/main.cpp
   src/App.cpp
+  src/Vectors.cpp
+  src/Drive.cpp
   src/Config.cpp
   src/ui/Canvas.cpp
   src/ui/Palettes.cpp
@@ -18,8 +20,10 @@ add_executable(firn
   src/ui/FileDialog.cpp
   src/ui/Adjust.cpp
   src/ui/TextDialog.cpp
+  src/ui/VectorDialog.cpp
   src/ui/Toolbar.cpp
   src/tools/Tools.cpp
+  src/tools/VectorTools.cpp
 )
 target_include_directories(firn PRIVATE src)
 # Lets a development build find the sample tubes in the (gitignored) backup.

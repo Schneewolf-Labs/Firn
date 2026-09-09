@@ -8,6 +8,7 @@
 
 #include "App.h"
 #include "firn/commands.h"
+#include "firn/vector.h"
 #include "imgui.h"
 
 using namespace firn;
@@ -23,7 +24,38 @@ void App::ensure_fonts() {
 
 namespace {
 
+vec::TextInfo current_text_info(const App& app) {
+    vec::TextInfo t;
+    t.text = app.text_buf;
+    t.font_path = app.text_font ? app.text_font->info().path : "";
+    t.font_family = app.fonts.empty() ? "" : app.fonts[app.font_index].family + "  " + app.fonts[app.font_index].style;
+    t.size = app.text_size;
+    t.align = app.text_align;
+    t.rotation = app.text_angle;
+    t.antialias = app.text_antialias;
+    return t;
+}
+
+// Vector mode: the text is an object on the vector layer, restyled from the
+// materials (fill = background, stroke = foreground when the width is > 0).
+void render_vector_preview(App& app) {
+    if (!app.doc || app.text_vec_layer < 0 || app.text_vec_index < 0 || !app.text_font) return;
+    auto& objs = app.doc->layer(app.text_vec_layer).objects;
+    if (app.text_vec_index >= static_cast<int>(objs.size())) return;
+    vec::Object& o = objs[app.text_vec_index];
+    app.place_text_object(o, current_text_info(app), static_cast<float>(app.text_x), static_cast<float>(app.text_y));
+    o.fill = app.material_style(false);
+    o.stroke = app.text_stroke > 0.0f ? app.material_style(true) : vec::PaintStyle{};
+    o.stroke_width = app.text_stroke;
+    o.antialias = app.text_antialias;
+    std::string name = app.text_buf;
+    o.name = name.substr(0, name.find('\n')).substr(0, 32);
+    o.selected = true;
+    app.doc->rasterize_vector_layer(app.text_vec_layer);
+}
+
 void render_preview(App& app) {
+    if (app.text_vec_layer >= 0) { render_vector_preview(app); return; }
     if (!app.doc || app.text_temp_layer < 0 || !app.text_font) return;
     Layer& L = app.doc->layer(app.text_temp_layer);
     L.pixels = Image(app.doc->width(), app.doc->height(), {0, 0, 0, 0});
@@ -86,7 +118,32 @@ void App::draw_text_dialog() {
                 font_index = std::clamp(font_index, 0, static_cast<int>(fonts.size()) - 1);
                 if (!text_font || text_font->info().path != fonts[font_index].path) text_font = text::Font::load(fonts[font_index].path);
             }
-            if (text_font) {
+            if (text_font && (create_as_vector || text_edit_object >= 0)) {
+                text_vec_layer = vector_layer_for_edit(true);
+                text_temp_layer = -1;
+                if (text_vec_layer >= 0) {
+                    auto& objs = doc->layer(text_vec_layer).objects;
+                    text_vec_before = objs;
+                    for (vec::Object& o : objs) o.selected = false;
+                    if (text_edit_object >= 0 && text_edit_object < static_cast<int>(objs.size()) && objs[text_edit_object].is_text) {
+                        // Re-edit: load the object's settings into the dialog.
+                        const vec::Object& o = objs[text_edit_object];
+                        std::snprintf(text_buf, sizeof(text_buf), "%s", o.text.text.c_str());
+                        text_size = o.text.size; text_align = o.text.align; text_angle = o.text.rotation; text_antialias = o.text.antialias;
+                        text_stroke = o.stroke.enabled() ? o.stroke_width : 0.0f;
+                        for (size_t i = 0; i < fonts.size(); ++i) if (fonts[i].path == o.text.font_path) { font_index = static_cast<int>(i); text_font = text::Font::load(fonts[i].path); }
+                        float bx0, by0, bx1, by1;
+                        if (vec::outline_bounds(o, &bx0, &by0, &bx1, &by1)) { text_x = static_cast<int>(bx0); text_y = static_cast<int>(by0); }
+                        text_vec_index = text_edit_object;
+                    } else {
+                        objs.push_back(vec::Object{});
+                        text_vec_index = static_cast<int>(objs.size()) - 1;
+                    }
+                    render_preview(*this);
+                    ImGui::OpenPopup("Text Entry");
+                }
+            } else if (text_font) {
+                text_vec_layer = -1;
                 text_prev_active = active_layer();
                 doc->add_layer("Text");
                 text_temp_layer = static_cast<int>(doc->layer_count()) - 1;
@@ -120,10 +177,12 @@ void App::draw_text_dialog() {
     changed |= ImGui::SliderFloat("Size", &text_size, 4.0f, 500.0f, "%.0f px", ImGuiSliderFlags_Logarithmic);
     ImGui::SameLine();
     ImGui::SetNextItemWidth(100);
-    changed |= ImGui::Combo("Align", &text_align, "Left\0Centre\0Right\0");
+    changed |= ImGui::Combo("Align", &text_align, "Left\0Center\0Right\0");
     changed |= ImGui::Checkbox("Anti-alias", &text_antialias);
     ImGui::SameLine();
     changed |= ImGui::ColorEdit4("Fill (background material)", bg_color, ImGuiColorEditFlags_NoInputs);
+    if (text_vec_layer < 0) { ImGui::SameLine(); changed |= ImGui::Checkbox("Create as vector", &create_as_vector); }
+    else { ImGui::SameLine(); ImGui::TextDisabled("(vector object)"); }
     ImGui::SetNextItemWidth(140);
     changed |= ImGui::SliderFloat("Stroke width", &text_stroke, 0.0f, 50.0f, "%.0f px");
     ImGui::SameLine();
@@ -141,7 +200,14 @@ void App::draw_text_dialog() {
     const bool ok = ImGui::Button("OK", ImVec2(80, 0));
     ImGui::SameLine();
     const bool cancel = ImGui::Button("Cancel", ImVec2(80, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape, false);
-    if (ok || cancel) {
+    if ((ok || cancel) && text_vec_layer >= 0) {
+        if (doc && text_vec_layer < static_cast<int>(doc->layer_count())) {
+            if (ok && text_buf[0]) objects_changed(text_edit_object >= 0 ? "Edit Text" : "Text", text_vec_before);
+            else { doc->layer(text_vec_layer).objects = text_vec_before; doc->rasterize_vector_layer(text_vec_layer); }
+        }
+        text_vec_layer = -1; text_vec_index = -1; text_edit_object = -1;
+        ImGui::CloseCurrentPopup();
+    } else if (ok || cancel) {
         Image pixels;
         if (doc && text_temp_layer >= 0) {
             pixels = doc->layer(text_temp_layer).pixels;

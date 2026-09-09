@@ -286,6 +286,11 @@ bool read_shape(const Reader& r, const Block& sb, vec::Object& o) {
             o.antialias = o.attr_raw[2] != 0;
             double d; std::memcpy(&d, o.attr_raw.data() + 3, 8); o.stroke_width = static_cast<float>(d);
             std::memcpy(&d, o.attr_raw.data() + 48, 8); o.miter = static_cast<float>(d);
+            // The two records read as the first and last line caps: the
+            // default file (+Solid) carries the same 7.21 sizes as these.
+            auto f64at = [&](size_t off) { double v; std::memcpy(&v, o.attr_raw.data() + off, 8); return static_cast<float>(v); };
+            o.line.first_cap = o.attr_raw[11]; o.line.first_w = f64at(13); o.line.first_h = f64at(21);
+            o.line.last_cap = o.attr_raw[29]; o.line.last_w = f64at(31); o.line.last_h = f64at(39);
         }
     }
     p += c1;
@@ -403,6 +408,7 @@ bool read_layer(const Reader& r, const Block& lb, const Header& hdr, const Palet
         L.opacity = opacity / 255.0f;
         L.blend = map_blend(blend);
         L.visible = visible != 0;
+        L.expanded = false;   // the palette lists objects only on request
         L.pixels = Image(doc.width(), doc.height(), {0, 0, 0, 0});
         for (const Block& vb : blocks(r, lb.start + chunk, lb.end)) {
             if (vb.id != kVectorExtBlock || !r.ok(vb.start, 8)) continue;
@@ -670,7 +676,10 @@ std::vector<vec::Gradient> load_gradients(const std::string& path, std::string* 
         if (p + 1 + nlen > d.size()) break;
         g.name.assign(reinterpret_cast<const char*>(d.data() + p + 1), nlen);
         p += 1 + nlen;
-        if ((1 + nlen) % 2 == 1) ++p;  // Pascal strings are padded to an even length
+        // Some files pad the Pascal name to an even length, others do not:
+        // take the reading whose stop count and first location make sense.
+        auto plausible = [&](size_t q) { return q + 6 <= d.size() && be16(q) >= 1 && be16(q) <= 64 && be32(q + 2) <= 4096; };
+        if (!plausible(p) && plausible(p + 1)) ++p;
         if (p + 2 > d.size()) break;
         const int nc = be16(p); p += 2;
         g.colors.clear();
@@ -982,6 +991,9 @@ std::vector<uint8_t> write_shape(const vec::Object& o) {
     const double wd = o.stroke_width, mt = o.miter;
     std::memcpy(attr.data() + 3, &wd, 8);
     std::memcpy(attr.data() + 48, &mt, 8);
+    auto put = [&](size_t off, double v) { std::memcpy(attr.data() + off, &v, 8); };
+    attr[11] = static_cast<uint8_t>(o.line.first_cap); put(13, o.line.first_w); put(21, o.line.first_h);
+    attr[29] = static_cast<uint8_t>(o.line.last_cap); put(31, o.line.last_w); put(39, o.line.last_h);
     w.u32(60); w.bytes(attr);
     w.bytes(write_paint_style(o.stroke));
     w.bytes(write_paint_style(o.fill));
@@ -1006,7 +1018,14 @@ std::vector<uint8_t> write_shape(const vec::Object& o) {
 std::vector<uint8_t> vector_layer_payload(const Layer& L) {
     Writer ext;
     ext.u32(8); ext.u32(static_cast<uint32_t>(L.objects.size()));
-    for (const vec::Object& o : L.objects) ext.bytes(write_shape(o));
+    // Shape ids are unique within a layer in the original's files; objects
+    // made here all start at 1, so renumber in order.
+    uint32_t next_id = 1;
+    for (const vec::Object& o : L.objects) {
+        vec::Object copy = o;
+        copy.file_flags = next_id++;
+        ext.bytes(write_shape(copy));
+    }
     Writer b;
     b.block(kVectorExtBlock, ext.out);
     return b.out;

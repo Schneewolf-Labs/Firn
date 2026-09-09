@@ -127,9 +127,12 @@ A shape block is a sequence of chunks and sub-blocks:
    chunk `{8, member count}`; its members are the next shape blocks.
 2. Attribute chunk, length 60 (payload 56): `u8 stroke on, u8 fill on,
    u8 antialias, f64 stroke width, {u8, u8, f64, f64} x2, u8, f64 miter
-   limit`. The two records and the lone byte are carried through unchanged
-   (line caps and join, unverified). Defaults in the original's own preset
-   shapes: `01 00 1.0 1.0`, `01 00 1.0 1.0`, `00`, miter 10.
+   limit`. The two records read as the first and last line caps `{type,
+   ?, width, height}`: the default styled line (+Solid) has the same 7.21
+   cap sizes the balloon sample stores here. The second byte of each and
+   the lone byte are carried through unchanged. Defaults in the original's
+   own preset shapes: `01 00 1.0 1.0`, `01 00 1.0 1.0`, `00`, miter 10.
+   Dash patterns have no known slot in a shape and are not written.
 3. Paint style block (id 15) for the stroke, then one for the fill. The
    first chunk is `{6, kind u16}`: 0 none, 1 solid, 2 gradient, 3 pattern.
    Solid: chunk `{12, r, g, b, 0, ffffffff}`. Gradient: chunk `{35, style

@@ -107,6 +107,15 @@ struct Object {
     void transform(float a, float b, float c, float d, float tx, float ty);  // affine [a b; c d] + t
 };
 
+// Bounds of the flattened outline (anchors and curves, not handles); false when empty.
+bool outline_bounds(const Object& o, float* x0, float* y0, float* x1, float* y1);
+// True when (x, y) is inside a filled object or within `tolerance` of its outline.
+bool hit_test(const Object& o, float x, float y, float tolerance);
+// One past the last member of the group starting at index i (i + 1 for plain objects).
+size_t group_end(const std::vector<Object>& objects, size_t i);
+// Index of the group object containing i, or -1 when it is top level.
+int group_of(const std::vector<Object>& objects, size_t i);
+
 // Strokes a flattened path into a coverage mask, applying dashes and caps.
 void stroke_polyline(Mask& acc, const std::vector<std::pair<float, float>>& pts, bool closed, float width, const LineStyle& line, bool antialias);
 

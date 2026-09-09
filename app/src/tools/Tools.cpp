@@ -11,6 +11,7 @@
 #include "firn/io_psp.h"
 #include "firn/mask.h"
 #include "firn/raster.h"
+#include "firn/vector.h"
 #include "tools/Tool.h"
 
 using namespace firn;
@@ -604,10 +605,28 @@ public:
         const size_t layer = app.active_layer();
         Image& target = app.paint_pixels(layer);
         Image before = target;
-        const Color color = to_color(b == ImGuiMouseButton_Left ? app.fg_color : app.bg_color);
-        const raster::Rect changed = raster::flood_fill(target, static_cast<int>(std::floor(in.img_x)),
-                                                        static_cast<int>(std::floor(in.img_y)), color,
-                                                        app.fill_tolerance, app.fill_opacity, &app.doc->selection());
+        const bool fg = b == ImGuiMouseButton_Left;
+        const App::Material& mat = fg ? app.fg_material : app.bg_material;
+        raster::Rect changed;
+        if (mat.kind == 0) {
+            const Color color = to_color(fg ? app.fg_color : app.bg_color);
+            changed = raster::flood_fill(target, static_cast<int>(std::floor(in.img_x)),
+                                         static_cast<int>(std::floor(in.img_y)), color,
+                                         app.fill_tolerance, app.fill_opacity, &app.doc->selection());
+        } else {
+            // Gradient or pattern: fill the matching region through the material.
+            Mask region = mask::magic_wand(target, static_cast<int>(std::floor(in.img_x)), static_cast<int>(std::floor(in.img_y)), app.fill_tolerance, true);
+            if (app.doc->has_selection()) mask::combine(region, app.doc->selection(), mask::Combine::Intersect);
+            int rx0 = target.width(), ry0 = target.height(), rx1 = -1, ry1 = -1;
+            std::vector<uint8_t> cov(region.data(), region.data() + region.size());
+            for (int y = 0; y < region.height(); ++y)
+                for (int x = 0; x < region.width(); ++x)
+                    if (region.at(x, y)) { rx0 = std::min(rx0, x); ry0 = std::min(ry0, y); rx1 = std::max(rx1, x); ry1 = std::max(ry1, y); }
+            if (rx1 < rx0) return;
+            if (app.fill_opacity < 1.0f) for (uint8_t& c : cov) c = static_cast<uint8_t>(c * app.fill_opacity + 0.5f);
+            vec::paint(target, cov, target.width(), target.height(), app.material_style(fg), static_cast<float>(rx0), static_cast<float>(ry0), static_cast<float>(rx1 + 1), static_cast<float>(ry1 + 1));
+            changed = raster::Rect{rx0, ry0, rx1 + 1, ry1 + 1};
+        }
         if (changed.empty()) return;
         app.paint_touched(layer, &changed);
         app.commit_pixels(layer, name(), std::move(before), target);
@@ -973,13 +992,18 @@ public:
         if (!app.doc || b != ImGuiMouseButton_Left) return;
         app.text_x = static_cast<int>(std::floor(in.img_x));
         app.text_y = static_cast<int>(std::floor(in.img_y));
+        app.text_edit_object = -1;
         app.show_text_dialog = true;
     }
     void draw_overlay(App&, const ToolInput& in) override {
         in.dl->AddLine(ImVec2(in.screen.x, in.screen.y - 8), ImVec2(in.screen.x, in.screen.y + 8), IM_COL32(255, 255, 255, 220));
         in.dl->AddLine(ImVec2(in.screen.x - 8, in.screen.y), ImVec2(in.screen.x + 8, in.screen.y), IM_COL32(255, 255, 255, 220));
     }
-    void draw_options(App&) override { ImGui::TextUnformatted("Click where the text's top-left corner should go."); }
+    void draw_options(App& app) override {
+        app.draw_create_as_vector();
+        ImGui::SameLine();
+        ImGui::TextUnformatted("Click where the text's top-left corner should go.");
+    }
 };
 
 // --- Line and Preset Shapes --------------------------------------------
@@ -990,18 +1014,44 @@ class ShapeToolBase : public Tool {
 public:
     const char* category() const override { return "Text and Shapes"; }
     bool wants_snap() const override { return true; }
-    void on_press(App& app, const ToolInput& in, ImGuiMouseButton) override {
-        if (!app.active_is_raster()) return;
-        layer_ = app.active_layer();
-        before_ = app.paint_pixels(layer_);
+    void on_press(App& app, const ToolInput& in, ImGuiMouseButton b) override {
+        if (!app.doc) return;
+        button_ = b;
+        vector_ = app.create_as_vector;
+        if (vector_) {
+            layer_ = app.vector_layer_for_edit(true);
+            if (layer_ < 0) return;
+            before_objects_ = app.doc->layer(layer_).objects;
+        } else {
+            if (!app.active_is_raster()) return;
+            layer_ = app.active_layer();
+            before_ = app.paint_pixels(layer_);
+        }
         x0_ = x1_ = in.img_x; y0_ = y1_ = in.img_y;
         active_ = true;
     }
     void on_drag(App& app, const ToolInput& in, ImGuiMouseButton) override {
         if (!active_) return;
         x1_ = in.img_x; y1_ = in.img_y;
+        std::vector<vec::Object> objs = build(app);
+        if (vector_) {
+            auto& L = app.doc->layer(layer_).objects;
+            L = before_objects_;
+            for (vec::Object& o : L) o.selected = false;
+            for (vec::Object& o : objs) { o.selected = true; L.push_back(o); }
+            app.doc->rasterize_vector_layer(layer_);
+            return;
+        }
+        // Raster: render the objects, then composite through the selection.
         Image work = before_;
-        draw(app, work);
+        Image shape(work.width(), work.height(), {0, 0, 0, 0});
+        vec::rasterize(objs, shape);
+        for (int y = 0; y < work.height(); ++y)
+            for (int x = 0; x < work.width(); ++x) {
+                const Color c = shape.get(x, y);
+                if (c.a) raster::blend_over(work, x, y, c, 1.0f);
+            }
+        if (app.doc->has_selection()) raster::apply_through_mask(work, before_, app.doc->selection());
         app.paint_pixels(layer_) = std::move(work);
         app.paint_touched(layer_);
     }
@@ -1009,18 +1059,25 @@ public:
         if (!active_) return;
         on_drag(app, in, ImGuiMouseButton_Left);
         active_ = false;
-        app.commit_pixels(layer_, name(), before_, app.paint_pixels(layer_));
+        if (vector_) app.objects_changed(name(), before_objects_);
+        else app.commit_pixels(layer_, name(), before_, app.paint_pixels(layer_));
     }
     void cancel(App& app) override {
-        if (active_ && app.doc && layer_ < app.doc->layer_count()) { app.paint_pixels(layer_) = before_; app.paint_touched(layer_); }
+        if (active_ && app.doc && layer_ < static_cast<int>(app.doc->layer_count())) {
+            if (vector_) { app.doc->layer(layer_).objects = before_objects_; app.doc->rasterize_vector_layer(layer_); }
+            else { app.paint_pixels(layer_) = before_; app.paint_touched(layer_); }
+        }
         active_ = false;
     }
 
 protected:
-    virtual void draw(App& app, Image& img) = 0;
-    bool active_ = false;
-    size_t layer_ = 0;
+    // The objects for the current drag, styled from the materials.
+    virtual std::vector<vec::Object> build(App& app) = 0;
+    bool active_ = false, vector_ = false;
+    int layer_ = 0;
+    ImGuiMouseButton button_ = ImGuiMouseButton_Left;
     Image before_;
+    std::vector<vec::Object> before_objects_;
     float x0_ = 0, y0_ = 0, x1_ = 0, y1_ = 0;
 };
 
@@ -1034,16 +1091,19 @@ public:
         ImGui::SameLine();
         ImGui::Checkbox("Anti-alias", &app.shape_antialias);
         ImGui::SameLine();
-        ImGui::TextDisabled("Left draws with the foreground, right with the background.");
+        app.draw_line_style_combo();
+        ImGui::SameLine();
+        app.draw_create_as_vector();
+        ImGui::SameLine();
+        ImGui::TextDisabled("Left draws with the foreground material, right with the background.");
     }
-    void on_press(App& app, const ToolInput& in, ImGuiMouseButton b) override { button_ = b; ShapeToolBase::on_press(app, in, b); }
 
 protected:
-    void draw(App& app, Image& img) override {
-        const Mask m = mask::polyline(img.width(), img.height(), {{x0_, y0_}, {x1_, y1_}}, app.line_width, app.shape_antialias);
-        raster::paint_mask(img, m, to_color(button_ == ImGuiMouseButton_Left ? app.fg_color : app.bg_color), &app.doc->selection());
+    std::vector<vec::Object> build(App& app) override {
+        vec::Object o = vec::make_polygon({{x0_, y0_}, {x1_, y1_}}, false);
+        app.apply_object_style(o, true, false, button_);
+        return {o};
     }
-    ImGuiMouseButton button_ = ImGuiMouseButton_Left;
 };
 
 class PresetShapeTool : public ShapeToolBase {
@@ -1051,13 +1111,32 @@ public:
     const char* name() const override { return "Preset Shape"; }
     const char* shortcut() const override { return "I"; }
     void draw_options(App& app) override {
-        ImGui::SetNextItemWidth(150);
-        ImGui::Combo("Shape", &app.shape_kind, "Rectangle\0Rounded Rectangle\0Ellipse\0Triangle\0Polygon\0Star\0");
-        if (app.shape_kind == 1) { ImGui::SameLine(); ImGui::SetNextItemWidth(90); ImGui::SliderFloat("Radius", &app.shape_radius, 1.0f, 200.0f, "%.0f"); }
-        if (app.shape_kind == 4) { ImGui::SameLine(); ImGui::SetNextItemWidth(90); ImGui::SliderInt("Sides", &app.shape_sides, 3, 24); }
-        if (app.shape_kind == 5) {
-            ImGui::SameLine(); ImGui::SetNextItemWidth(90); ImGui::SliderInt("Points", &app.star_points, 3, 24);
-            ImGui::SameLine(); ImGui::SetNextItemWidth(90); ImGui::SliderFloat("Inner", &app.star_inner, 0.1f, 1.0f, "%.2f");
+        app.ensure_shape_library();
+        ImGui::SetNextItemWidth(170);
+        static const char* builtin[] = {"Rectangle", "Rounded Rectangle", "Ellipse", "Triangle", "Polygon", "Star"};
+        const char* current = app.shape_library_index >= 0 && app.shape_library_index < static_cast<int>(app.shape_library.size())
+                                  ? app.shape_library[app.shape_library_index].name.c_str() : builtin[std::clamp(app.shape_kind, 0, 5)];
+        if (ImGui::BeginCombo("Shape", current)) {
+            for (int i = 0; i < 6; ++i)
+                if (ImGui::Selectable(builtin[i], app.shape_library_index < 0 && app.shape_kind == i)) { app.shape_kind = i; app.shape_library_index = -1; }
+            if (!app.shape_library.empty()) ImGui::Separator();
+            for (size_t i = 0; i < app.shape_library.size(); ++i) {
+                ImGui::PushID(static_cast<int>(i));
+                if (ImGui::Selectable(app.shape_library[i].name.c_str(), app.shape_library_index == static_cast<int>(i))) app.shape_library_index = static_cast<int>(i);
+                ImGui::PopID();
+            }
+            ImGui::EndCombo();
+        }
+        if (app.shape_library_index < 0) {
+            if (app.shape_kind == 1) { ImGui::SameLine(); ImGui::SetNextItemWidth(90); ImGui::SliderFloat("Radius", &app.shape_radius, 1.0f, 200.0f, "%.0f"); }
+            if (app.shape_kind == 4) { ImGui::SameLine(); ImGui::SetNextItemWidth(90); ImGui::SliderInt("Sides", &app.shape_sides, 3, 24); }
+            if (app.shape_kind == 5) {
+                ImGui::SameLine(); ImGui::SetNextItemWidth(90); ImGui::SliderInt("Points", &app.star_points, 3, 24);
+                ImGui::SameLine(); ImGui::SetNextItemWidth(90); ImGui::SliderFloat("Inner", &app.star_inner, 0.1f, 1.0f, "%.2f");
+            }
+        } else {
+            ImGui::SameLine();
+            ImGui::Checkbox("Retain style", &app.shape_retain_style);
         }
         ImGui::SameLine();
         ImGui::Checkbox("Stroke", &app.shape_stroke);
@@ -1069,33 +1148,23 @@ public:
         ImGui::SameLine();
         ImGui::Checkbox("Anti-alias", &app.shape_antialias);
         ImGui::SameLine();
-        ImGui::TextDisabled("Stroke: foreground. Fill: background.");
+        app.draw_line_style_combo();
+        ImGui::SameLine();
+        app.draw_create_as_vector();
+        ImGui::SameLine();
+        ImGui::TextDisabled("Stroke: foreground material. Fill: background. Right button swaps them.");
     }
 
 protected:
-    void draw(App& app, Image& img) override {
-        const int w = img.width(), h = img.height();
-        const float lx = std::min(x0_, x1_), rx = std::max(x0_, x1_), ty = std::min(y0_, y1_), by = std::max(y0_, y1_);
-        const float sw = app.shape_stroke ? app.line_width : 0.0f;
-        const float cx = (lx + rx) * 0.5f, cy = (ty + by) * 0.5f;
-        auto shape = [&](float inset) {
-            const float hx = (rx - lx) * 0.5f - inset, hy = (by - ty) * 0.5f - inset;
-            switch (app.shape_kind) {
-                case 1: return mask::rounded_rectangle(w, h, lx + inset, ty + inset, rx - inset, by - inset, std::max(0.0f, app.shape_radius - inset), app.shape_antialias);
-                case 2: return mask::ellipse(w, h, cx, cy, hx, hy, app.shape_antialias);
-                case 3: return mask::regular_polygon(w, h, cx, cy, hx, hy, 3, 0.0f, app.shape_antialias);
-                case 4: return mask::regular_polygon(w, h, cx, cy, hx, hy, app.shape_sides, 0.0f, app.shape_antialias);
-                case 5: return mask::star(w, h, cx, cy, hx, hy, app.star_points, app.star_inner, 0.0f, app.shape_antialias);
-                default: return mask::rectangle(w, h, lx + inset, ty + inset, rx - inset, by - inset, app.shape_antialias);
-            }
-        };
-        const Mask* clip = &app.doc->selection();
-        if (app.shape_fill) raster::paint_mask(img, shape(sw), to_color(app.bg_color), clip);
-        if (app.shape_stroke && sw > 0.0f) {
-            Mask ring = shape(0.0f);
-            mask::combine(ring, shape(sw), mask::Combine::Subtract);
-            raster::paint_mask(img, ring, to_color(app.fg_color), clip);
+    std::vector<vec::Object> build(App& app) override {
+        std::vector<vec::Object> objs = app.shape_objects(x0_, y0_, x1_, y1_);
+        const bool retain = app.shape_library_index >= 0 && app.shape_retain_style;
+        for (vec::Object& o : objs) {
+            if (o.is_group) continue;
+            if (retain) { o.antialias = app.shape_antialias; continue; }
+            app.apply_object_style(o, app.shape_stroke, app.shape_fill, button_);
         }
+        return objs;
     }
 };
 
@@ -1129,5 +1198,6 @@ std::vector<std::unique_ptr<Tool>> make_default_tools() {
     t.push_back(std::make_unique<TextTool>());
     t.push_back(std::make_unique<LineTool>());
     t.push_back(std::make_unique<PresetShapeTool>());
+    for (auto& v : make_vector_tools()) t.push_back(std::move(v));
     return t;
 }

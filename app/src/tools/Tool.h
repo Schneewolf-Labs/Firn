@@ -35,8 +35,10 @@ public:
     virtual void on_release(App&, const ToolInput&, ImGuiMouseButton) {}
     virtual void cancel(App&) {}
 
-    // Drawn over the canvas while hovered (brush outline, etc).
+    // Drawn over the canvas while hovered (brush outline, etc), or always
+    // when overlay_always() (selection boxes, nodes).
     virtual void draw_overlay(App&, const ToolInput&) {}
+    virtual bool overlay_always() const { return false; }
     virtual void draw_options(App&) {}
 
     // Left-drag pans instead of reaching the tool.
@@ -44,3 +46,4 @@ public:
 };
 
 std::vector<std::unique_ptr<Tool>> make_default_tools();
+std::vector<std::unique_ptr<Tool>> make_vector_tools();   // VectorTools.cpp

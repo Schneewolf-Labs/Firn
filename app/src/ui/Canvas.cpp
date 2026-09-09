@@ -190,7 +190,7 @@ void App::draw_canvas() {
             if (sy >= view_pos.y && sy <= view_pos.y + view_size.y) dl->AddLine(ImVec2(std::max(p0.x, view_pos.x), sy), ImVec2(std::min(p1.x, view_pos.x + view_size.x), sy), gc);
         }
     }
-    if ((hovered || active_button >= 0) && !guide_busy) tool().draw_overlay(*this, in);
+    if ((hovered || active_button >= 0 || tool().overlay_always()) && !guide_busy) tool().draw_overlay(*this, in);
 
     // Guides.
     if (show_guides) {

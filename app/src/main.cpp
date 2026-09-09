@@ -10,6 +10,7 @@
 #endif
 
 #include "App.h"
+#include "Drive.h"
 #include "Config.h"
 #include "imgui.h"
 #include "imgui_impl_opengl3.h"
@@ -99,6 +100,8 @@ int main(int argc, char** argv) {
     ImGui_ImplOpenGL3_Init(glsl_version);
 
     App app;
+    Driver driver;
+    if (const char* sock = std::getenv("FIRN_DRIVE")) driver.start(sock);
     bool first_frame = true;
     if (argc > 1) {
         if (!app.open_document(argv[1])) std::fprintf(stderr, "%s\n", app.status.c_str());
@@ -107,6 +110,8 @@ int main(int argc, char** argv) {
     while (!app.quit) {
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
+            // While scripted, the real pointer must not reach the UI.
+            if (driver.active() && (event.type == SDL_MOUSEMOTION || event.type == SDL_MOUSEBUTTONDOWN || event.type == SDL_MOUSEBUTTONUP || event.type == SDL_MOUSEWHEEL)) continue;
             ImGui_ImplSDL2_ProcessEvent(&event);
             if (event.type == SDL_QUIT) app.request_quit();
             if (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_CLOSE &&
@@ -120,6 +125,7 @@ int main(int argc, char** argv) {
 
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplSDL2_NewFrame();
+        if (driver.active()) driver.before_frame(app, window);
         ImGui::NewFrame();
 
         app.handle_shortcuts();
@@ -151,12 +157,14 @@ int main(int argc, char** argv) {
         app.draw_palettes();
         app.draw_dialogs();
         if (app.show_imgui_demo) ImGui::ShowDemoWindow(&app.show_imgui_demo);
+        if (driver.active()) driver.draw_cursor();
 
         ImGui::Render();
         glViewport(0, 0, (int)io.DisplaySize.x, (int)io.DisplaySize.y);
         glClearColor(0.16f, 0.16f, 0.16f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+        if (driver.active()) driver.after_render(app);
         SDL_GL_SwapWindow(window);
     }
 

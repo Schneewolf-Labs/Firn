@@ -241,6 +241,7 @@ void App::draw_menu() {
         const int n = has_doc ? static_cast<int>(doc->layer_count()) : 0;
         const bool is_bg = has_layer && doc->layer(layer).background;
         if (ImGui::MenuItem("New Raster Layer", nullptr, false, has_doc)) layer_new();
+        if (ImGui::MenuItem("New Vector Layer", nullptr, false, has_doc)) layer_new_vector();
         if (ImGui::MenuItem("New Layer Group", nullptr, false, has_any_layer)) layer_new_group();
         if (ImGui::BeginMenu("New Mask Layer", has_any_layer)) {
             if (ImGui::MenuItem("Show All")) layer_set_mask("New Mask Layer", Mask(doc->width(), doc->height(), 255));
@@ -279,7 +280,57 @@ void App::draw_menu() {
         }
         ImGui::Separator();
         if (ImGui::MenuItem("Promote Background Layer", nullptr, false, is_bg)) layer_promote_background();
+        if (ImGui::MenuItem("Convert to Raster Layer", nullptr, false, has_any_layer && doc->layer(layer).is_vector())) layer_convert_to_raster();
         (void)is_group;
+        ImGui::EndMenu();
+    }
+    if (ImGui::BeginMenu("Objects")) {
+        const bool on_vector = has_any_layer && doc->layer(layer).is_vector();
+        const size_t nsel = on_vector ? selected_objects().size() : 0;
+        bool has_text = false;
+        if (on_vector) for (const auto& o : doc->layer(layer).objects) if (o.selected && o.is_text) has_text = true;
+        if (ImGui::BeginMenu("Align", nsel > 0)) {
+            static const char* items[] = {"Top", "Bottom", "Left", "Right", "Vertical Center", "Horizontal Center", "Center in Canvas", "Horizontal Center in Canvas", "Vertical Center in Canvas"};
+            for (int i = 0; i < 9; ++i) {
+                if (i == 6) ImGui::Separator();
+                if (ImGui::MenuItem(items[i], nullptr, false, i >= 6 || nsel > 1)) object_align(i);
+            }
+            ImGui::EndMenu();
+        }
+        if (ImGui::BeginMenu("Distribute", nsel > 2)) {
+            static const char* items[] = {"Vertical Top", "Vertical Center", "Vertical Bottom", "Horizontal Left", "Horizontal Center", "Horizontal Right", "Space Evenly Vertically", "Space Evenly Horizontally"};
+            for (int i = 0; i < 8; ++i) { if (i == 3 || i == 6) ImGui::Separator(); if (ImGui::MenuItem(items[i])) object_distribute(i); }
+            ImGui::EndMenu();
+        }
+        if (ImGui::BeginMenu("Make Same Size", nsel > 1)) {
+            if (ImGui::MenuItem("Height")) object_same_size(0);
+            if (ImGui::MenuItem("Width")) object_same_size(1);
+            if (ImGui::MenuItem("Both")) object_same_size(2);
+            ImGui::EndMenu();
+        }
+        if (ImGui::BeginMenu("Arrange", nsel > 0)) {
+            const int n = static_cast<int>(doc->layer(layer).objects.size()) + 1;
+            if (ImGui::MenuItem("Bring to Top")) object_arrange(n);
+            if (ImGui::MenuItem("Move Up")) object_arrange(1);
+            if (ImGui::MenuItem("Move Down")) object_arrange(-1);
+            if (ImGui::MenuItem("Send to Bottom")) object_arrange(-n);
+            ImGui::EndMenu();
+        }
+        ImGui::Separator();
+        if (ImGui::MenuItem("Group", nullptr, false, nsel > 1)) object_group();
+        if (ImGui::MenuItem("Ungroup", nullptr, false, nsel > 0)) object_ungroup();
+        ImGui::Separator();
+        if (ImGui::MenuItem("Edit Text...", nullptr, false, has_text)) open_text_edit();
+        if (ImGui::BeginMenu("Convert Text to Curves", has_text)) {
+            if (ImGui::MenuItem("As Single Shape")) object_text_to_curves(false);
+            if (ImGui::MenuItem("As Character Shapes")) object_text_to_curves(true);
+            ImGui::EndMenu();
+        }
+        if (ImGui::MenuItem("Properties...", nullptr, false, nsel > 0)) open_vector_properties();
+        ImGui::Separator();
+        if (ImGui::MenuItem("Select All", nullptr, false, on_vector)) object_select_all();
+        if (ImGui::MenuItem("Select None", nullptr, false, nsel > 0)) object_select_none();
+        if (ImGui::MenuItem("Delete", nullptr, false, nsel > 0)) object_delete();
         ImGui::EndMenu();
     }
     if (ImGui::BeginMenu("Window")) {
@@ -296,6 +347,7 @@ void App::draw_menu() {
 void App::draw_dialogs() {
     draw_adjust_dialogs();
     draw_text_dialog();
+    draw_vector_dialogs();
 
     if (file_dialog.draw()) {
         if (file_op == PendingFileOp::Open) open_document(file_dialog.path());

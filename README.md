@@ -39,9 +39,9 @@ FIRN_WINDOW=1280x800 ./build/app/firn   # override the initial window size
 Opens PNG, JPEG, BMP, TGA, GIF and PNM through stb, and the original
 program's native container (`.PspImage`, plus `.PspTube` and `.PspFrame`,
 which share it) with layers, positions, opacity, blend modes and visibility.
-Vector, adjustment, mask and group layers are skipped with a warning; a file
-with no raster layers falls back to its embedded flattened composite. See
-`docs/FORMAT.md`. Saves the native container with layers, or PNG, JPEG, BMP
+Vector layers are read with their shapes, gradients and groups (the balloon
+sample renders within 0.8/255 of the original's own composite); adjustment
+layers are skipped with a warning. See `docs/FORMAT.md`. Saves the native container with layers, or PNG, JPEG, BMP
 and TGA flattened. Files Firn writes open in the original program.
 `firn-convert` does the same from the command line.
 
@@ -52,8 +52,8 @@ selection, **L** freehand selection, **W** magic wand, **E** dropper, **M**
 move, **R** crop, **B** paint brush, **P** airbrush, **X** eraser, **C**
 clone (right-click sets the source), **N** lighten/darken, **U** smudge
 (right button pushes), **Q** color replacer, **F** flood fill, **T** text,
-**V** line, **I** preset shape. Dodge/Burn, Soften, Sharpen, Saturation and
-Hue brushes have no key. `[` and `]` resize the brush.
+**V** line, **I** preset shape, **O** object selector, **D** pen. Dodge/Burn,
+Soften, Sharpen, Saturation and Hue brushes have no key. `[` and `]` resize the brush.
 Left button uses the foreground material, right button the background.
 Space + drag or middle-drag pans with any tool; Escape cancels a stroke.
 
@@ -68,6 +68,22 @@ incremental and angular selection and random or continuous placement.
 
 Layers can be grouped (Layers > New Layer Group) and carry masks (Layers >
 New Mask Layer); press Edit next to a mask to paint on it in grayscale.
+
+Vector objects: Layers > New Vector Layer, or tick "Create as vector" on the
+Preset Shape, Line and Text tools, and the shapes stay editable. The Object
+Selector moves, scales and rotates them (double-click for the Vector
+Properties dialog: stroke, fill, width, line style, gradient, pattern, and
+the text of a text object); the Pen draws point-to-point or freehand paths
+and edits nodes. The Objects menu aligns, distributes, sizes, arranges,
+groups and converts text to curves. Preset shapes come from `.PspShape`
+files (`~/.config/firn/shapes` or `FIRN_SHAPE_DIRS`), gradients from
+`.PspGradient` (`gradients`, `FIRN_GRADIENT_DIRS`), styled lines from
+`.PspStyledLine` (`lines`, `FIRN_LINE_DIRS`) and patterns from images
+(`patterns`, `FIRN_PATTERN_DIRS`). The Materials palette switches the
+foreground and background between a color, a gradient and a pattern, which
+the flood fill and the shape tools honor. Vector layers save to the native
+container and open in the original; Layers > Convert to Raster Layer
+flattens one.
 
 Selections: Shift adds, Ctrl subtracts, a plain click deselects. Ctrl+A all,
 Ctrl+D none, Ctrl+Shift+I invert, Delete clears. Every pixel command and the

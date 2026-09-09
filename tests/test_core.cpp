@@ -1,6 +1,7 @@
 // Minimal assert-based tests; no framework dependency yet.
 #include <chrono>
 #include <cstdio>
+#include <filesystem>
 #include <cstdlib>
 #include <memory>
 #include <string>
@@ -1338,6 +1339,21 @@ static void test_vector_roundtrip() {
         CHECK(grads[0].name == "Black-white" && grads[0].colors.size() == 3);
         CHECK(grads[0].colors[0].color.r == 0 && grads[0].colors[2].color.r == 255 && grads[0].colors[2].pos == 100);
     }
+    // Every shipped gradient file parses to sane stops (name padding varies between files).
+    {
+        namespace fs = std::filesystem;
+        std::error_code ec;
+        int files = 0;
+        for (const auto& de : fs::recursive_directory_iterator(std::string(FIRN_SOURCE_DIR) + "/WindowsInstall/Gradients", fs::directory_options::skip_permission_denied, ec)) {
+            if (!de.is_regular_file(ec) || de.path().extension() != ".PspGradient") continue;
+            ++files;
+            const auto gs = io::load_gradients(de.path().string());
+            CHECK(gs.size() == 1 && gs[0].colors.size() >= 2 && !gs[0].opacities.empty());
+            for (const auto& c : gs[0].colors) CHECK(c.pos >= 0 && c.pos <= 100 && c.mid >= 1 && c.mid <= 99);
+            for (const auto& o : gs[0].opacities) CHECK(o.pos >= 0 && o.pos <= 100 && o.opacity >= 0 && o.opacity <= 100);
+        }
+        (void)files;
+    }
     auto line = io::load_styled_line(std::string(FIRN_SOURCE_DIR) + "/WindowsInstall/Styled Lines/Dashed Lines/Dashed.PspStyledLine");
     if (line) {
         CHECK(line->name == "Dashed" && line->dashes.size() == 2 && line->dashes[0] == 24 && line->dashes[1] == 12);
@@ -1374,7 +1390,45 @@ static void test_vector_roundtrip() {
     }
 }
 
+static void test_vector_queries() {
+    using namespace vec;
+    Object r = make_rectangle(10, 10, 50, 30);
+    r.fill.kind = PaintStyle::Kind::Solid;
+    r.stroke.kind = PaintStyle::Kind::None;
+    float x0, y0, x1, y1;
+    CHECK(outline_bounds(r, &x0, &y0, &x1, &y1) && x0 == 10 && y0 == 10 && x1 == 50 && y1 == 30);
+    CHECK(hit_test(r, 30, 20, 1));          // inside a filled shape
+    CHECK(!hit_test(r, 60, 20, 1));         // outside
+    r.fill.kind = PaintStyle::Kind::None;
+    r.stroke.kind = PaintStyle::Kind::Solid;
+    r.stroke_width = 2;
+    CHECK(!hit_test(r, 30, 20, 1));         // hollow: the interior no longer hits
+    CHECK(hit_test(r, 30, 10.5f, 1));       // but the outline does
+    // Groups: a group object precedes its members; nested groups count as one member.
+    std::vector<Object> objs;
+    Object g; g.is_group = true; g.group_count = 2;
+    Object inner; inner.is_group = true; inner.group_count = 1;
+    objs.push_back(g); objs.push_back(make_rectangle(0, 0, 1, 1)); objs.push_back(inner); objs.push_back(make_rectangle(0, 0, 2, 2)); objs.push_back(make_rectangle(5, 5, 6, 6));
+    CHECK(group_end(objs, 0) == 4);
+    CHECK(group_end(objs, 2) == 4);
+    CHECK(group_end(objs, 4) == 5);
+    CHECK(group_of(objs, 1) == 0);
+    CHECK(group_of(objs, 3) == 2);          // innermost
+    CHECK(group_of(objs, 4) == -1);
+    // Text outlines: glyph contours are closed cubic paths tagged by glyph.
+    const auto fonts = text::list_fonts();
+    if (!fonts.empty()) {
+        auto font = text::Font::load(fonts[0].path);
+        std::vector<int> ids;
+        const auto contours = font->outlines("Ab", 40, text::Font::Align::Left, 1.0f, 0.0f, nullptr, &ids);
+        CHECK(contours.size() >= 2 && ids.size() == contours.size());
+        CHECK(ids.front() == 0 && ids.back() == 1);
+        for (const auto& c : contours) CHECK(c.size() >= 3);
+    }
+}
+
 int main() {
+    test_vector_queries();
     test_vector_roundtrip();
     test_vector_core();
     test_history_limit();

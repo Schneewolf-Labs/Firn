@@ -14,6 +14,7 @@
 #include "firn/document.h"
 #include "firn/raster.h"
 #include "firn/text.h"
+#include "firn/vector.h"
 #include "Config.h"
 #include "tools/Tool.h"
 #include "ui/FileDialog.h"
@@ -206,6 +207,82 @@ struct App {
     float shape_radius = 10.0f;         // rounded rectangle corner radius
     int shape_sides = 6, star_points = 5;
     float star_inner = 0.5f;
+    // Vector objects. Shape, line, and text tools make vector objects when
+    // create_as_vector is on (on a vector layer, created as needed).
+    bool create_as_vector = false;
+    int pen_mode = 0;                   // 0 point to point, 1 freehand, 2 edit nodes
+    bool pen_close = false;
+    void draw_line_style_combo();       // styled line picker for the tool options
+    void draw_create_as_vector();       // the checkbox shared by the shape tools
+    // Materials beyond a flat color: gradient or pattern, combined with the
+    // foreground/background color for the solid case.
+    struct Material {
+        int kind = 0;                    // 0 color, 1 gradient, 2 pattern
+        int gradient_index = -1;         // into gradient_library, -1 = the two-color default
+        firn::vec::Gradient gradient;    // colors/opacities of the chosen gradient
+        int gradient_style = 0;          // vec::GradientStyle
+        float gradient_angle = 0.0f;
+        int gradient_repeats = 0;
+        bool gradient_invert = false;
+        int pattern_index = -1;
+        std::shared_ptr<const firn::Image> pattern;
+        float pattern_scale = 1.0f, pattern_angle = 0.0f;
+    };
+    Material fg_material, bg_material;
+    firn::vec::PaintStyle material_style(bool foreground) const;   // as a paint style
+    // Libraries scanned from ~/.config/firn/*, FIRN_*_DIRS, Preferences, and the backup.
+    struct ShapeEntry { std::string path, name; std::vector<firn::vec::Object> objects; int width = 0, height = 0; };
+    std::vector<ShapeEntry> shape_library;
+    bool shape_library_loaded = false;
+    int shape_library_index = -1;       // -1 = one of the built-in shapes (shape_kind)
+    bool shape_retain_style = true;     // library shapes keep their own stroke/fill
+    void ensure_shape_library();
+    std::vector<firn::vec::Gradient> gradient_library;
+    bool gradients_loaded = false;
+    void ensure_gradients();
+    struct LineEntry { std::string path; firn::vec::LineStyle line; };
+    std::vector<LineEntry> line_library;
+    bool lines_loaded = false;
+    int line_index = -1;                // -1 = solid
+    void ensure_line_styles();
+    struct PatternEntry { std::string path, name; };
+    std::vector<PatternEntry> pattern_library;
+    bool patterns_loaded = false;
+    void ensure_patterns();
+    // Object editing
+    int vector_layer_for_edit(bool create);   // active vector layer, or a new one; -1 when none
+    void add_vector_object(firn::vec::Object o, const std::string& name);   // onto vector_layer_for_edit(true), selected
+    std::vector<firn::vec::Object> shape_objects(float x0, float y0, float x1, float y1) const;   // preset shape(s) for a drag rect, unstyled
+    void apply_object_style(firn::vec::Object& o, bool stroke, bool fill, ImGuiMouseButton button) const;
+    std::vector<size_t> selected_objects() const;     // indices into the active vector layer
+    void select_objects(const std::vector<size_t>& indices, bool add = false);
+    void objects_changed(const char* name, std::vector<firn::vec::Object> before);  // commits the live edit
+    void object_align(int how);          // 0 top, 1 bottom, 2 left, 3 right, 4 vertical center, 5 horizontal center, 6 center in canvas, 7 h center in canvas, 8 v center in canvas
+    void object_distribute(int how);     // 0 v top, 1 v center, 2 v bottom, 3 h left, 4 h center, 5 h right, 6 space v, 7 space h
+    void object_same_size(int how);      // 0 height, 1 width, 2 both
+    void object_arrange(int delta);
+    void object_group();
+    void object_ungroup();
+    void object_delete();
+    void object_select_all();
+    void object_select_none();
+    void object_text_to_curves(bool per_character);
+    void open_vector_properties();
+    void open_text_edit();               // re-opens the text dialog on a selected text object
+    bool show_vector_props_dialog = false;
+    firn::vec::Object vector_props_edit; // dialog working copy (first selected object)
+    std::vector<firn::vec::Object> vector_props_before;
+    int vector_props_layer = -1;
+    int vector_props_index = -1;
+    int text_edit_object = -1;           // object the text dialog is editing, or -1 for a new one
+    void draw_vector_dialogs();
+    void layer_new_vector();
+    void layer_convert_to_raster();
+    std::vector<firn::vec::Path> text_paths(const firn::vec::TextInfo& t, std::vector<int>* glyph_ids = nullptr) const;  // outlines, block top-left at (0, 0)
+    void place_text_object(firn::vec::Object& o, const firn::vec::TextInfo& t, float x, float y) const;   // rebuilds o's paths at (x, y) with rotation
+    int text_vec_layer = -1;             // vector layer the text dialog previews on (create_as_vector)
+    int text_vec_index = -1;             // object being previewed there
+    std::vector<firn::vec::Object> text_vec_before;
     // Custom brush tips
     struct TipEntry { std::string path, name; std::shared_ptr<const firn::raster::BrushTip> tip; };
     std::vector<TipEntry> brush_tips;

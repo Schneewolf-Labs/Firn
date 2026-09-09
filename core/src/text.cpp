@@ -195,4 +195,97 @@ Image Font::render(const std::string& utf8, float px, Color color, bool antialia
     return out;
 }
 
+
+std::vector<Font::Contour> Font::outlines(const std::string& utf8, float px, Align align,
+                                          float line_spacing, float kerning, Layout* layout, std::vector<int>* glyph_ids) const {
+    const stbtt_fontinfo& f = impl_->info;
+    const float scale = stbtt_ScaleForPixelHeight(&f, std::max(px, 1.0f));
+    int ascent, descent, line_gap;
+    stbtt_GetFontVMetrics(&f, &ascent, &descent, &line_gap);
+    const float line_h = (ascent - descent + line_gap) * scale * line_spacing;
+    std::vector<std::string> lines;
+    {
+        size_t start = 0;
+        while (true) {
+            const size_t nl = utf8.find('\n', start);
+            lines.push_back(utf8.substr(start, nl == std::string::npos ? std::string::npos : nl - start));
+            if (nl == std::string::npos) break;
+            start = nl + 1;
+        }
+    }
+    struct Glyph { int index; float x; };
+    std::vector<std::vector<Glyph>> placed(lines.size());
+    std::vector<float> widths(lines.size(), 0.0f);
+    for (size_t li = 0; li < lines.size(); ++li) {
+        float x = 0.0f;
+        int prev = 0;
+        size_t i = 0;
+        while (i < lines[li].size()) {
+            const uint32_t cp = next_codepoint(lines[li], i);
+            const int g = stbtt_FindGlyphIndex(&f, static_cast<int>(cp));
+            if (prev) x += stbtt_GetGlyphKernAdvance(&f, prev, g) * scale;
+            placed[li].push_back({g, x});
+            int adv, lsb;
+            stbtt_GetGlyphHMetrics(&f, g, &adv, &lsb);
+            x += adv * scale + kerning;
+            prev = g;
+        }
+        widths[li] = x;
+    }
+    const float block_w = *std::max_element(widths.begin(), widths.end());
+    std::vector<Contour> out;
+    int glyph_no = 0;
+    for (size_t li = 0; li < lines.size(); ++li) {
+        const float base_y = 1.0f + ascent * scale + li * line_h;
+        const float indent = align == Align::Left ? 0.0f : align == Align::Center ? (block_w - widths[li]) * 0.5f : block_w - widths[li];
+        for (const Glyph& g : placed[li]) {
+            const float gx = 1.0f + indent + g.x;
+            const int this_glyph = glyph_no++;
+            stbtt_vertex* verts = nullptr;
+            const int n = stbtt_GetGlyphShape(&f, g.index, &verts);
+            Contour cur;
+            auto map_x = [&](short v) { return gx + v * scale; };
+            auto map_y = [&](short v) { return base_y - v * scale; };
+            auto flush = [&]() { if (cur.size() >= 2) { out.push_back(cur); if (glyph_ids) glyph_ids->push_back(this_glyph); } cur.clear(); };
+            for (int i = 0; i < n; ++i) {
+                const stbtt_vertex& v = verts[i];
+                const float x = map_x(v.x), y = map_y(v.y);
+                if (v.type == STBTT_vmove) {
+                    flush();
+                    cur.push_back({x, y, x, y, x, y});
+                } else if (cur.empty()) {
+                    cur.push_back({x, y, x, y, x, y});
+                } else if (v.type == STBTT_vline) {
+                    cur.push_back({x, y, x, y, x, y});
+                } else if (v.type == STBTT_vcurve) {
+                    OutlinePoint& a = cur.back();
+                    const float cx = map_x(v.cx), cy = map_y(v.cy);
+                    a.out_x = a.x + 2.0f / 3.0f * (cx - a.x); a.out_y = a.y + 2.0f / 3.0f * (cy - a.y);
+                    cur.push_back({x, y, x + 2.0f / 3.0f * (cx - x), y + 2.0f / 3.0f * (cy - y), x, y});
+                } else if (v.type == STBTT_vcubic) {
+                    OutlinePoint& a = cur.back();
+                    a.out_x = map_x(v.cx); a.out_y = map_y(v.cy);
+                    cur.push_back({x, y, map_x(v.cx1), map_y(v.cy1), x, y});
+                }
+            }
+            flush();
+            stbtt_FreeShape(&f, verts);
+        }
+    }
+    // Contours end on their start point; drop that duplicate so closing the
+    // path does not add a zero-length segment (keep its incoming handle).
+    for (Contour& c : out) {
+        if (c.size() >= 2 && std::abs(c.front().x - c.back().x) < 1e-3f && std::abs(c.front().y - c.back().y) < 1e-3f) {
+            c.front().in_x = c.back().in_x; c.front().in_y = c.back().in_y;
+            c.pop_back();
+        }
+    }
+    if (layout) {
+        layout->width = std::max(1, static_cast<int>(std::ceil(block_w)) + 2);
+        layout->height = std::max(1, static_cast<int>(std::ceil(line_h * lines.size() + (-descent) * scale)) + 2);
+        layout->baseline = static_cast<int>(1.0f + ascent * scale);
+    }
+    return out;
+}
+
 }  // namespace firn::text

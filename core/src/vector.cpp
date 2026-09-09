@@ -295,6 +295,65 @@ void rasterize(const std::vector<Object>& objects, Image& dst) {
     }
 }
 
+// --- Queries ---------------------------------------------------------------
+
+bool outline_bounds(const Object& o, float* x0, float* y0, float* x1, float* y1) {
+    bool any = false;
+    for (const Path& p : o.paths) {
+        for (const auto& pt : flatten(p)) {
+            if (!any) { *x0 = *x1 = pt.first; *y0 = *y1 = pt.second; any = true; }
+            *x0 = std::min(*x0, pt.first); *x1 = std::max(*x1, pt.first);
+            *y0 = std::min(*y0, pt.second); *y1 = std::max(*y1, pt.second);
+        }
+    }
+    return any;
+}
+
+bool hit_test(const Object& o, float x, float y, float tolerance) {
+    float bx0, by0, bx1, by1;
+    if (!outline_bounds(o, &bx0, &by0, &bx1, &by1)) return false;
+    const float tol = std::max(tolerance, o.stroke.enabled() ? o.stroke_width * 0.5f : 0.0f);
+    if (x < bx0 - tol || x > bx1 + tol || y < by0 - tol || y > by1 + tol) return false;
+    bool inside = false;
+    for (const Path& p : o.paths) {
+        const auto pts = flatten(p);
+        const size_t n = pts.size();
+        if (n < 2) continue;
+        // Distance to the outline.
+        const size_t segs = p.closed ? n : n - 1;
+        for (size_t i = 0; i < segs; ++i) {
+            const auto& a = pts[i]; const auto& b = pts[(i + 1) % n];
+            const float dx = b.first - a.first, dy = b.second - a.second;
+            const float len2 = dx * dx + dy * dy;
+            float t = len2 > 0 ? ((x - a.first) * dx + (y - a.second) * dy) / len2 : 0.0f;
+            t = std::clamp(t, 0.0f, 1.0f);
+            const float px = a.first + dx * t, py = a.second + dy * t;
+            if (std::hypot(x - px, y - py) <= tol) return true;
+        }
+        // Even-odd inside test (fills are drawn even-odd too).
+        for (size_t i = 0, j = n - 1; i < n; j = i++) {
+            const auto& a = pts[i]; const auto& b = pts[j];
+            if ((a.second > y) != (b.second > y) && x < (b.first - a.first) * (y - a.second) / (b.second - a.second) + a.first) inside = !inside;
+        }
+    }
+    return inside && o.fill.enabled();
+}
+
+size_t group_end(const std::vector<Object>& objects, size_t i) {
+    if (i >= objects.size()) return objects.size();
+    if (!objects[i].is_group) return i + 1;
+    size_t p = i + 1;
+    for (uint32_t k = 0; k < objects[i].group_count && p < objects.size(); ++k) p = group_end(objects, p);
+    return p;
+}
+
+int group_of(const std::vector<Object>& objects, size_t i) {
+    int best = -1;  // innermost: the last group that starts before i and spans it
+    for (size_t g = 0; g < i; ++g)
+        if (objects[g].is_group && group_end(objects, g) > i) best = static_cast<int>(g);
+    return best;
+}
+
 // --- Builders ------------------------------------------------------------
 
 namespace {

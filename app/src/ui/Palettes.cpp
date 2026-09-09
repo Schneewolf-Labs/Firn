@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "App.h"
+#include "firn/vector.h"
 #include "imgui.h"
 
 using namespace firn;
@@ -37,12 +38,17 @@ static void draw_tool_options(App& app) {
     ImGui::End();
 }
 
+void draw_material_editor(App& app, bool foreground);  // VectorDialog.cpp
+
 static void draw_materials(App& app) {
     ImGui::Begin("Materials");
-    ImGui::ColorEdit4("Foreground", app.fg_color, ImGuiColorEditFlags_NoInputs);
-    ImGui::ColorEdit4("Background", app.bg_color, ImGuiColorEditFlags_NoInputs);
+    ImGui::TextDisabled("Foreground"); ImGui::SameLine();
+    draw_material_editor(app, true);
+    ImGui::TextDisabled("Background"); ImGui::SameLine();
+    draw_material_editor(app, false);
     if (ImGui::Button("Swap")) {
         for (int i = 0; i < 4; ++i) std::swap(app.fg_color[i], app.bg_color[i]);
+        std::swap(app.fg_material, app.bg_material);
     }
     ImGui::Separator();
     if (app.doc && app.active_layer() >= 0) {
@@ -133,8 +139,12 @@ static void draw_layers(App& app) {
             if (ImGui::ArrowButton("##exp", L.expanded ? ImGuiDir_Up : ImGuiDir_Right)) L.expanded = !L.expanded;
             ImGui::SameLine();
         }
+        if (L.is_vector()) {
+            if (ImGui::ArrowButton("##exp", L.expanded ? ImGuiDir_Down : ImGuiDir_Right)) L.expanded = !L.expanded;
+            ImGui::SameLine();
+        }
         char label[192];
-        std::snprintf(label, sizeof(label), "%s%s%s%s", L.type == LayerType::Group ? "[Group] " : "", L.name.c_str(),
+        std::snprintf(label, sizeof(label), "%s%s%s%s", L.type == LayerType::Group ? "[Group] " : L.is_vector() ? "[Vector] " : "", L.name.c_str(),
                       L.blend != BlendMode::Normal ? "  [" : "", L.blend != BlendMode::Normal ? blend_mode_name(L.blend) : "");
         if (L.blend != BlendMode::Normal) std::strncat(label, "]", sizeof(label) - std::strlen(label) - 1);
         // Size the selectable to its label so the controls after it stay clickable.
@@ -154,6 +164,41 @@ static void draw_layers(App& app) {
         }
         if (L.background) { ImGui::SameLine(); ImGui::TextDisabled("(background)"); }
         else if (L.opacity < 1.0f) { ImGui::SameLine(); ImGui::TextDisabled("%.0f%%", L.opacity * 100.0f); }
+        // Objects of an expanded vector layer, top-most first; clicking
+        // selects the object (Shift adds), the checkbox hides it.
+        if (L.is_vector() && L.expanded) {
+            ImGui::Indent(20.0f);
+            std::vector<vec::Object>& objs = L.objects;
+            int depth = 0;
+            std::vector<size_t> group_ends;
+            for (int oi = static_cast<int>(objs.size()) - 1; oi >= 0; --oi) {
+                vec::Object& o = objs[oi];
+                ImGui::PushID(oi);
+                const int g = vec::group_of(objs, oi);
+                depth = 0;
+                for (int gg = g; gg >= 0; gg = vec::group_of(objs, static_cast<size_t>(gg))) ++depth;
+                ImGui::Indent(depth * 12.0f);
+                bool ovis = o.visible;
+                if (ImGui::Checkbox("##ovis", &ovis)) {
+                    std::vector<vec::Object> before = objs;
+                    o.visible = ovis;
+                    doc.set_active_layer(i);
+                    app.objects_changed(ovis ? "Show Object" : "Hide Object", std::move(before));
+                }
+                ImGui::SameLine();
+                char olabel[160];
+                std::snprintf(olabel, sizeof(olabel), "%s%s", o.is_group ? "[Group] " : o.is_text ? "[Text] " : "", o.name.c_str());
+                if (ImGui::Selectable(olabel, o.selected, ImGuiSelectableFlags_AllowDoubleClick, ImVec2(ImGui::CalcTextSize(olabel).x + 8.0f, 0))) {
+                    doc.set_active_layer(i);
+                    app.select_objects({static_cast<size_t>(oi)}, ImGui::GetIO().KeyShift);
+                    if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) app.open_vector_properties();
+                }
+                ImGui::Unindent(depth * 12.0f);
+                ImGui::PopID();
+            }
+            if (objs.empty()) ImGui::TextDisabled("(no objects)");
+            ImGui::Unindent(20.0f);
+        }
         ImGui::Unindent(L.depth * 14.0f);
         ImGui::PopID();
     }

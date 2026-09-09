@@ -63,7 +63,7 @@ what to work on next.
 - [x] Text tool (vendor stb_truetype; rasterized to a new layer)
 - [x] Line and preset shapes drawn as raster
 - [x] Text stroke/outline and rotation; rounded rectangle, polygon and star shapes
-- [ ] Text editing after placement (needs vector text objects)
+- [x] Text editing after placement (vector text objects: Objects > Edit Text, or the properties dialog)
 
 ## 7. Workspace
 
@@ -96,7 +96,12 @@ what to work on next.
 
 ## 11. Further out
 
-- [ ] Vector layers and objects (editable text and shapes, the Pen tool)
+- [x] Vector layers and objects: native read/write (verified against the
+      stored composite and in the original), Object Selector, Pen, create-as-vector
+      shapes/lines/text, Vector Properties, Objects menu, preset shape / gradient /
+      styled line / pattern libraries, gradient and pattern materials
+- [ ] Vector leftovers: the original's text shape layout (no sample), dashes/caps
+      in saved shapes (only segment caps have a known slot), Fit Text to Path
 - [ ] Scripting (the original's Python command API; docs/COMMANDS.md is the inventory)
 - [ ] Printing and print layout
 - [ ] 16-bit channels, color management

@@ -34,6 +34,14 @@ public:
     Image render(const std::string& utf8, float px, Color color, bool antialias, Align align,
                  float line_spacing = 1.0f, float kerning = 0.0f, Layout* layout = nullptr) const;
 
+    // Glyph outlines as closed cubic contours, laid out like render() with
+    // the block's top-left at (0, 0). Quadratic segments are raised to cubics.
+    struct OutlinePoint { float x, y, in_x, in_y, out_x, out_y; };
+    using Contour = std::vector<OutlinePoint>;
+    std::vector<Contour> outlines(const std::string& utf8, float px, Align align,
+                                  float line_spacing = 1.0f, float kerning = 0.0f, Layout* layout = nullptr,
+                                  std::vector<int>* glyph_ids = nullptr) const;   // per contour: index of its glyph in the text
+
 private:
     Font() = default;
     struct Impl;

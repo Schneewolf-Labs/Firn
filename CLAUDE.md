@@ -41,7 +41,7 @@ core/    libfirncore: image model, layers, document, commands, undo, raster ops,
 tools/   firn-convert: CLI that prints a file's layer stack and flattens it to PNG.
 app/     the desktop app. src/ui/ = canvas, menus, palettes, file dialog; src/tools/ = canvas tools.
 tests/   assert-based core tests (no framework), one ctest target.
-scripts/ drive.py drives the running app with synthesized X11 input for screenshots.
+scripts/ drive.py drives the running app over its FIRN_DRIVE socket (virtual cursor, screenshots, state).
 docs/    notes on the original: command inventory, module mapping, FORMAT.md
          (the native container layout, verified against the sample files).
 ```
@@ -128,10 +128,25 @@ docs/    notes on the original: command inventory, module mapping, FORMAT.md
   layout is `layout.ini` beside it). Add new persisted fields there, expose
   them in File > Preferences, and push them into live state in
   `App::apply_config`.
-- **Libraries** (picture tubes, brush tips, paper textures) are scanned
-  lazily by `App::ensure_*` from `~/.config/firn/{tubes,brushes,textures}`,
+- **Libraries** (picture tubes, brush tips, paper textures, preset shapes,
+  gradients, styled lines, patterns) are scanned lazily by `App::ensure_*`
+  from `~/.config/firn/{tubes,brushes,textures,shapes,gradients,lines,patterns}`,
   the `FIRN_*_DIRS` env vars, the Preferences folders, and the gitignored
   sample folders under `WindowsInstall/` in a development build.
+- **Vector layers** (`LayerType::Vector`) hold `vec::Object`s
+  (`core/include/firn/vector.h`) and a rendered pixel cache. Every edit goes
+  through `VectorEditCommand` (before/after object lists); tools mutate
+  `Layer::objects` live, call `Document::rasterize_vector_layer`, and commit
+  with `App::objects_changed`. Selection is `Object::selected` (never
+  saved); groups are a group object followed by its members
+  (`vec::group_end`). Shape, line and text tools build objects in both
+  modes; "Create as vector" keeps them editable, otherwise
+  `vec::rasterize` paints them through the selection. Text objects keep
+  their `TextInfo` for re-editing until saved (the original's text shape
+  layout is unknown, so they are written as plain paths).
+- **Materials**: `App::material_style(fg)` turns the color plus
+  `App::Material` (gradient/pattern) into a `vec::PaintStyle`; the flood
+  fill, shape, line and text tools all paint through it.
 - **Saved selections** live in `Document::alpha_channels()` and round-trip
   through the native format; the current selection itself is not stored.
 - The toolbar and status bar (`app/src/ui/Toolbar.cpp`) sit outside the
@@ -144,20 +159,26 @@ docs/    notes on the original: command inventory, module mapping, FORMAT.md
 
 ## Checking UI changes
 
-Unit tests cover the core. For the app, launch it small and drive it:
+Unit tests cover the core. For the app, use the in-app driver
+(`app/src/Drive.cpp`): with `FIRN_DRIVE=<socket>` set, the app listens on a
+Unix socket, moves a **virtual cursor** with synthetic ImGui events (the
+real pointer is never touched and real mouse events are ignored while
+driving), writes screenshots from its own framebuffer, and answers every
+command with a state line once its frames have run, so scripts never sleep
+or guess:
 
 ```sh
-FIRN_WINDOW=1280x800 ./build/app/firn some.png &
-WID=$(xwininfo -root -tree | grep '"Firn"' | awk '{print $1}')
-python3 scripts/drive.py $WID key:b drag:400,300:700,500:1 shot:/tmp/out.png
-python3 scripts/drive.py $WID ctrl:o type:grad.png key:Return   # dialogs too
+python3 scripts/drive.py --launch some.png          # kills old instances, starts small, waits for the socket
+python3 scripts/drive.py "tool:Preset Shape" set:create_as_vector:1 drag_img:20,20:140,140 state
+python3 scripts/drive.py ctrl:z shot:/tmp/out.png save:/tmp/out.pspimage
+python3 scripts/drive.py --kill                      # when done
 ```
 
-Needs `python3-xlib`, `xwininfo`, and ImageMagick `import`. Coordinates are
-window-relative. **Always run `python3 scripts/drive.py --kill` before
-launching and again when done** (it is `pkill -9 -x firn`; never `pkill -f`,
-which matches your own shell). SIGTERM used to be turned into a quit request
-by SDL, leaving instances parked on the unsaved-changes prompt; the app now
-disables SDL's signal handlers and the helper uses SIGKILL, and it also kills
-the app if any step fails. Do not launch the app maximized;
-the user's screen is 3440 px wide.
+`*_img` steps take image pixel coordinates (the state line reports `origin`
+and `zoom` for the rest); `tool:NAME` and `set:OPTION:VALUE` replace hunting
+for widgets; `state` reports the tool, active layer, object selection,
+history, open popups and status. **Always `--launch` (or `--kill`) before a
+run and `--kill` when done** (SIGKILL: SDL used to turn SIGTERM into a quit
+request that parked a modified image on the unsaved-changes prompt). Never
+launch the app maximized; the user's screen is 3440 px wide. The old
+XTest-based driving is gone: it fought the user for the mouse.

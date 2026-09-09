@@ -206,7 +206,7 @@ void UngroupCommand::execute(Document& doc) {
 void VectorEditCommand::execute(Document& doc) {
     Layer& L = doc.layer(layer_);
     if (!L.is_vector()) return;
-    before_ = L.objects;
+    if (!has_before_) { before_ = L.objects; has_before_ = true; }
     L.objects = after_;
     doc.rasterize_vector_layer(layer_);
 }
