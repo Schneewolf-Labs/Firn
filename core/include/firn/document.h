@@ -102,9 +102,17 @@ public:
 
     // Bumped on every mutation; the UI uses it to know when to re-upload.
     uint64_t revision() const { return revision_; }
-    void touch() { ++revision_; }
+    void touch() { ++revision_; dirty_ = {0, 0, width_, height_}; }
+    // Mutation confined to a rect: lets the display recomposite only that area.
+    void touch(const raster::Rect& r) { ++revision_; dirty_ = dirty_.empty() ? r.clipped(width_, height_) : dirty_.united(r.clipped(width_, height_)); }
+    // Area changed since the last take_dirty(); the whole image after touch().
+    raster::Rect take_dirty() { raster::Rect r = dirty_; dirty_ = {}; return r; }
+
+    // Composites only `r` of the document into `dst` (document-sized).
+    void composite_into(Image& dst, const raster::Rect& r) const;
 
 private:
+    void composite_region(Image& out, size_t from, size_t to, const raster::Rect& r) const;
     int width_;
     int height_;
     std::vector<std::unique_ptr<Layer>> layers_;
@@ -112,6 +120,7 @@ private:
     uint64_t revision_ = 0;
     Mask selection_;
     uint64_t selection_revision_ = 0;
+    raster::Rect dirty_;
 };
 
 }  // namespace firn

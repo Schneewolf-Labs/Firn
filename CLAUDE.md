@@ -56,7 +56,9 @@ docs/    notes on the original: command inventory, module mapping, FORMAT.md
   release records one `LayerSnapshotCommand` via `App::commit`. One gesture =
   one history entry. `App::run` is for commands that execute themselves.
 - **`Document::revision()`** is how the UI knows to re-upload the canvas
-  texture. Anything that changes pixels or layer state must `touch()`.
+  texture. Anything that changes pixels or layer state must `touch()`; live
+  tools pass the changed rect (`touch(rect)` / `App::paint_touched(layer,
+  &rect)`) so only that area is recomposited and uploaded.
 - **Straight-alpha RGBA8** everywhere in `Image`. Blur and resample in
   premultiplied space internally (see `raster::gaussian_blur`) so transparent
   pixels don't bleed color.

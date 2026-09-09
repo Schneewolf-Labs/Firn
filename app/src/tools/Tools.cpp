@@ -330,7 +330,8 @@ public:
 
 private:
     void flush(App& app) {
-        if (!stroke_->render(app.paint_pixels(layer_)).empty()) app.paint_touched(layer_);
+        const raster::Rect r = stroke_->render(app.paint_pixels(layer_));
+        if (!r.empty()) app.paint_touched(layer_, &r);
     }
     Kind kind_;
     size_t layer_ = 0;
@@ -543,7 +544,7 @@ public:
                                                         static_cast<int>(std::floor(in.img_y)), color,
                                                         app.fill_tolerance, app.fill_opacity, &app.doc->selection());
         if (changed.empty()) return;
-        app.paint_touched(layer);
+        app.paint_touched(layer, &changed);
         app.commit_pixels(layer, name(), std::move(before), target);
     }
     void draw_options(App& app) override {

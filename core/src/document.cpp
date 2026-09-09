@@ -2,6 +2,8 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cstring>
+#include <thread>
 
 namespace firn {
 
@@ -116,16 +118,30 @@ Image Document::composite() const {
 
 namespace {
 
-// Blends `src` (document-sized, straight alpha) onto `dst` with a layer's
-// opacity, blend mode and optional mask.
-void blend_layer(Image& dst, const Image& src, const Layer& L, int w, int h) {
+// Blends rows [y0, y1) x [x0, x1) of `src` (document-sized, straight alpha)
+// onto `dst` with a layer's opacity, blend mode and optional mask. Normal
+// mode at full opacity without a mask takes an integer fast path.
+void blend_rows(Image& dst, const Image& src, const Layer& L, int w, const raster::Rect& r) {
     const float lo = std::clamp(L.opacity, 0.0f, 1.0f);
     const bool masked = L.has_mask() && L.mask_enabled;
+    const bool fast = !masked && L.blend == BlendMode::Normal && lo >= 1.0f;
     uint8_t* d = dst.data();
     const uint8_t* s = src.data();
-    for (int y = 0; y < h; ++y)
-        for (int x = 0; x < w; ++x) {
+    for (int y = r.y0; y < r.y1; ++y)
+        for (int x = r.x0; x < r.x1; ++x) {
             const size_t i = (static_cast<size_t>(y) * w + x) * 4;
+            if (fast) {
+                const int sa = s[i + 3];
+                if (sa == 0) continue;
+                if (sa == 255) { std::memcpy(d + i, s + i, 4); continue; }
+                const int da = d[i + 3];
+                const int oa = sa + da * (255 - sa) / 255;
+                if (oa == 0) continue;
+                for (int c = 0; c < 3; ++c)
+                    d[i + c] = static_cast<uint8_t>((s[i + c] * sa + d[i + c] * da * (255 - sa) / 255) / oa);
+                d[i + 3] = static_cast<uint8_t>(oa);
+                continue;
+            }
             if (masked) {
                 const uint8_t m = L.mask.at(x, y);
                 if (m == 0) continue;
@@ -137,25 +153,56 @@ void blend_layer(Image& dst, const Image& src, const Layer& L, int w, int h) {
         }
 }
 
+// Splits the rect into row bands and blends them on worker threads.
+void blend_layer(Image& dst, const Image& src, const Layer& L, int w, const raster::Rect& r) {
+    const int rows = r.y1 - r.y0;
+    const unsigned hw = std::max(1u, std::thread::hardware_concurrency());
+    const int bands = static_cast<int>(std::min<size_t>(hw, static_cast<size_t>(std::max(1, rows * (r.x1 - r.x0) / 65536))));
+    if (bands <= 1) { blend_rows(dst, src, L, w, r); return; }
+    std::vector<std::thread> pool;
+    for (int b = 0; b < bands; ++b) {
+        raster::Rect band = r;
+        band.y0 = r.y0 + rows * b / bands;
+        band.y1 = r.y0 + rows * (b + 1) / bands;
+        pool.emplace_back([&, band] { blend_rows(dst, src, L, w, band); });
+    }
+    for (auto& t : pool) t.join();
+}
+
 }  // namespace
 
-Image Document::composite_range(size_t from, size_t to) const {
-    Image out(width_, height_, {0, 0, 0, 0});
+void Document::composite_into(Image& dst, const raster::Rect& rect) const {
+    const raster::Rect r = rect.clipped(width_, height_);
+    if (r.empty()) return;
+    // Clear the region, then blend the top-level stack into it.
+    for (int y = r.y0; y < r.y1; ++y)
+        std::memset(dst.data() + (static_cast<size_t>(y) * width_ + r.x0) * 4, 0, static_cast<size_t>(r.x1 - r.x0) * 4);
+    if (layers_.empty()) return;
+    composite_region(dst, 0, layers_.size() - 1, r);
+}
+
+void Document::composite_region(Image& out, size_t from, size_t to, const raster::Rect& r) const {
     size_t li = from;
     while (li <= to && li < layers_.size()) {
         const Layer& L = *layers_[li];
         if (L.type == LayerType::Group) {
             const size_t end = group_end(li);
             if (L.visible && L.opacity > 0.0f && end > li + 1) {
-                const Image inner = composite_range(li + 1, std::min(end - 1, to));
-                blend_layer(out, inner, L, width_, height_);
+                Image inner(width_, height_, {0, 0, 0, 0});
+                composite_region(inner, li + 1, std::min(end - 1, to), r);
+                blend_layer(out, inner, L, width_, r);
             }
             li = end;
             continue;
         }
-        if (L.visible && L.opacity > 0.0f && !L.pixels.empty()) blend_layer(out, L.pixels, L, width_, height_);
+        if (L.visible && L.opacity > 0.0f && !L.pixels.empty()) blend_layer(out, L.pixels, L, width_, r);
         ++li;
     }
+}
+
+Image Document::composite_range(size_t from, size_t to) const {
+    Image out(width_, height_, {0, 0, 0, 0});
+    composite_region(out, from, to, {0, 0, width_, height_});
     return out;
 }
 

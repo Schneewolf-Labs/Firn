@@ -1,4 +1,5 @@
 // Minimal assert-based tests; no framework dependency yet.
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <memory>
@@ -1064,7 +1065,61 @@ static void test_effects_round3() {
     CHECK(ob.get(15, 15).r == 128);
 }
 
+static void test_composite_region_and_speed() {
+    Document doc(64, 48);
+    Layer& bg = doc.add_layer("bg"); bg.background = true;
+    for (int y = 0; y < 48; ++y) for (int x = 0; x < 64; ++x) bg.pixels.set(x, y, {static_cast<uint8_t>(x * 4), static_cast<uint8_t>(y * 5), 30, 255});
+    Layer& half = doc.add_layer("half"); half.opacity = 0.5f; half.blend = BlendMode::Multiply;
+    for (int y = 10; y < 30; ++y) for (int x = 10; x < 40; ++x) half.pixels.set(x, y, {200, 100, 50, 200});
+    Layer& top = doc.add_layer("top");
+    for (int y = 20; y < 40; ++y) for (int x = 30; x < 60; ++x) top.pixels.set(x, y, {0, 0, 255, static_cast<uint8_t>(x * 4)});
+    const Image full = doc.composite();
+    Image partial = full;
+    // Scribble on the cache, then ask for one region back: it must match the full composite there.
+    for (int y = 0; y < 48; ++y) for (int x = 0; x < 64; ++x) partial.set(x, y, {1, 2, 3, 4});
+    doc.composite_into(partial, {15, 15, 50, 35});
+    for (int y = 15; y < 35; ++y) for (int x = 15; x < 50; ++x) {
+        Color a = full.get(x, y), b = partial.get(x, y);
+        CHECK(a.r == b.r && a.g == b.g && a.b == b.b && a.a == b.a);
+    }
+    CHECK(partial.get(0, 0).r == 1);  // outside untouched
+    // Dirty rect tracking.
+    doc.take_dirty();
+    doc.touch({5, 5, 10, 10});
+    doc.touch({8, 8, 20, 12});
+    raster::Rect d = doc.take_dirty();
+    CHECK(d.x0 == 5 && d.y0 == 5 && d.x1 == 20 && d.y1 == 12);
+    CHECK(doc.take_dirty().empty());
+    doc.touch();
+    CHECK(doc.take_dirty().x1 == 64);
+
+    // Fast path agrees with the general path within rounding.
+    Document f(3, 1);
+    f.add_layer("a").pixels.fill({10, 20, 30, 255});
+    Layer& b2 = f.add_layer("b");
+    b2.pixels.set(0, 0, {200, 100, 0, 255});
+    b2.pixels.set(1, 0, {200, 100, 0, 128});
+    b2.pixels.set(2, 0, {200, 100, 0, 0});
+    Image fc = f.composite();
+    CHECK(fc.get(0, 0).r == 200 && fc.get(2, 0).r == 10);
+    CHECK(fc.get(1, 0).r >= 104 && fc.get(1, 0).r <= 106);
+
+    // Timing report (not asserted): a 12 MP three-layer composite.
+    Document big(4000, 3000);
+    big.add_layer("bg").pixels.fill({100, 100, 100, 255});
+    big.add_layer("a").pixels.fill({50, 60, 70, 128});
+    Layer& c = big.add_layer("c"); c.blend = BlendMode::Overlay; c.pixels.fill({200, 20, 20, 90});
+    auto t0 = std::chrono::steady_clock::now();
+    Image bc = big.composite();
+    auto t1 = std::chrono::steady_clock::now();
+    big.composite_into(bc, {1000, 1000, 1200, 1200});
+    auto t2 = std::chrono::steady_clock::now();
+    std::printf("composite 4000x3000x3 layers: %.0f ms full, %.1f ms for a 200x200 region\n",
+                std::chrono::duration<double, std::milli>(t1 - t0).count(), std::chrono::duration<double, std::milli>(t2 - t1).count());
+}
+
 int main() {
+    test_composite_region_and_speed();
     test_effects_round3();
     test_square_brush();
     test_groups_and_masks();

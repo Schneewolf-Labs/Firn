@@ -464,10 +464,11 @@ Image& App::paint_pixels(size_t layer) {
     return doc->layer(layer).pixels;
 }
 
-void App::paint_touched(size_t layer) {
+void App::paint_touched(size_t layer, const raster::Rect* rect) {
     if (mask_edit && layer == mask_proxy_layer && doc && layer < doc->layer_count() && doc->layer(layer).has_mask())
         doc->layer(layer).mask = image_to_mask(mask_proxy);
-    doc->touch();
+    if (rect) doc->touch(*rect);
+    else doc->touch();
 }
 
 void App::commit_pixels(size_t layer, const std::string& name, Image before, const Image& after) {
@@ -604,11 +605,28 @@ void App::sync_canvas_texture() {
     if (!doc) {
         if (canvas_tex) { glDeleteTextures(1, &canvas_tex); canvas_tex = 0; }
         canvas_tex_revision = ~0ull;
+        composite_cache = Image();
         return;
     }
     if (canvas_tex && canvas_tex_revision == doc->revision()) return;
 
-    Image composite = doc->composite();
+    // Incremental path: same document size and a known dirty rect.
+    const raster::Rect dirty = doc->take_dirty();
+    const bool cache_ok = canvas_tex && composite_cache.width() == doc->width() && composite_cache.height() == doc->height() && canvas_tex_revision != ~0ull;
+    if (cache_ok && !dirty.empty() && (dirty.x1 - dirty.x0) * (dirty.y1 - dirty.y0) < doc->width() * doc->height()) {
+        doc->composite_into(composite_cache, dirty);
+        glBindTexture(GL_TEXTURE_2D, canvas_tex);
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+        glPixelStorei(GL_UNPACK_ROW_LENGTH, composite_cache.width());
+        glTexSubImage2D(GL_TEXTURE_2D, 0, dirty.x0, dirty.y0, dirty.x1 - dirty.x0, dirty.y1 - dirty.y0, GL_RGBA, GL_UNSIGNED_BYTE,
+                        composite_cache.data() + (static_cast<size_t>(dirty.y0) * composite_cache.width() + dirty.x0) * 4);
+        glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+        canvas_tex_revision = doc->revision();
+        return;
+    }
+
+    composite_cache = doc->composite();
+    const Image& composite = composite_cache;
     if (!canvas_tex) {
         glGenTextures(1, &canvas_tex);
         glBindTexture(GL_TEXTURE_2D, canvas_tex);

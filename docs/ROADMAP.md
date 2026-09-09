@@ -70,6 +70,12 @@ what to work on next.
 - [x] Tools palette grouped by the original's categories
 - [x] Windows build verified by CI (GitHub Actions, MSVC + vcpkg SDL2)
 
+## 9. Performance (large photos)
+
+- [x] Dirty-rect compositing and sub-texture uploads while painting
+- [x] Integer fast path for Normal blending; row-parallel compositing (12 MP x 3 layers: ~50 ms full, ~1 ms per brush flush)
+- [ ] Preview on a downscaled proxy for very large layers
+
 ## 8. Format completeness
 
 - [x] Masks attached to groups and layers, kept editable (enable, invert, delete, from selection/image)

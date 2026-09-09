@@ -70,6 +70,7 @@ struct App {
     // Canvas view
     GLuint canvas_tex = 0;
     uint64_t canvas_tex_revision = ~0ull;  // revision the texture was built from
+    firn::Image composite_cache;            // what the texture holds; updated per dirty rect
     float zoom = 1.0f;
     float pan_x = 0.0f, pan_y = 0.0f;  // canvas offset in screen px, relative to view center
     bool fit_requested = true;
@@ -274,7 +275,7 @@ struct App {
     void set_mask_edit(bool on);
     void refresh_mask_proxy();
     firn::Image& paint_pixels(size_t layer);            // layer pixels, or the mask proxy in mask edit mode
-    void paint_touched(size_t layer);                   // call after live edits to paint_pixels()
+    void paint_touched(size_t layer, const firn::raster::Rect* rect = nullptr);  // after live edits to paint_pixels()
     void commit_pixels(size_t layer, const std::string& name, firn::Image before, const firn::Image& after);
     void layer_set_props(const firn::LayerProps& before, const firn::LayerProps& after);
     void open_layer_properties();
