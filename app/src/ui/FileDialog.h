@@ -29,11 +29,15 @@ private:
     void refresh();
     bool matches_filter(const std::string& name) const;
     bool accept(const std::string& typed);
+    // Save mode: the "Save as type" choice, an index into exts_.
+    void set_type_from_name(const std::string& name);
+    void apply_type_to_name();
 
     Mode mode_ = Mode::Open;
     std::string title_;
     std::vector<std::string> exts_;
     bool open_requested_ = false;
+    int type_ = 0;
     bool show_all_ = false;
     bool show_hidden_ = false;
     std::filesystem::path dir_;

@@ -68,6 +68,8 @@ void FileDialog::open(Mode mode, std::string title, std::vector<std::string> ext
 
     fs::path init = initial_path.empty() ? fs::path() : fs::path(initial_path);
     std::error_code ec;
+    type_ = 0;
+    if (!init.empty()) set_type_from_name(init.filename().string());
     if (!init.empty() && fs::is_directory(init, ec)) {
         set_dir(init);
         name_buf_[0] = 0;
@@ -118,10 +120,47 @@ void FileDialog::refresh() {
     });
 }
 
+namespace {
+
+// Display names for the "Save as type" list; anything else shows its extension.
+const char* type_label(const std::string& ext) {
+    if (ext == "pspimage") return "Firn image (*.pspimage)";
+    if (ext == "png") return "PNG (*.png)";
+    if (ext == "jpg") return "JPEG (*.jpg, *.jpeg)";
+    if (ext == "jpeg") return nullptr;  // folded into jpg
+    if (ext == "bmp") return "Windows bitmap (*.bmp)";
+    if (ext == "tga") return "Targa (*.tga)";
+    return ext.c_str();
+}
+
+bool same_type(const std::string& a, const std::string& b) {
+    return a == b || (a == "jpg" && b == "jpeg") || (a == "jpeg" && b == "jpg");
+}
+
+}  // namespace
+
 bool FileDialog::matches_filter(const std::string& name) const {
     if (show_all_ || exts_.empty()) return true;
     const std::string ext = extension_of(name);
+    if (mode_ == Mode::Save && type_ >= 0 && type_ < static_cast<int>(exts_.size())) return same_type(ext, exts_[type_]);
     return std::find(exts_.begin(), exts_.end(), ext) != exts_.end();
+}
+
+void FileDialog::set_type_from_name(const std::string& name) {
+    const std::string ext = extension_of(name);
+    for (size_t i = 0; i < exts_.size(); ++i)
+        if (same_type(ext, exts_[i]) && type_label(exts_[i])) { type_ = static_cast<int>(i); return; }
+}
+
+// Replaces (or adds) the extension in the name field to match the chosen type.
+void FileDialog::apply_type_to_name() {
+    if (type_ < 0 || type_ >= static_cast<int>(exts_.size())) return;
+    std::string name = name_buf_;
+    if (name.empty()) return;
+    const std::string ext = extension_of(name);
+    if (std::find(exts_.begin(), exts_.end(), ext) != exts_.end()) name.erase(name.size() - ext.size() - 1);
+    name += "." + exts_[type_];
+    std::snprintf(name_buf_, sizeof(name_buf_), "%s", name.c_str());
 }
 
 // Resolve what the user typed or picked into a final path. Returns false
@@ -139,7 +178,10 @@ bool FileDialog::accept(const std::string& typed) {
     if (mode_ == Mode::Open) {
         if (!fs::exists(p, ec)) { error_ = "File not found: " + p.filename().string(); return false; }
     } else {
-        if (extension_of(p.filename().string()).empty() && !exts_.empty()) p += "." + exts_[0];
+        // A typed extension the app can write wins; otherwise the chosen type applies.
+        const std::string ext = extension_of(p.filename().string());
+        if (std::find(exts_.begin(), exts_.end(), ext) == exts_.end() && !exts_.empty())
+            p += "." + exts_[type_ >= 0 && type_ < static_cast<int>(exts_.size()) ? type_ : 0];
         if (!fs::is_directory(p.parent_path(), ec)) { error_ = "No such folder: " + p.parent_path().string(); return false; }
     }
     result_ = p.string();
@@ -221,6 +263,20 @@ bool FileDialog::draw() {
     if (ImGui::Checkbox("All files", &show_all_)) refresh();
     ImGui::SameLine();
     if (ImGui::Checkbox("Hidden", &show_hidden_)) refresh();
+    if (mode_ == Mode::Save && !exts_.empty()) {
+        ImGui::TextUnformatted("Save as type:");
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(-260);
+        const char* current = type_ >= 0 && type_ < static_cast<int>(exts_.size()) && type_label(exts_[type_]) ? type_label(exts_[type_]) : "";
+        if (ImGui::BeginCombo("##type", current)) {
+            for (size_t i = 0; i < exts_.size(); ++i) {
+                const char* label = type_label(exts_[i]);
+                if (!label) continue;
+                if (ImGui::Selectable(label, static_cast<int>(i) == type_)) { type_ = static_cast<int>(i); apply_type_to_name(); refresh(); }
+            }
+            ImGui::EndCombo();
+        }
+    }
 
     // Status + buttons.
     if (!error_.empty()) ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "%s", error_.c_str());
