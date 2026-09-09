@@ -21,6 +21,7 @@ add_executable(firn
   src/ui/Adjust.cpp
   src/ui/TextDialog.cpp
   src/ui/VectorDialog.cpp
+  src/ui/AdjustmentLayer.cpp
   src/ui/Toolbar.cpp
   src/tools/Tools.cpp
   src/tools/VectorTools.cpp

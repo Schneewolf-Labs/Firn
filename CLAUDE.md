@@ -144,6 +144,14 @@ docs/    notes on the original: command inventory, module mapping, FORMAT.md
   `vec::rasterize` paints them through the selection. Text objects keep
   their `TextInfo` for re-editing until saved (the original's text shape
   layout is unknown, so they are written as plain paths).
+- **Adjustment layers** (`LayerType::Adjustment`, `Layer::adjustment`,
+  `core/include/firn/adjustment.h`) transform what is composited below them
+  (within their group) through their mask and opacity. Create with
+  `AddAdjustmentLayerCommand`, edit with `SetAdjustmentCommand`; the dialog
+  in `app/src/ui/AdjustmentLayer.cpp` edits the layer live and commits on OK.
+- **The official format spec** (versions 7 and 8) and the scripting command
+  API are linked from `docs/FORMAT.md` (References); consult them before
+  reverse-engineering a block from samples.
 - **Materials**: `App::material_style(fg)` turns the color plus
   `App::Material` (gradient/pattern) into a `vec::PaintStyle`; the flood
   fill, shape, line and text tools all paint through it.

@@ -41,7 +41,8 @@ always use the stored length rather than a constant.
 | 17 | Composite attributes | chunk `{len, width, height, depth u16, compression u16, planes u16, colors u32, type u16}`; type 0 full size, 1 thumbnail |
 | 18 | JPEG | chunk `{len, compressed_len, uncompressed_len, image_type u16}` then a JFIF stream |
 | 13 / 14 / 15 / 19 | Vector extension / shape / paint style / line style | see **Vector layers** below |
-| 10, 26, 12 | extended data, adjustment extension | skipped |
+| 12 | Adjustment extension | see **Adjustment layers** below |
+| 10 | extended data | skipped |
 
 ## General image attributes (id 0), chunk length 46
 
@@ -112,6 +113,38 @@ meaning. 48-bit samples are u16; the high byte is kept.
 
 RLE: read a count byte `n`; if `n > 128` repeat the next byte `n - 128`
 times, else copy `n` literal bytes.
+
+## Adjustment layers (type 4)
+
+Per the official format specification (see References): the layer info
+chunk is followed by an adjustment extension block (id 12) holding an info
+chunk `{6, type u16}` and one definition chunk, then a bitmap chunk
+`{8, 1, 1}` and a channel block of DIB type 7 (an 8-bit mask that limits
+where the adjustment applies; all 255 = everywhere). That bitmap takes the
+user mask's place, so its extent goes in the info chunk's **mask rect and
+saved mask rect** fields with the image rects zero; the original hangs on
+a file that puts it in the image rects. The header's contents flags gain
+0x4. Types: 1 Levels, 2 Curves, 3
+Brightness/Contrast, 4 Color Balance, 5 HSL, 6 Channel Mixer, 7 Invert,
+8 Threshold, 9 Posterize. Definition chunks (each starts with its u32
+length):
+
+- Levels: `f64 gamma x4, i32 input ceiling x4, i32 input floor x4, i32
+  output ceiling x4, i32 output floor x4` (master, red, green, blue).
+- Curves: four chunks (RGB, red, green, blue) of `{len, freehand u8, point
+  count u16, 18 x (input u8, output u8), 256-byte table}`.
+- Brightness/Contrast: `i32 brightness, i32 contrast`.
+- Color Balance: `u8 preserve luminance, i32 highlight x3, midtone x3,
+  shadow x3`.
+- HSL: `u8 colorize, i32 master hue/saturation/lightness, i32 colorize
+  hue/saturation/lightness, then red, yellow, green, cyan, blue, magenta
+  ranges of 7 i32 each (hue, saturation, lightness, four range degrees)`.
+- Channel Mixer: `u8 monochrome, i32 blue row (red, green, blue, constant),
+  green row, red row`.
+- Invert: nothing. Threshold: `i32`. Posterize: `i32`.
+
+Firn applies an adjustment layer to everything composited below it within
+its group, blended by opacity and its mask; alpha is untouched.
 
 ## Vector layers (type 3)
 
@@ -223,3 +256,12 @@ all layers intact; `scripts/original-open.sh` automates that check.
 The current selection block (id 6), adjustment layer contents, vector
 text shapes (no sample carries one), color profiles, and the 16-bit path
 beyond truncation to 8 bits.
+
+## References
+
+Corel published the format specification for versions 7 and 8 (the same
+container this app reads; version 8 adds art media and text shapes):
+`ftp.corel.com/pub/documentation/PSP/` mirrored at
+`http://ftpmirror.your.org/pub/misc/ftp.corel.com/pub/documentation/PSP/`,
+alongside the scripting command API reference. Everything above was
+first derived from the sample files and later checked against the spec.

@@ -1,3 +1,4 @@
+#include "firn/adjust.h"
 #include "firn/io_psp.h"
 
 #include <algorithm>
@@ -23,11 +24,11 @@ enum : uint16_t {
     kImageBlock = 0, kCreatorBlock = 1, kColorBlock = 2, kLayerStartBlock = 3, kLayerBlock = 4,
     kChannelBlock = 5, kSelectionBlock = 6, kCompositeImageBlock = 9, kCompositeBankBlock = 16,
     kCompositeAttrBlock = 17, kJpegBlock = 18, kGroupExtBlock = 25, kMaskExtBlock = 26, kTubeBlock = 11,
-    kAlphaBankBlock = 7, kAlphaChannelBlock = 8, kVectorExtBlock = 13, kShapeBlock = 14, kPaintStyleBlock = 15, kLineStyleBlock = 19,
+    kAlphaBankBlock = 7, kAlphaChannelBlock = 8, kAdjustmentExtBlock = 12, kVectorExtBlock = 13, kShapeBlock = 14, kPaintStyleBlock = 15, kLineStyleBlock = 19,
 };
 enum : uint16_t { kCompNone = 0, kCompRle = 1, kCompLz77 = 2, kCompJpeg = 3 };
 // Bitmap (DIB) types. Layers use 0/1; thumbnails 5/6; composites 8/9.
-enum : uint16_t { kDibImage = 0, kDibTransMask = 1, kDibUserMask = 2, kDibAlphaMask = 4, kDibThumbnail = 5, kDibThumbnailTrans = 6, kDibComposite = 8, kDibCompositeTrans = 9 };
+enum : uint16_t { kDibImage = 0, kDibTransMask = 1, kDibUserMask = 2, kDibAlphaMask = 4, kDibThumbnail = 5, kDibThumbnailTrans = 6, kDibAdjustment = 7, kDibComposite = 8, kDibCompositeTrans = 9 };
 bool is_image_dib(uint16_t t) { return t == kDibImage || t == kDibThumbnail || t == kDibComposite; }
 bool is_trans_dib(uint16_t t) { return t == kDibTransMask || t == kDibThumbnailTrans || t == kDibCompositeTrans; }
 enum : uint8_t { kLayerRaster = 1, kLayerVector = 3, kLayerAdjustment = 4, kLayerGroup = 5, kLayerMask = 6, kLayerArtMedia = 7 };
@@ -177,6 +178,92 @@ struct BankCtx {
 
 // Reads a mask layer's single channel into a document-sized mask; pixels
 // outside the saved mask rect take the extension block's `outside` value.
+// Adjustment layer extension (docs/FORMAT.md): info chunk {len, type u16}
+// then one definition chunk whose layout depends on the type.
+void read_adjustment(const Reader& r, const Block& b, Adjustment& a) {
+    if (!r.ok(b.start, 6)) return;
+    size_t p = b.start;
+    const size_t c0 = r.u32(p);
+    a.kind = static_cast<Adjustment::Kind>(r.u16(p + 4));
+    p += c0;
+    if (!r.ok(p, 4)) return;
+    const size_t len = r.u32(p);
+    auto f64 = [&](size_t off) { double v; std::memcpy(&v, r.p + off, 8); return v; };
+    auto i32 = [&](size_t off) { return r.i32(off); };
+    switch (a.kind) {
+        case Adjustment::Kind::Levels:
+            if (len >= 4 + 32 + 64) {
+                for (int c = 0; c < 4; ++c) {
+                    Adjustment::Levels& l = a.levels[c];
+                    l.gamma = static_cast<float>(f64(p + 4 + c * 8));
+                    l.in_high = i32(p + 36 + c * 4); l.in_low = i32(p + 52 + c * 4);
+                    l.out_high = i32(p + 68 + c * 4); l.out_low = i32(p + 84 + c * 4);
+                }
+            }
+            break;
+        case Adjustment::Kind::Curves: {
+            // Four chunks: RGB, red, green, blue. {len, freehand u8, count u16, 18 x (in, out), 256-byte table}.
+            size_t q = p;
+            for (int c = 0; c < 4 && r.ok(q, 4); ++c) {
+                const size_t cl = r.u32(q);
+                if (cl < 7 || !r.ok(q, cl)) break;
+                const bool freehand = r.u8(q + 4) != 0;
+                const int count = std::min<int>(r.u16(q + 5), 18);
+                a.curves[c].clear();
+                if (freehand && cl >= 4 + 3 + 36 + 256) {
+                    for (int i = 0; i < 256; i += 15) a.curves[c].emplace_back(static_cast<float>(i), static_cast<float>(r.u8(q + 43 + i)));
+                    a.curves[c].emplace_back(255.0f, static_cast<float>(r.u8(q + 43 + 255)));
+                } else {
+                    for (int i = 0; i < count && q + 7 + i * 2 + 1 < q + cl; ++i)
+                        a.curves[c].emplace_back(static_cast<float>(r.u8(q + 7 + i * 2)), static_cast<float>(r.u8(q + 8 + i * 2)));
+                }
+                if (a.curves[c].size() < 2) a.curves[c] = {{0, 0}, {255, 255}};
+                q += cl;
+            }
+            break;
+        }
+        case Adjustment::Kind::BrightnessContrast:
+            if (len >= 12) { a.brightness = i32(p + 4); a.contrast = i32(p + 8); }
+            break;
+        case Adjustment::Kind::ColorBalance:
+            if (len >= 5 + 36) {
+                a.color_balance.preserve_luminosity = r.u8(p + 4) != 0;
+                for (int i = 0; i < 3; ++i) {
+                    a.color_balance.highlights[i] = i32(p + 5 + i * 4);
+                    a.color_balance.midtones[i] = i32(p + 17 + i * 4);
+                    a.color_balance.shadows[i] = i32(p + 29 + i * 4);
+                }
+            }
+            break;
+        case Adjustment::Kind::HSL:
+            if (len >= 5 + 24) {
+                a.colorize = r.u8(p + 4) != 0;
+                a.hue = i32(p + 5); a.saturation = i32(p + 9); a.lightness = i32(p + 13);
+                a.colorize_hue = i32(p + 17); a.colorize_saturation = i32(p + 21);
+                for (int rng = 0; rng < 6; ++rng)
+                    for (int k = 0; k < 7; ++k) {
+                        const size_t off = p + 29 + (rng * 7 + k) * 4;
+                        if (off + 4 <= p + len) a.hsl_ranges[rng][k] = i32(off);
+                    }
+            }
+            break;
+        case Adjustment::Kind::ChannelMixer:
+            if (len >= 5 + 48) {
+                a.mixer.monochrome = r.u8(p + 4) != 0;
+                // Stored blue, green, red rows; each red, green, blue, constant.
+                for (int row = 0; row < 3; ++row) {
+                    const int out = 2 - row;
+                    for (int i = 0; i < 3; ++i) a.mixer.mix[out][i] = static_cast<float>(i32(p + 5 + (row * 4 + i) * 4));
+                    a.mixer.constant[out] = static_cast<float>(i32(p + 5 + (row * 4 + 3) * 4));
+                }
+            }
+            break;
+        case Adjustment::Kind::Threshold: if (len >= 8) a.threshold = i32(p + 4); break;
+        case Adjustment::Kind::Posterize: if (len >= 8) a.posterize = i32(p + 4); break;
+        default: break;
+    }
+}
+
 bool read_mask_layer(const Reader& r, const Block& lb, size_t info_end, const Header& hdr, const int32_t mask_rect[4],
                      const int32_t saved_mask[4], int W, int H, Mask& out, std::string& err) {
     const std::vector<Block> subs = blocks(r, info_end, lb.end);
@@ -397,6 +484,41 @@ bool read_layer(const Reader& r, const Block& lb, const Header& hdr, const Palet
         for (const Block& b : blocks(r, lb.start + chunk, lb.end))
             if (b.id == kGroupExtBlock && r.ok(b.start, 8)) g.remaining = static_cast<int>(r.u32(b.start + 4));
         ctx.groups.push_back(g);
+        return true;
+    }
+    if (type == kLayerAdjustment) {
+        Layer& L = doc.add_layer(name);
+        L.type = LayerType::Adjustment;
+        L.depth = depth;
+        L.opacity = opacity / 255.0f;
+        L.blend = map_blend(blend);
+        L.visible = visible != 0;
+        size_t bitmap_at = lb.start + chunk;
+        for (const Block& b : blocks(r, lb.start + chunk, lb.end))
+            if (b.id == kAdjustmentExtBlock) { read_adjustment(r, b, L.adjustment); bitmap_at = b.end; }
+        // The adjustment bitmap (an 8-bit mask over the layer rect) limits where it applies.
+        if (r.ok(bitmap_at, 8) && bitmap_at + 8 <= lb.end) {
+            const size_t bchunk = r.u32(bitmap_at);
+            const int sw = saved_mask[2] - saved_mask[0], sh = saved_mask[3] - saved_mask[1];
+            const int ox = mask_rect[0] + saved_mask[0], oy = mask_rect[1] + saved_mask[1];
+            for (const Block& b : blocks(r, bitmap_at + bchunk, lb.end)) {
+                if (b.id != kChannelBlock || !r.ok(b.start, 16) || r.u16(b.start + 12) != kDibAdjustment) continue;
+                const size_t cchunk = r.u32(b.start), clen = r.u32(b.start + 4);
+                std::vector<uint8_t> tile;
+                if (sw <= 0 || sh <= 0 || !r.ok(b.start + cchunk, clen)) continue;
+                if (!decompress(hdr.compression, r.p + b.start + cchunk, clen, static_cast<size_t>(sw) * sh, tile, err)) return false;
+                Mask m(doc.width(), doc.height(), 0);
+                bool all = true;
+                for (int y = 0; y < m.height(); ++y)
+                    for (int x = 0; x < m.width(); ++x) {
+                        const int tx = x - ox, ty = y - oy;
+                        if (tx >= 0 && ty >= 0 && tx < sw && ty < sh) m.at(x, y) = tile[static_cast<size_t>(ty) * sw + tx];
+                        if (m.at(x, y) != 255) all = false;
+                    }
+                if (!all) L.mask = std::move(m);   // a full-white bitmap is "no mask"
+                break;
+            }
+        }
         return true;
     }
     if (type == kLayerMask) {
@@ -1090,6 +1212,79 @@ std::vector<uint8_t> group_block(const Layer& G, uint32_t member_count) {
     return w.out;
 }
 
+std::vector<uint8_t> adjustment_definition(const Adjustment& a) {
+    Writer w;
+    switch (a.kind) {
+        case Adjustment::Kind::Levels:
+            w.u32(4 + 32 + 64);
+            for (int c = 0; c < 4; ++c) w.f64(a.levels[c].gamma);
+            for (int c = 0; c < 4; ++c) w.i32(a.levels[c].in_high);
+            for (int c = 0; c < 4; ++c) w.i32(a.levels[c].in_low);
+            for (int c = 0; c < 4; ++c) w.i32(a.levels[c].out_high);
+            for (int c = 0; c < 4; ++c) w.i32(a.levels[c].out_low);
+            break;
+        case Adjustment::Kind::Curves:
+            for (int c = 0; c < 4; ++c) {
+                const auto& pts = a.curves[c];
+                w.u32(4 + 3 + 36 + 256);
+                w.u8(0);
+                w.u16(static_cast<int>(std::min<size_t>(pts.size(), 18)));
+                for (size_t i = 0; i < 18; ++i) {
+                    if (i < pts.size()) { w.u8(static_cast<uint8_t>(std::clamp(pts[i].first, 0.0f, 255.0f))); w.u8(static_cast<uint8_t>(std::clamp(pts[i].second, 0.0f, 255.0f))); }
+                    else { w.u8(0); w.u8(0); }
+                }
+                const adjust::Lut lut = adjust::curve_lut(pts);
+                for (int i = 0; i < 256; ++i) w.u8(lut[i]);
+            }
+            break;
+        case Adjustment::Kind::BrightnessContrast: w.u32(12); w.i32(a.brightness); w.i32(a.contrast); break;
+        case Adjustment::Kind::ColorBalance:
+            w.u32(5 + 36); w.u8(a.color_balance.preserve_luminosity ? 1 : 0);
+            for (int i = 0; i < 3; ++i) w.i32(a.color_balance.highlights[i]);
+            for (int i = 0; i < 3; ++i) w.i32(a.color_balance.midtones[i]);
+            for (int i = 0; i < 3; ++i) w.i32(a.color_balance.shadows[i]);
+            break;
+        case Adjustment::Kind::HSL:
+            w.u32(5 + 24 + 6 * 7 * 4); w.u8(a.colorize ? 1 : 0);
+            w.i32(a.hue); w.i32(a.saturation); w.i32(a.lightness);
+            w.i32(a.colorize_hue); w.i32(a.colorize_saturation); w.i32(0);
+            for (int rng = 0; rng < 6; ++rng) for (int k = 0; k < 7; ++k) w.i32(a.hsl_ranges[rng][k]);
+            break;
+        case Adjustment::Kind::ChannelMixer:
+            w.u32(5 + 48); w.u8(a.mixer.monochrome ? 1 : 0);
+            for (int row = 0; row < 3; ++row) {
+                const int out = 2 - row;
+                for (int i = 0; i < 3; ++i) w.i32(static_cast<int32_t>(a.mixer.mix[out][i]));
+                w.i32(static_cast<int32_t>(a.mixer.constant[out]));
+            }
+            break;
+        case Adjustment::Kind::Threshold: w.u32(8); w.i32(a.threshold); break;
+        case Adjustment::Kind::Posterize: w.u32(8); w.i32(a.posterize); break;
+        default: w.u32(4); break;
+    }
+    return w.out;
+}
+
+std::vector<uint8_t> adjustment_block(const Layer& L, int doc_w, int doc_h) {
+    const int32_t full[4] = {0, 0, doc_w, doc_h};
+    Writer payload;
+    // The adjustment bitmap plays the user-mask role: its rects go in the
+    // mask rect fields (the original hangs when they sit in the image rects).
+    payload.bytes(layer_info(L.name, kLayerAdjustment, kZeroRect, kZeroRect, L.opacity, L.blend, L.visible, full, full, false));
+    Writer ext;
+    ext.u32(6); ext.u16(static_cast<int>(L.adjustment.kind));
+    ext.bytes(adjustment_definition(L.adjustment));
+    payload.block(kAdjustmentExtBlock, ext.out);
+    payload.u32(8); payload.u16(1); payload.u16(1);
+    std::vector<uint8_t> plane;
+    if (L.has_mask() && L.mask_enabled) plane.assign(L.mask.data(), L.mask.data() + L.mask.size());
+    else plane.assign(static_cast<size_t>(doc_w) * doc_h, 255);
+    payload.bytes(channel_block(kDibAdjustment, 0, plane, (static_cast<size_t>(doc_w) + 3) / 4 * 4 * doc_h));
+    Writer w;
+    w.block(kLayerBlock, payload.out);
+    return w.out;
+}
+
 std::vector<uint8_t> mask_block(const std::string& owner_name, const Mask& m, bool enabled, int doc_w, int doc_h) {
     const int32_t full[4] = {0, 0, doc_w, doc_h};
     Writer payload;
@@ -1207,7 +1402,7 @@ std::vector<uint8_t> save_psp_to_memory(const Document& doc) {
     // expanded into their own blocks.
     Writer bank;
     uint32_t block_count = 0;
-    bool has_groups = false, has_masks = false, has_vectors = false;
+    bool has_groups = false, has_masks = false, has_vectors = false, has_adjustments = false;
     {
         size_t i = 0;
         while (i < doc.layer_count()) {
@@ -1223,6 +1418,12 @@ std::vector<uint8_t> save_psp_to_memory(const Document& doc) {
                 if (L.has_mask()) ++members;
                 bank.bytes(group_block(L, members));
                 ++block_count; has_groups = true;
+                ++i;
+                continue;
+            }
+            if (L.is_adjustment()) {
+                bank.bytes(adjustment_block(L, doc.width(), doc.height()));
+                ++block_count; has_adjustments = true;
                 ++i;
                 continue;
             }
@@ -1264,6 +1465,7 @@ std::vector<uint8_t> save_psp_to_memory(const Document& doc) {
         }
     }
     if (has_vectors) contents |= 0x00000002u; // vector layers
+    if (has_adjustments) contents |= 0x00000004u; // adjustment layers
     if (has_groups) contents |= 0x00000008u;  // group layers
     if (has_masks) contents |= 0x00000010u;   // mask layers
     if (!doc.alpha_channels().empty()) contents |= 0x80000000u;  // alpha channels

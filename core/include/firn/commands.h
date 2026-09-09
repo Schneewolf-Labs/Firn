@@ -266,6 +266,33 @@ private:
     int prev_active_ = -1;
 };
 
+// Adds an adjustment layer above the active layer.
+class AddAdjustmentLayerCommand : public Command {
+public:
+    AddAdjustmentLayerCommand(std::string name, Adjustment adj) : name_(std::move(name)), adj_(std::move(adj)) {}
+    std::string name() const override { return "New Adjustment Layer"; }
+    void execute(Document& doc) override;
+    void undo(Document& doc) override;
+    size_t index() const { return index_; }
+private:
+    std::string name_;
+    Adjustment adj_;
+    size_t index_ = 0;
+    int prev_active_ = -1;
+};
+
+// Changes an adjustment layer's parameters (already applied live or not).
+class SetAdjustmentCommand : public Command {
+public:
+    SetAdjustmentCommand(size_t layer, Adjustment before, Adjustment after) : layer_(layer), before_(std::move(before)), after_(std::move(after)) {}
+    std::string name() const override { return std::string(Adjustment::kind_name(after_.kind)) + " Layer"; }
+    void execute(Document& doc) override;
+    void undo(Document& doc) override;
+private:
+    size_t layer_;
+    Adjustment before_, after_;
+};
+
 // Turns a vector layer into a raster layer holding its rendering.
 class ConvertToRasterCommand : public Command {
 public:

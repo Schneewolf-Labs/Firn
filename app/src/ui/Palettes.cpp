@@ -143,13 +143,16 @@ static void draw_layers(App& app) {
             ImGui::SameLine();
         }
         char label[192];
-        std::snprintf(label, sizeof(label), "%s%s%s%s", L.type == LayerType::Group ? "[Group] " : L.is_vector() ? "[Vector] " : "", L.name.c_str(),
+        std::snprintf(label, sizeof(label), "%s%s%s%s", L.type == LayerType::Group ? "[Group] " : L.is_vector() ? "[Vector] " : L.is_adjustment() ? "[Adjust] " : "", L.name.c_str(),
                       L.blend != BlendMode::Normal ? "  [" : "", L.blend != BlendMode::Normal ? blend_mode_name(L.blend) : "");
         if (L.blend != BlendMode::Normal) std::strncat(label, "]", sizeof(label) - std::strlen(label) - 1);
         // Size the selectable to its label so the controls after it stay clickable.
         if (ImGui::Selectable(label, active == i, ImGuiSelectableFlags_AllowDoubleClick, ImVec2(ImGui::CalcTextSize(label).x + 8.0f, 0))) {
             doc.set_active_layer(i);
-            if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) app.open_layer_properties();
+            if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
+                if (L.is_adjustment()) app.open_adjustment_dialog(i, false);
+                else app.open_layer_properties();
+            }
         }
         if (L.has_mask()) {
             ImGui::SameLine();

@@ -146,7 +146,7 @@ std::string Driver::state_text(App& app) const {
         o << " active=" << a;
         if (a >= 0) {
             const firn::Layer& L = app.doc->layer(a);
-            o << " active_name=\"" << L.name << "\" active_type=" << (L.is_vector() ? "vector" : L.type == firn::LayerType::Group ? "group" : "raster");
+            o << " active_name=\"" << L.name << "\" active_type=" << (L.is_vector() ? "vector" : L.is_adjustment() ? "adjustment" : L.type == firn::LayerType::Group ? "group" : "raster");
             if (L.is_vector()) {
                 o << " objects=" << L.objects.size() << " selected=" << app.selected_objects().size();
             }

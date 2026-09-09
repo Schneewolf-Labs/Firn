@@ -242,6 +242,12 @@ void App::draw_menu() {
         const bool is_bg = has_layer && doc->layer(layer).background;
         if (ImGui::MenuItem("New Raster Layer", nullptr, false, has_doc)) layer_new();
         if (ImGui::MenuItem("New Vector Layer", nullptr, false, has_doc)) layer_new_vector();
+        if (ImGui::BeginMenu("New Adjustment Layer", has_doc)) {
+            using K = Adjustment::Kind;
+            static const K kinds[] = {K::BrightnessContrast, K::ChannelMixer, K::ColorBalance, K::Curves, K::HSL, K::Invert, K::Levels, K::Posterize, K::Threshold};
+            for (K k : kinds) if (ImGui::MenuItem(Adjustment::kind_name(k))) layer_new_adjustment(k);
+            ImGui::EndMenu();
+        }
         if (ImGui::MenuItem("New Layer Group", nullptr, false, has_any_layer)) layer_new_group();
         if (ImGui::BeginMenu("New Mask Layer", has_any_layer)) {
             if (ImGui::MenuItem("Show All")) layer_set_mask("New Mask Layer", Mask(doc->width(), doc->height(), 255));
@@ -253,7 +259,10 @@ void App::draw_menu() {
         if (ImGui::MenuItem("Duplicate", nullptr, false, has_any_layer)) layer_duplicate();
         if (ImGui::MenuItem("Delete", nullptr, false, has_any_layer && n > 1)) layer_delete();
         if (ImGui::MenuItem("Ungroup Layers", nullptr, false, is_group)) layer_ungroup();
-        if (ImGui::MenuItem("Properties...", nullptr, false, has_any_layer)) open_layer_properties();
+        if (ImGui::MenuItem("Properties...", nullptr, false, has_any_layer)) {
+            if (doc->layer(layer).is_adjustment()) open_adjustment_dialog(layer, false);
+            else open_layer_properties();
+        }
         ImGui::Separator();
         if (ImGui::BeginMenu("Mask", has_any_layer && doc->layer(layer).has_mask())) {
             bool on = doc->layer(layer).mask_enabled;
@@ -348,6 +357,7 @@ void App::draw_dialogs() {
     draw_adjust_dialogs();
     draw_text_dialog();
     draw_vector_dialogs();
+    draw_adjustment_layer_dialog();
 
     if (file_dialog.draw()) {
         if (file_op == PendingFileOp::Open) open_document(file_dialog.path());

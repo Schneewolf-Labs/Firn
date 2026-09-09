@@ -178,6 +178,28 @@ void blend_layer(Image& dst, const Image& src, const Layer& L, int w, const rast
     for (auto& t : pool) t.join();
 }
 
+// An adjustment layer transforms what is below it; opacity and its mask
+// blend the result back over the untouched pixels. Alpha is kept.
+void apply_adjustment_layer(Image& out, const Layer& L, int w, const raster::Rect& r) {
+    const int rw = r.x1 - r.x0, rh = r.y1 - r.y0;
+    if (rw <= 0 || rh <= 0) return;
+    Image region(rw, rh);
+    for (int y = 0; y < rh; ++y)
+        std::memcpy(region.data() + static_cast<size_t>(y) * rw * 4, out.data() + (static_cast<size_t>(y + r.y0) * w + r.x0) * 4, static_cast<size_t>(rw) * 4);
+    L.adjustment.apply(region);
+    const bool masked = L.has_mask() && L.mask_enabled;
+    for (int y = 0; y < rh; ++y) {
+        uint8_t* d = out.data() + (static_cast<size_t>(y + r.y0) * w + r.x0) * 4;
+        const uint8_t* s = region.data() + static_cast<size_t>(y) * rw * 4;
+        for (int x = 0; x < rw; ++x, d += 4, s += 4) {
+            float f = L.opacity;
+            if (masked) f *= L.mask.at(x + r.x0, y + r.y0) / 255.0f;
+            if (f <= 0.0f || d[3] == 0) continue;
+            for (int c = 0; c < 3; ++c) d[c] = static_cast<uint8_t>(d[c] + (s[c] - d[c]) * f + 0.5f);
+        }
+    }
+}
+
 }  // namespace
 
 void Document::composite_into(Image& dst, const raster::Rect& rect) const {
@@ -202,6 +224,11 @@ void Document::composite_region(Image& out, size_t from, size_t to, const raster
                 blend_layer(out, inner, L, width_, r);
             }
             li = end;
+            continue;
+        }
+        if (L.type == LayerType::Adjustment) {
+            if (L.visible && L.opacity > 0.0f) apply_adjustment_layer(out, L, width_, r);
+            ++li;
             continue;
         }
         if (L.visible && L.opacity > 0.0f && !L.pixels.empty()) blend_layer(out, L.pixels, L, width_, r);

@@ -6,11 +6,12 @@
 #include "firn/blend.h"
 #include "firn/image.h"
 #include "firn/mask.h"
+#include "firn/adjustment.h"
 #include "firn/vector.h"
 
 namespace firn {
 
-enum class LayerType : uint8_t { Raster, Group, Vector };
+enum class LayerType : uint8_t { Raster, Group, Vector, Adjustment };
 
 struct Layer {
     std::string name;
@@ -32,8 +33,10 @@ struct Layer {
     bool mask_enabled = true;
     Image pixels;           // empty for groups; the rendered cache for vector layers
     std::vector<vec::Object> objects;  // vector layers only
+    Adjustment adjustment;             // adjustment layers only; its mask limits where it applies
     bool is_raster() const { return type == LayerType::Raster; }
     bool is_vector() const { return type == LayerType::Vector; }
+    bool is_adjustment() const { return type == LayerType::Adjustment; }
     bool has_mask() const { return !mask.empty(); }
 };
 

@@ -277,6 +277,16 @@ struct App {
     int text_edit_object = -1;           // object the text dialog is editing, or -1 for a new one
     void draw_vector_dialogs();
     void layer_new_vector();
+    // Adjustment layers: the dialog edits the layer live; Cancel on a new
+    // layer undoes its creation.
+    void layer_new_adjustment(firn::Adjustment::Kind kind);
+    void open_adjustment_dialog(int layer, bool created);
+    void draw_adjustment_layer_dialog();
+    bool show_adjust_layer_dialog = false;
+    int adj_layer_index = -1;
+    bool adj_layer_created = false;
+    firn::Adjustment adj_before;
+    std::string adj_name_before;
     void layer_convert_to_raster();
     std::vector<firn::vec::Path> text_paths(const firn::vec::TextInfo& t, std::vector<int>* glyph_ids = nullptr) const;  // outlines, block top-left at (0, 0)
     void place_text_object(firn::vec::Object& o, const firn::vec::TextInfo& t, float x, float y) const;   // rebuilds o's paths at (x, y) with rotation

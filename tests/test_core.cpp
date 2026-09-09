@@ -1460,7 +1460,85 @@ static void test_vector_queries() {
     }
 }
 
+static void test_adjustment_layers() {
+    Document doc(8, 8);
+    Layer& base = doc.add_layer("Background");
+    base.pixels = Image(8, 8, {100, 100, 100, 255});
+    doc.set_active_layer(0);
+    CommandStack stack;
+    Adjustment a;
+    a.kind = Adjustment::Kind::Invert;
+    stack.run(doc, std::make_unique<AddAdjustmentLayerCommand>("Invert", a));
+    CHECK(doc.layer_count() == 2 && doc.layer(1).is_adjustment());
+    Image c = doc.composite();
+    CHECK(c.get(3, 3).r == 155 && c.get(3, 3).a == 255);
+    // Opacity and mask scale the effect.
+    doc.layer(1).opacity = 0.5f; doc.touch();
+    c = doc.composite();
+    CHECK(std::abs(static_cast<int>(c.get(3, 3).r) - 128) <= 1);
+    doc.layer(1).opacity = 1.0f;
+    doc.layer(1).mask = Mask(8, 8, 0);
+    doc.layer(1).mask.at(0, 0) = 255;
+    doc.touch();
+    c = doc.composite();
+    CHECK(c.get(0, 0).r == 155 && c.get(3, 3).r == 100);
+    doc.layer(1).mask = Mask();
+    // Editing through the command, undo restores.
+    Adjustment b = a;
+    b.kind = Adjustment::Kind::BrightnessContrast;
+    b.brightness = 50;
+    stack.run(doc, std::make_unique<SetAdjustmentCommand>(1, a, b));
+    CHECK(doc.layer(1).adjustment.kind == Adjustment::Kind::BrightnessContrast);
+    CHECK(doc.composite().get(3, 3).r > 100);
+    stack.undo(doc);
+    CHECK(doc.composite().get(3, 3).r == 155);
+    stack.undo(doc);
+    CHECK(doc.layer_count() == 1);
+    // Every kind round-trips through the native format with its parameters.
+    using K = Adjustment::Kind;
+    for (K k : {K::Levels, K::Curves, K::BrightnessContrast, K::ColorBalance, K::HSL, K::ChannelMixer, K::Invert, K::Threshold, K::Posterize}) {
+        Document d(8, 8);
+        d.add_layer("Background").pixels = Image(8, 8, {100, 100, 100, 255});
+        Layer& L = d.add_layer(Adjustment::kind_name(k));
+        L.type = LayerType::Adjustment;
+        Adjustment& x = L.adjustment;
+        x.kind = k;
+        x.brightness = -20; x.contrast = 30;
+        x.levels[0].gamma = 1.5f; x.levels[0].in_low = 10; x.levels[2].out_high = 200;
+        x.curves[1] = {{0, 0}, {128, 200}, {255, 255}};
+        x.color_balance.midtones[0] = 40; x.color_balance.shadows[2] = -15; x.color_balance.preserve_luminosity = false;
+        x.hue = 30; x.saturation = -10; x.lightness = 5; x.hsl_ranges[2][3] = 77;
+        x.mixer.mix[0][1] = 50; x.mixer.constant[2] = -10; x.mixer.monochrome = true;
+        x.threshold = 90; x.posterize = 4;
+        L.mask = Mask(8, 8, 128);
+        const std::string tmp = "/tmp/firn_test_adj.pspimage";
+        CHECK(io::save_psp(d, tmp, nullptr));
+        std::string err; std::vector<std::string> warnings;
+        auto back = io::load_psp(tmp, &err, &warnings);
+        std::remove(tmp.c_str());
+        CHECK(back && back->layer_count() == 2 && back->layer(1).is_adjustment());
+        const Adjustment& y = back->layer(1).adjustment;
+        CHECK(y.kind == k);
+        CHECK(back->layer(1).has_mask() && back->layer(1).mask.at(2, 2) == 128);
+        switch (k) {
+            case K::BrightnessContrast: CHECK(y.brightness == -20 && y.contrast == 30); break;
+            case K::Levels: CHECK(y.levels[0].gamma == 1.5f && y.levels[0].in_low == 10 && y.levels[2].out_high == 200); break;
+            case K::Curves: CHECK(y.curves[1].size() == 3 && y.curves[1][1].second == 200); break;
+            case K::ColorBalance: CHECK(y.color_balance.midtones[0] == 40 && y.color_balance.shadows[2] == -15 && !y.color_balance.preserve_luminosity); break;
+            case K::HSL: CHECK(y.hue == 30 && y.saturation == -10 && y.lightness == 5 && y.hsl_ranges[2][3] == 77); break;
+            case K::ChannelMixer: CHECK(y.mixer.mix[0][1] == 50 && y.mixer.constant[2] == -10 && y.mixer.monochrome); break;
+            case K::Threshold: CHECK(y.threshold == 90); break;
+            case K::Posterize: CHECK(y.posterize == 4); break;
+            default: break;
+        }
+        // The rendering survives too.
+        Image before = d.composite(), after = back->composite();
+        CHECK(before.get(3, 3).r == after.get(3, 3).r);
+    }
+}
+
 int main() {
+    test_adjustment_layers();
     test_vector_default_bytes();
     test_vector_queries();
     test_vector_roundtrip();

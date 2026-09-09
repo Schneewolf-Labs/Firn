@@ -9,6 +9,7 @@ add_library(firncore STATIC
   src/effects.cpp
   src/text.cpp
   src/vector.cpp
+  src/adjustment.cpp
   src/io.cpp
   src/io_psp.cpp
 )

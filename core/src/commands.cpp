@@ -218,6 +218,38 @@ void VectorEditCommand::undo(Document& doc) {
     doc.rasterize_vector_layer(layer_);
 }
 
+void AddAdjustmentLayerCommand::execute(Document& doc) {
+    prev_active_ = doc.active_layer();
+    int depth = 0;
+    size_t at = doc.layer_count();
+    if (prev_active_ >= 0) {
+        const Layer& a = doc.layer(prev_active_);
+        at = a.type == LayerType::Group ? doc.group_end(prev_active_) : prev_active_ + 1;
+        depth = a.depth;
+    }
+    Layer& L = doc.add_layer(name_, static_cast<int>(at));
+    L.type = LayerType::Adjustment;
+    L.depth = depth;
+    L.adjustment = adj_;
+    index_ = at;
+    doc.set_active_layer(static_cast<int>(at));
+    doc.touch();
+}
+
+void AddAdjustmentLayerCommand::undo(Document& doc) {
+    doc.remove_layer(index_);
+    doc.set_active_layer(prev_active_);
+    doc.touch();
+}
+
+void SetAdjustmentCommand::execute(Document& doc) {
+    if (layer_ < doc.layer_count() && doc.layer(layer_).is_adjustment()) { doc.layer(layer_).adjustment = after_; doc.touch(); }
+}
+
+void SetAdjustmentCommand::undo(Document& doc) {
+    if (layer_ < doc.layer_count() && doc.layer(layer_).is_adjustment()) { doc.layer(layer_).adjustment = before_; doc.touch(); }
+}
+
 void AddVectorLayerCommand::execute(Document& doc) {
     prev_active_ = doc.active_layer();
     int depth = 0;

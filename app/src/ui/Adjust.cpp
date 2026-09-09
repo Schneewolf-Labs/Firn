@@ -126,7 +126,10 @@ void draw_histogram(const std::array<int, 256>& h, ImVec2 size) {
     ImGui::Dummy(size);
 }
 
+}  // namespace
+
 // Editable curve: click to add a point, drag to move, right-click to remove.
+// Shared with the adjustment layer dialog (edits app.curve_points).
 bool curve_editor(App& app, const ImVec2 size) {
     bool changed = false;
     const ImVec2 p0 = ImGui::GetCursorScreenPos();
@@ -186,6 +189,8 @@ bool curve_editor(App& app, const ImVec2 size) {
         dl->AddCircleFilled(to_screen(pts[i].first, pts[i].second), 4.0f, static_cast<int>(i) == app.curve_drag ? IM_COL32(255, 200, 0, 255) : IM_COL32(120, 180, 255, 255));
     return changed;
 }
+
+namespace {
 
 }  // namespace
 
