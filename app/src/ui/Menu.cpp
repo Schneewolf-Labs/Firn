@@ -55,8 +55,10 @@ void App::draw_menu() {
         ImGui::EndMenu();
     }
     if (ImGui::BeginMenu("View")) {
-        if (ImGui::MenuItem("Fit to Window", nullptr, false, has_doc)) fit_requested = true;
-        if (ImGui::MenuItem("Actual Size", nullptr, false, has_doc)) { zoom = 1.0f; pan_x = pan_y = 0.0f; }
+        if (ImGui::MenuItem("Zoom In", "+", false, has_doc)) zoom_about(canvas_center, 1.25f);
+        if (ImGui::MenuItem("Zoom Out", "-", false, has_doc)) zoom_about(canvas_center, 0.8f);
+        if (ImGui::MenuItem("Fit to Window", "Ctrl+0", false, has_doc)) fit_requested = true;
+        if (ImGui::MenuItem("Actual Size", "Ctrl+Alt+0", false, has_doc)) { zoom = 1.0f; pan_x = pan_y = 0.0f; }
         ImGui::Separator();
         ImGui::MenuItem("Rulers", nullptr, &show_rulers);
         ImGui::MenuItem("Grid", nullptr, &show_grid);
@@ -88,6 +90,8 @@ void App::draw_menu() {
         if (ImGui::MenuItem("Canvas Size...", nullptr, false, has_doc)) open_canvas_dialog();
         ImGui::Separator();
         if (ImGui::MenuItem("Grayscale", nullptr, false, has_layer)) run(std::make_unique<GrayscaleCommand>(layer));
+        ImGui::Separator();
+        if (ImGui::MenuItem("Image Information...", "Shift+I", false, has_doc)) show_info_dialog = true;
         ImGui::EndMenu();
     }
     if (ImGui::BeginMenu("Adjust")) {
@@ -180,6 +184,14 @@ void App::draw_menu() {
             if (ImGui::MenuItem("Enhance")) run(std::make_unique<AdjustCommand>(layer, "Enhance Edges", effects::enhance_edges));
             if (ImGui::MenuItem("Enhance More")) run(std::make_unique<AdjustCommand>(layer, "Enhance Edges More", effects::enhance_edges_more));
             if (ImGui::MenuItem("Find All")) run(std::make_unique<AdjustCommand>(layer, "Find Edges", effects::find_edges));
+            ImGui::EndMenu();
+        }
+        if (ImGui::BeginMenu("Illumination Effects", has_layer)) {
+            if (ImGui::MenuItem("Sunburst...")) open_adjust = Adj::Sunburst;
+            ImGui::EndMenu();
+        }
+        if (ImGui::BeginMenu("Reflection Effects", has_layer)) {
+            if (ImGui::MenuItem("Kaleidoscope...")) open_adjust = Adj::Kaleidoscope;
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("Texture Effects", has_layer)) {
@@ -278,6 +290,27 @@ void App::draw_dialogs() {
 
     if (show_new_dialog) { ImGui::OpenPopup("New Image"); show_new_dialog = false; }
     if (show_jpeg_dialog) { ImGui::OpenPopup("JPEG Options"); show_jpeg_dialog = false; }
+    if (show_info_dialog) { ImGui::OpenPopup("Image Information"); show_info_dialog = false; }
+
+    if (ImGui::BeginPopupModal("Image Information", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        if (doc) {
+            size_t rasters = 0, groups = 0, masks = 0;
+            for (size_t i = 0; i < doc->layer_count(); ++i) {
+                rasters += doc->layer(i).is_raster();
+                groups += doc->layer(i).type == LayerType::Group;
+                masks += doc->layer(i).has_mask();
+            }
+            const double mb = static_cast<double>(doc->width()) * doc->height() * 4 * rasters / (1024.0 * 1024.0);
+            ImGui::Text("File:        %s", doc_path.empty() ? "(unsaved)" : doc_path.c_str());
+            ImGui::Text("Dimensions:  %d x %d pixels", doc->width(), doc->height());
+            ImGui::Text("Layers:      %zu raster, %zu group(s), %zu mask(s)", rasters, groups, masks);
+            ImGui::Text("Memory:      %.1f MB of layer pixels", mb);
+            ImGui::Text("Selection:   %s", doc->has_selection() ? "yes" : "none");
+            ImGui::Text("History:     %zu step(s), %s", history.size(), modified() ? "modified" : "saved");
+        }
+        if (ImGui::Button("OK") || ImGui::IsKeyPressed(ImGuiKey_Escape, false) || ImGui::IsKeyPressed(ImGuiKey_Enter, false)) ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
+    }
 
     if (ImGui::BeginPopupModal("JPEG Options", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
         ImGui::SliderInt("Quality", &jpeg_quality, 1, 100);

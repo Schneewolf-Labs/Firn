@@ -50,6 +50,11 @@ void ripple(Image& img, float amplitude, float wavelength);
 void spherize(Image& img, int strength);
 void lens_distortion(Image& img, int strength);
 
+// Kaleidoscope: mirrors a wedge of `petals` around the center, rotated by
+// `angle` degrees. Sunburst: a light source at (fx, fy) in 0..1 with rays.
+void kaleidoscope(Image& img, int petals, float angle_degrees, float radius_percent);
+void sunburst(Image& img, float fx, float fy, float brightness, int rays, float ray_brightness, Color color, uint32_t seed = 7);
+
 // Halftone: dots on a grid of `cell` px sized by luminance, ink over paper.
 void halftone(Image& img, int cell, float angle_degrees, Color ink, Color paper);
 // Chrome: grayscale run through a repeated brightness ramp (`bands`).

@@ -360,6 +360,60 @@ void lens_distortion(Image& img, int strength) {
     });
 }
 
+void kaleidoscope(Image& img, int petals, float angle_degrees, float radius_percent) {
+    petals = std::max(2, petals);
+    const float cx = img.width() * 0.5f, cy = img.height() * 0.5f;
+    const float wedge = 3.14159265f / petals;  // each petal is mirrored, so 2*petals wedges
+    const float rot = angle_degrees * 3.14159265f / 180.0f;
+    const float rmax = std::hypot(cx, cy) * std::clamp(radius_percent, 1.0f, 100.0f) / 100.0f;
+    remap(img, [&](float x, float y, float& sx, float& sy) {
+        const float dx = x - cx, dy = y - cy;
+        const float d = std::hypot(dx, dy);
+        float a = std::atan2(dy, dx) - rot;
+        a = std::fmod(a, 2.0f * wedge);
+        if (a < 0) a += 2.0f * wedge;
+        if (a > wedge) a = 2.0f * wedge - a;  // mirror the second half of each pair
+        const float dd = std::fmod(d, rmax);   // repeat outward beyond the radius
+        sx = cx + dd * std::cos(a + rot);
+        sy = cy + dd * std::sin(a + rot);
+    });
+}
+
+void sunburst(Image& img, float fx, float fy, float brightness, int rays, float ray_brightness, Color color, uint32_t seed) {
+    const int w = img.width(), h = img.height();
+    const float sx = fx * w, sy = fy * h;
+    const float reach = std::hypot(static_cast<float>(w), static_cast<float>(h)) * 0.5f;
+    // Ray angles and strengths from a seeded generator so results repeat.
+    uint32_t state = seed ? seed : 1;
+    auto rnd = [&]() { state ^= state << 13; state ^= state >> 17; state ^= state << 5; return (state & 0xFFFFFF) / 16777216.0f; };
+    std::vector<float> ray_angle, ray_strength, ray_width;
+    for (int i = 0; i < std::max(0, rays); ++i) { ray_angle.push_back(rnd() * 6.2831853f); ray_strength.push_back(0.3f + 0.7f * rnd()); ray_width.push_back(0.02f + 0.06f * rnd()); }
+    uint8_t* p = img.data();
+    for (int y = 0; y < h; ++y)
+        for (int x = 0; x < w; ++x) {
+            const float dx = (x + 0.5f) - sx, dy = (y + 0.5f) - sy;
+            const float d = std::hypot(dx, dy);
+            float glow = brightness * std::max(0.0f, 1.0f - d / reach);
+            glow *= glow;
+            if (!ray_angle.empty()) {
+                const float a = std::atan2(dy, dx);
+                float best = 0.0f;
+                for (size_t i = 0; i < ray_angle.size(); ++i) {
+                    float da = std::abs(a - ray_angle[i]);
+                    da = std::min(da, 6.2831853f - da);
+                    best = std::max(best, ray_strength[i] * std::max(0.0f, 1.0f - da / ray_width[i]));
+                }
+                glow += ray_brightness * best * std::max(0.0f, 1.0f - d / (reach * 1.5f));
+            }
+            if (glow <= 0.0f) continue;
+            uint8_t* px = p + (static_cast<size_t>(y) * w + x) * 4;
+            const float k = std::min(glow, 1.0f);
+            px[0] = clamp8(px[0] + (color.r - px[0]) * k);
+            px[1] = clamp8(px[1] + (color.g - px[1]) * k);
+            px[2] = clamp8(px[2] + (color.b - px[2]) * k);
+        }
+}
+
 void halftone(Image& img, int cell, float angle_degrees, Color ink, Color paper) {
     cell = std::max(2, cell);
     const int w = img.width(), h = img.height();

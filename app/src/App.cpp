@@ -817,8 +817,12 @@ void App::handle_shortcuts() {
     if (ctrl && ImGui::IsKeyPressed(ImGuiKey_V, false)) paste_as_new_image();
     if (ctrl && ImGui::IsKeyPressed(ImGuiKey_L, false)) paste_as_new_layer();
     if (ctrl && io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_R, false)) crop_to_selection();
+    if (ctrl && ImGui::IsKeyPressed(ImGuiKey_0, false)) { if (io.KeyAlt) { zoom = 1.0f; pan_x = pan_y = 0.0f; } else fit_requested = true; }
     if (ctrl) return;
     if (ImGui::IsKeyPressed(ImGuiKey_Delete, false)) clear_selection();
+    if (ImGui::IsKeyPressed(ImGuiKey_Equal, false) || ImGui::IsKeyPressed(ImGuiKey_KeypadAdd, false)) zoom_about(canvas_center, 1.25f);
+    if (ImGui::IsKeyPressed(ImGuiKey_Minus, false) || ImGui::IsKeyPressed(ImGuiKey_KeypadSubtract, false)) zoom_about(canvas_center, 0.8f);
+    if (io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_I, false)) show_info_dialog = true;
 
     // Single-key tool shortcuts, as in the original (A pan, Z zoom, E dropper, B brush, X eraser, F fill).
     for (size_t i = 0; i < tools.size(); ++i) {

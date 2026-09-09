@@ -195,7 +195,8 @@ void App::draw_adjust_dialogs() {
                                     "Posterize", "Solarize", "Unsharp Mask", "Median", "Motion Blur", "Mosaic",
                                     "Add Noise", "Drop Shadow", "Color Balance", "Sepia Toning", "Hue Map", "Wave",
                                     "Pinch", "Twirl", "Buttonize", "Inner Bevel", "Cutout", "Ripple", "Spherize",
-                                    "Lens Distortion", "Halftone", "Chrome", "Outer Bevel", "Fade Correction"};
+                                    "Lens Distortion", "Halftone", "Chrome", "Outer Bevel", "Fade Correction",
+                                    "Kaleidoscope", "Sunburst"};
     if (open_adjust != Adj::None) {
         if (doc && active_layer() >= 0) ImGui::OpenPopup(kTitles[static_cast<int>(open_adjust)]);
         open_adjust = Adj::None;
@@ -511,4 +512,28 @@ void App::draw_adjust_dialogs() {
     adjust_modal(*this, "Fade Correction",
         [&] { return ImGui::SliderInt("Amount of correction", &fade_amount, 1, 100); },
         [&](Image& img) { adjust::fade_correction(img, fade_amount); });
+
+    adjust_modal(*this, "Kaleidoscope",
+        [&] {
+            bool c = ImGui::SliderInt("Petals", &kal_petals, 2, 32);
+            c |= ImGui::SliderFloat("Rotation", &kal_angle, 0.0f, 359.0f, "%.0f");
+            c |= ImGui::SliderFloat("Radius", &kal_radius, 1.0f, 100.0f, "%.0f%%");
+            return c;
+        },
+        [&](Image& img) { effects::kaleidoscope(img, kal_petals, kal_angle, kal_radius); });
+
+    adjust_modal(*this, "Sunburst",
+        [&] {
+            bool c = ImGui::SliderFloat("Horizontal position", &sun_x, 0.0f, 1.0f, "%.2f");
+            c |= ImGui::SliderFloat("Vertical position", &sun_y, 0.0f, 1.0f, "%.2f");
+            c |= ImGui::SliderFloat("Brightness", &sun_brightness, 0.0f, 2.0f, "%.2f");
+            c |= ImGui::SliderInt("Rays", &sun_rays, 0, 64);
+            c |= ImGui::SliderFloat("Ray brightness", &sun_ray_brightness, 0.0f, 2.0f, "%.2f");
+            c |= ImGui::ColorEdit3("Color", sun_color, ImGuiColorEditFlags_NoInputs);
+            return c;
+        },
+        [&](Image& img) {
+            auto c8 = [](float f) { return static_cast<uint8_t>(f * 255.0f + 0.5f); };
+            effects::sunburst(img, sun_x, sun_y, sun_brightness, sun_rays, sun_ray_brightness, {c8(sun_color[0]), c8(sun_color[1]), c8(sun_color[2]), 255});
+        });
 }

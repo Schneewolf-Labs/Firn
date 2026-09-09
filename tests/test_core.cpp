@@ -1171,7 +1171,25 @@ static void test_brush_tip() {
     CHECK(out.get(20, 5).r == 0 && out.get(5, 20).r == 0);        // outside the 20 px tip
 }
 
+static void test_kaleidoscope_sunburst() {
+    Image g(41, 41);
+    for (int y = 0; y < 41; ++y) for (int x = 0; x < 41; ++x) g.set(x, y, {static_cast<uint8_t>(x * 6), static_cast<uint8_t>(y * 6), 0, 255});
+    Image k = g;
+    effects::kaleidoscope(k, 4, 0.0f, 100.0f);
+    // Mirror symmetry across the horizontal axis through the center.
+    CHECK(std::abs(k.get(30, 15).r - k.get(30, 25).r) <= 2 && std::abs(k.get(30, 15).g - k.get(30, 25).g) <= 2);
+    Image s(41, 41, {0, 0, 0, 255});
+    effects::sunburst(s, 0.5f, 0.5f, 1.0f, 0, 0.0f, {255, 255, 255, 255});
+    CHECK(s.get(20, 20).r > 200 && s.get(0, 0).r < 30);  // bright at the source, dark in the corner
+    Image r(41, 41, {0, 0, 0, 255});
+    effects::sunburst(r, 0.5f, 0.5f, 0.0f, 8, 1.0f, {255, 255, 255, 255});
+    int lit = 0;
+    for (int x = 0; x < 41; ++x) lit += r.get(x, 20).r > 0 || r.get(20, x).r > 0;
+    CHECK(lit > 0);
+}
+
 int main() {
+    test_kaleidoscope_sunburst();
     test_brush_tip();
     test_tube_info();
     test_photo_fixes();

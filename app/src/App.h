@@ -116,7 +116,7 @@ struct App {
     enum class Adj { None, BrightnessContrast, Curves, Gamma, Levels, Threshold, ChannelMixer, Colorize, HSL,
                      Average, Gaussian, Posterize, Solarize, UnsharpMask, Median, MotionBlur, Mosaic, AddNoise, DropShadow,
                      ColorBalance, Sepia, HueMap, Wave, Pinch, Twirl, Buttonize, InnerBevel, Cutout,
-                     Ripple, Spherize, Lens, Halftone, Chrome, OuterBevel, FadeCorrection };
+                     Ripple, Spherize, Lens, Halftone, Chrome, OuterBevel, FadeCorrection, Kaleidoscope, Sunburst };
     Adj open_adjust = Adj::None;
     struct Preview {
         bool active = false;
@@ -142,6 +142,9 @@ struct App {
     float gamma_rgb[3] = {1.0f, 1.0f, 1.0f}; bool gamma_link = true;
     int fade_amount = 45;
     float redeye_strength = 1.0f;
+    int kal_petals = 6; float kal_angle = 0, kal_radius = 50;
+    float sun_x = 0.5f, sun_y = 0.5f, sun_brightness = 0.8f, sun_ray_brightness = 0.6f; int sun_rays = 12; float sun_color[3] = {1, 1, 0.9f};
+    bool show_info_dialog = false;
     int threshold_value = 128, posterize_levels = 6, solarize_threshold = 128;
     firn::adjust::ChannelMix mixer;
     int mixer_row = 0;
