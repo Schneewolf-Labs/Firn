@@ -20,7 +20,7 @@
 static const char* kAppTitle = "Firn";
 
 // Default workspace, applied only when no imgui.ini layout exists:
-//   Tools strip | Tool Options across the top, Image centre | Materials/Overview
+//   Tools strip | Tool Options across the top, Image center | Materials/Overview
 //   over Layers/History on the right.
 static void build_default_layout(ImGuiID dockspace_id) {
     ImGuiDockNode* node = ImGui::DockBuilderGetNode(dockspace_id);
@@ -31,16 +31,16 @@ static void build_default_layout(ImGuiID dockspace_id) {
     ImGui::DockBuilderAddNode(dockspace_id, ImGuiDockNodeFlags_DockSpace);
     ImGui::DockBuilderSetNodeSize(dockspace_id, vp->WorkSize);
 
-    ImGuiID centre = dockspace_id;
-    ImGuiID left = ImGui::DockBuilderSplitNode(centre, ImGuiDir_Left, 0.12f, nullptr, &centre);
-    ImGuiID right = ImGui::DockBuilderSplitNode(centre, ImGuiDir_Right, 0.22f, nullptr, &centre);
-    ImGuiID top = ImGui::DockBuilderSplitNode(centre, ImGuiDir_Up, 0.10f, nullptr, &centre);
+    ImGuiID center = dockspace_id;
+    ImGuiID left = ImGui::DockBuilderSplitNode(center, ImGuiDir_Left, 0.12f, nullptr, &center);
+    ImGuiID right = ImGui::DockBuilderSplitNode(center, ImGuiDir_Right, 0.22f, nullptr, &center);
+    ImGuiID top = ImGui::DockBuilderSplitNode(center, ImGuiDir_Up, 0.10f, nullptr, &center);
     ImGuiID right_bottom = 0;
     ImGuiID right_top = ImGui::DockBuilderSplitNode(right, ImGuiDir_Up, 0.45f, nullptr, &right_bottom);
 
     ImGui::DockBuilderDockWindow("Tools", left);
     ImGui::DockBuilderDockWindow("Tool Options", top);
-    ImGui::DockBuilderDockWindow("Image", centre);
+    ImGui::DockBuilderDockWindow("Image", center);
     ImGui::DockBuilderDockWindow("Materials", right_top);
     ImGui::DockBuilderDockWindow("Overview", right_top);
     ImGui::DockBuilderDockWindow("Layers", right_bottom);

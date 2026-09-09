@@ -71,9 +71,9 @@ struct App {
     GLuint canvas_tex = 0;
     uint64_t canvas_tex_revision = ~0ull;  // revision the texture was built from
     float zoom = 1.0f;
-    float pan_x = 0.0f, pan_y = 0.0f;  // canvas offset in screen px, relative to view centre
+    float pan_x = 0.0f, pan_y = 0.0f;  // canvas offset in screen px, relative to view center
     bool fit_requested = true;
-    ImVec2 canvas_centre;               // view centre in screen space, updated by draw_canvas
+    ImVec2 canvas_center;               // view center in screen space, updated by draw_canvas
 
     // Tools
     std::vector<std::unique_ptr<Tool>> tools;
@@ -177,7 +177,7 @@ struct App {
     int resize_by_percent = 0;
     int resize_filter = 2;              // raster::Filter
     // Canvas size dialog
-    int canvas_w = 0, canvas_h = 0, canvas_anchor = 4;  // 3x3 anchor, 4 = centre
+    int canvas_w = 0, canvas_h = 0, canvas_anchor = 4;  // 3x3 anchor, 4 = center
     // Rotate dialog
     float rotate_degrees = 15.0f;
     int rotate_cw = 1;
@@ -266,7 +266,7 @@ struct App {
     void layer_mask_from_selection();
     void layer_mask_from_image();
 
-    // Mask edit mode: tools paint a greyscale proxy of the active layer's
+    // Mask edit mode: tools paint a grayscale proxy of the active layer's
     // mask instead of its pixels; the mask follows live.
     bool mask_edit = false;
     firn::Image mask_proxy;
@@ -280,7 +280,7 @@ struct App {
     void open_layer_properties();
 
     // Geometry
-    firn::Color background_fill() const;  // bg material as an opaque colour
+    firn::Color background_fill() const;  // bg material as an opaque color
     void crop_to_selection();
     void crop_to(firn::raster::Rect r);
     void rotate(float degrees_cw);

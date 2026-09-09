@@ -44,7 +44,7 @@ private:
 
 // Base for commands that rewrite a single layer's pixels. Snapshots the
 // layer before executing and confines the result to the document's selection.
-// Simple and correct; optimise with dirty rects later.
+// Simple and correct; optimize with dirty rects later.
 class LayerPixelCommand : public Command {
 public:
     explicit LayerPixelCommand(size_t layer) : layer_(layer) {}
@@ -95,10 +95,10 @@ protected:
     std::function<void(Image&)> fn_;
 };
 
-class GreyscaleCommand : public LayerPixelCommand {
+class GrayscaleCommand : public LayerPixelCommand {
 public:
     using LayerPixelCommand::LayerPixelCommand;
-    std::string name() const override { return "Greyscale"; }
+    std::string name() const override { return "Grayscale"; }
 protected:
     void apply(Image& img) override;
 };
@@ -122,7 +122,7 @@ protected:
     float radius_;
 };
 
-// Edit > Clear: fills the selection (or the whole layer) with a colour.
+// Edit > Clear: fills the selection (or the whole layer) with a color.
 class ClearCommand : public LayerPixelCommand {
 public:
     ClearCommand(size_t layer, Color c) : LayerPixelCommand(layer), color_(c) {}
@@ -270,7 +270,7 @@ private:
     Document::State before_;
 };
 
-// Moves a layer (or group block) past its neighbouring sibling: +1 up
+// Moves a layer (or group block) past its neighboring sibling: +1 up
 // towards the top, -1 down; large steps go to the end of the siblings.
 class ArrangeLayerCommand : public Command {
 public:

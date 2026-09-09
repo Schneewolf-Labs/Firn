@@ -95,7 +95,7 @@ static void test_stroke_opacity_does_not_build_up() {
     raster::Stroke s(base, b, {0, 0, 0, 255}, raster::StrokeMode::Paint);
     Image out = base;
     s.add_point(8, 16);
-    s.add_point(24, 16);  // many overlapping stamps across the centre
+    s.add_point(24, 16);  // many overlapping stamps across the center
     s.add_point(8, 16);   // and back over the same pixels
     raster::Rect r = s.render(out);
     CHECK(!r.empty());
@@ -115,7 +115,7 @@ static void test_stroke_erase() {
     s.add_point(4, 4);
     s.render(out);
     Color c = out.get(4, 4);
-    CHECK(c.a == 0 && c.r == 10);  // colour kept, alpha cleared
+    CHECK(c.a == 0 && c.r == 10);  // color kept, alpha cleared
 }
 
 static void test_flood_fill() {
@@ -139,14 +139,14 @@ static void test_adjustments() {
     Image img(2, 1);
     img.set(0, 0, {255, 0, 0, 255});
     img.set(1, 0, {0, 0, 255, 255});
-    raster::greyscale(img);
+    raster::grayscale(img);
     CHECK(img.get(0, 0).r == 76 && img.get(0, 0).g == 76);
     CHECK(img.get(1, 0).r == 29);
 
     Image bc(1, 1, {100, 100, 100, 255});
     raster::brightness_contrast(bc, 50, 0);
     CHECK(bc.get(0, 0).r == 150);
-    raster::brightness_contrast(bc, 0, -100);  // full negative contrast collapses to grey
+    raster::brightness_contrast(bc, 0, -100);  // full negative contrast collapses to gray
     CHECK(bc.get(0, 0).r == 128);
 
     // Gaussian blur of a solid image is a no-op and preserves alpha.
@@ -154,7 +154,7 @@ static void test_adjustments() {
     raster::gaussian_blur(solid, 2.0f);
     Color c = solid.get(4, 4);
     CHECK(c.r == 40 && c.g == 80 && c.b == 120 && c.a == 255);
-    // A transparent neighbour must not bleed black into an opaque pixel's colour.
+    // A transparent neighbor must not bleed black into an opaque pixel's color.
     Image edge(8, 1, {0, 0, 0, 0});
     edge.set(3, 0, {200, 200, 200, 255});
     raster::gaussian_blur(edge, 1.0f);
@@ -311,10 +311,10 @@ static void test_blend_modes() {
     CHECK(px(BlendMode::HardLight, {0, 0, 0, 255}, {255, 255, 255, 255}).r == 255);
     CHECK(px(BlendMode::Dodge, {128, 128, 128, 255}, {255, 255, 255, 255}).r == 255);
     CHECK(px(BlendMode::Burn, {128, 128, 128, 255}, {0, 0, 0, 255}).r == 0);
-    // Luminance keeps the bottom's hue: a grey top over pure red gives a red-ish result.
+    // Luminance keeps the bottom's hue: a gray top over pure red gives a red-ish result.
     Color l = px(BlendMode::Luminance, {255, 0, 0, 255}, {128, 128, 128, 255});
     CHECK(l.r > l.g && l.g == l.b);
-    // Hue of a grey source is undefined (zero saturation) -> result is grey.
+    // Hue of a gray source is undefined (zero saturation) -> result is gray.
     Color h = px(BlendMode::Hue, {255, 0, 0, 255}, {128, 128, 128, 255});
     CHECK(h.r == h.g && h.g == h.b);
     // Color: takes the top's hue/sat with the bottom's luminance.
@@ -498,10 +498,10 @@ static void test_geometry() {
     CHECK(n.get(1, 0).r == 0 && n.get(2, 0).r == 255);
     Image b = raster::resample(two, 4, 1, raster::Filter::Bilinear);
     CHECK(b.get(1, 0).r > 0 && b.get(1, 0).r < 128 && b.get(2, 0).r > 128 && b.get(2, 0).r < 255);
-    // Shrinking averages: black+white -> grey.
+    // Shrinking averages: black+white -> gray.
     Image avg = raster::resample(two, 1, 1, raster::Filter::Bilinear);
     CHECK(avg.get(0, 0).r >= 127 && avg.get(0, 0).r <= 128);
-    // Transparent neighbours don't bleed colour.
+    // Transparent neighbors don't bleed color.
     Image edge(2, 1);
     edge.set(0, 0, {255, 0, 0, 255});
     edge.set(1, 0, {0, 0, 0, 0});
@@ -643,13 +643,13 @@ static void test_adjust_module() {
     }
     CHECK(adjust::rgb_to_hsl(255, 0, 0).h == 0.0f && adjust::rgb_to_hsl(0, 255, 0).h == 120.0f);
 
-    // Colorize keeps lightness; a grey becomes the requested hue.
+    // Colorize keeps lightness; a gray becomes the requested hue.
     Image img(1, 1, {100, 100, 100, 255});
     adjust::colorize(img, 0, 255);
     Color c = img.get(0, 0);
     CHECK(c.r > c.g && c.g == c.b && c.g == 0);  // pure red at lightness 100/255 -> r=200
     CHECK(c.r == 200);
-    // HSL: hue shift 120 turns red green; +100 lightness is white; -100 saturation is grey.
+    // HSL: hue shift 120 turns red green; +100 lightness is white; -100 saturation is gray.
     Image red(1, 1, {255, 0, 0, 255});
     adjust::hsl_adjust(red, 120, 0, 0);
     CHECK(red.get(0, 0).g == 255 && red.get(0, 0).r == 0);
@@ -724,7 +724,7 @@ static void test_effects() {
     Image e = step;
     effects::find_edges(e);
     CHECK(e.get(2, 1).r > 200 && e.get(0, 1).r == 0);
-    // Emboss is grey and mid-grey on flat areas.
+    // Emboss is gray and mid-gray on flat areas.
     Image em(5, 5, {200, 50, 50, 255});
     effects::emboss(em);
     CHECK(em.get(2, 2).r == 128 && em.get(2, 2).g == 128);
@@ -750,12 +750,12 @@ static void test_effects() {
     for (int x = 0; x < 4; ++x) { mo.set(x, 0, {0, 0, 0, 255}); mo.set(x, 1, {200, 200, 200, 255}); }
     effects::mosaic(mo, 2, 2);
     CHECK(mo.get(0, 0).r == 100 && mo.get(3, 1).r == 100);
-    // Motion blur along x smears a dot; transparent surroundings keep colour.
+    // Motion blur along x smears a dot; transparent surroundings keep color.
     Image mb(7, 1, {0, 0, 0, 0});
     mb.set(3, 0, {255, 0, 0, 255});
     effects::motion_blur(mb, 180.0f, 3);  // samples to the left: pixels 3,4,5 see it
     CHECK(mb.get(4, 0).a > 0 && mb.get(4, 0).r == 255 && mb.get(0, 0).a == 0);
-    // Noise changes pixels, monochrome keeps them grey, amplitude bounded.
+    // Noise changes pixels, monochrome keeps them gray, amplitude bounded.
     Image nz(16, 16, {128, 128, 128, 255});
     effects::add_noise(nz, 20, false, true, 7);
     int changed = 0;
@@ -789,7 +789,7 @@ static void test_stroke_modes() {
     st.add_point(1.5f, 0.5f);
     st.render(out);
     CHECK(out.get(1, 0).r == 255 && out.get(2, 0).r == 0);
-    // Filter: half-coverage blends halfway towards the filtered colour.
+    // Filter: half-coverage blends halfway towards the filtered color.
     Image fb(3, 1, {100, 100, 100, 255});
     raster::Brush wide; wide.size = 100; wide.hardness = 1; wide.opacity = 0.5f;
     raster::Stroke sf(fb, wide, {}, raster::StrokeMode::Filter);
@@ -841,17 +841,17 @@ static void test_text_and_polyline() {
     CHECK(opaque > 50 && partial > 20);
     Image hard = font->render("Hi", 32.0f, {0, 0, 0, 255}, false, text::Font::Align::Left);
     for (int y = 0; y < hard.height(); ++y) for (int x = 0; x < hard.width(); ++x) CHECK(hard.get(x, y).a == 0 || hard.get(x, y).a == 255);
-    // Centre alignment shifts the short line right.
+    // Center alignment shifts the short line right.
     Image left = font->render("I\nMMMM", 24.0f, {0, 0, 0, 255}, true, text::Font::Align::Left);
-    Image centre = font->render("I\nMMMM", 24.0f, {0, 0, 0, 255}, true, text::Font::Align::Centre);
+    Image center = font->render("I\nMMMM", 24.0f, {0, 0, 0, 255}, true, text::Font::Align::Center);
     auto first_ink_x = [](const Image& im, int row) { for (int x = 0; x < im.width(); ++x) if (im.get(x, row).a > 128) return x; return -1; };
     const int row = 12;
-    CHECK(first_ink_x(centre, row) > first_ink_x(left, row));
+    CHECK(first_ink_x(center, row) > first_ink_x(left, row));
     CHECK(text::Font::load("/nonexistent.ttf") == nullptr);
 }
 
 static void test_adjust_round2() {
-    // Color balance: midtone red pushes a grey towards red; preserve keeps lightness.
+    // Color balance: midtone red pushes a gray towards red; preserve keeps lightness.
     Image g(1, 1, {128, 128, 128, 255});
     adjust::ColorBalance cb;
     cb.midtones[0] = 60;
@@ -899,14 +899,14 @@ static void test_effects_round2() {
     for (int y = 1; y < 8; ++y) for (int x = 1; x < 8; ++x) {
         CHECK(w.get(x, y).r == g.get(x, y).r && p.get(x, y).r == g.get(x, y).r && t.get(x, y).r == g.get(x, y).r);
     }
-    // Wave shifts rows; twirl moves an off-centre pixel around.
+    // Wave shifts rows; twirl moves an off-center pixel around.
     Image wv = g; effects::wave(wv, 2, 4, 0, 0);
     bool moved = false;
     for (int y = 0; y < 9; ++y) moved |= wv.get(4, y).r != g.get(4, y).r;
     CHECK(moved);
     Image tw = g; effects::twirl(tw, 90);
     CHECK(tw.get(4, 4).r == g.get(4, 4).r && tw.get(6, 4).r != g.get(6, 4).r);
-    // Pinch pulls edge colour towards the centre.
+    // Pinch pulls edge color towards the center.
     Image pi = g; effects::pinch(pi, 80);
     CHECK(pi.get(6, 4).r > g.get(6, 4).r);
     // Buttonize: top-left edge lighter, bottom-right darker (transparent edge).
@@ -917,13 +917,13 @@ static void test_effects_round2() {
     effects::buttonize(bs, 4, 1.0f, {200, 0, 0, 255}, false);
     CHECK(bs.get(0, 10).r > 100 && bs.get(10, 10).r == 100);
     // Inner bevel on an opaque square in a transparent layer: lit from the left
-    // brightens the left edge and darkens the right edge; centre untouched.
+    // brightens the left edge and darkens the right edge; center untouched.
     Image bv(30, 30, {0, 0, 0, 0});
     for (int y = 5; y < 25; ++y) for (int x = 5; x < 25; ++x) bv.set(x, y, {128, 128, 128, 255});
     effects::inner_bevel(bv, nullptr, 5, 180.0f, 1.0f, 1.0f);
     CHECK(bv.get(6, 15).r > 128 && bv.get(23, 15).r < 128 && bv.get(15, 15).r == 128);
     CHECK(bv.get(2, 2).a == 0);
-    // Cutout with a selection region: darkens near the top-left inside edge, not the centre.
+    // Cutout with a selection region: darkens near the top-left inside edge, not the center.
     Image co(30, 30, {200, 200, 200, 255});
     Mask sel = mask::rectangle(30, 30, 5, 5, 25, 25, false);
     effects::cutout(co, sel.data(), 3, 3, 1.0f, 0.0f, {0, 0, 0, 255});
@@ -941,7 +941,7 @@ static void test_more_shapes() {
     Mask hex = mask::regular_polygon(40, 40, 20, 20, 15, 15, 6, 0.0f, true);
     CHECK(hex.at(20, 20) == 255 && hex.at(20, 6) == 255 && hex.at(6, 20) == 0);
     Mask st = mask::star(40, 40, 20, 20, 18, 18, 5, 0.4f, 0.0f, false);
-    CHECK(st.at(20, 4) == 255 && st.at(20, 20) == 255);     // top point and centre
+    CHECK(st.at(20, 4) == 255 && st.at(20, 20) == 255);     // top point and center
     CHECK(st.at(4, 4) == 0 && st.at(20, 36) == 0);           // between points below
 }
 
@@ -1039,7 +1039,7 @@ static void test_effects_round3() {
     for (int x = 0; x < 21; ++x) moved |= rp.get(x, 10).r != g.get(x, 10).r;
     CHECK(moved);
     Image sp = g; effects::spherize(sp, 100);
-    CHECK(sp.get(10, 10).r == g.get(10, 10).r && sp.get(14, 10).r < g.get(14, 10).r);  // bulge magnifies the centre
+    CHECK(sp.get(10, 10).r == g.get(10, 10).r && sp.get(14, 10).r < g.get(14, 10).r);  // bulge magnifies the center
     Image le = g; effects::lens_distortion(le, 100);
     CHECK(le.get(10, 10).r == g.get(10, 10).r && le.get(18, 10).r >= g.get(18, 10).r);   // barrel pulls the edge inward
     // Halftone: white stays paper, black becomes solid ink.
@@ -1049,7 +1049,7 @@ static void test_effects_round3() {
     Image hb(16, 16, {0, 0, 0, 255});
     effects::halftone(hb, 4, 0, {0, 0, 0, 255}, {255, 255, 255, 255});
     CHECK(hb.get(8, 8).r == 0);
-    // Chrome is grey and periodic.
+    // Chrome is gray and periodic.
     Image ch(4, 1);
     for (int x = 0; x < 4; ++x) ch.set(x, 0, {static_cast<uint8_t>(x * 85), static_cast<uint8_t>(x * 85), static_cast<uint8_t>(x * 85), 255});
     effects::chrome(ch, 2, 1.0f);

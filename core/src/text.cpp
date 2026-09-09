@@ -163,7 +163,7 @@ Image Font::render(const std::string& utf8, float px, Color color, bool antialia
 
     for (size_t li = 0; li < lines.size(); ++li) {
         const float base_y = 1.0f + ascent * scale + li * line_h;
-        const float indent = align == Align::Left ? 0.0f : align == Align::Centre ? (block_w - widths[li]) * 0.5f : block_w - widths[li];
+        const float indent = align == Align::Left ? 0.0f : align == Align::Center ? (block_w - widths[li]) * 0.5f : block_w - widths[li];
         for (const Glyph& g : placed[li]) {
             const float gx = 1.0f + indent + g.x;
             const float sub_x = antialias ? gx - std::floor(gx) : 0.0f;
@@ -188,7 +188,7 @@ Image Font::render(const std::string& utf8, float px, Color color, bool antialia
             }
         }
     }
-    // Scale alpha by the colour's alpha.
+    // Scale alpha by the color's alpha.
     if (color.a != 255)
         for (size_t i = 3; i < out.size_bytes(); i += 4) out.data()[i] = static_cast<uint8_t>(out.data()[i] * color.a / 255);
     if (layout) { layout->width = W; layout->height = H; layout->baseline = static_cast<int>(1.0f + ascent * scale); }

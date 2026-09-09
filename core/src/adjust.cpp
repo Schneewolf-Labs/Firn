@@ -102,7 +102,7 @@ Lut threshold_lut(int value) {
     return lut;
 }
 
-void greyscale_then_threshold(Image& img, int value) {
+void grayscale_then_threshold(Image& img, int value) {
     uint8_t* p = img.data();
     for (size_t i = 0; i < img.size_bytes(); i += 4) {
         const uint8_t v = luma(p + i) < value ? 0 : 255;
@@ -241,7 +241,7 @@ void hue_map(Image& img, const HueMap& m) {
     for (size_t i = 0; i < img.size_bytes(); i += 4) {
         HSL c = rgb_to_hsl(p[i], p[i + 1], p[i + 2]);
         if (c.s > 0.0f) {
-            // Interpolate the shift between the two nearest band centres (0, 36, 72, ...).
+            // Interpolate the shift between the two nearest band centers (0, 36, 72, ...).
             const float pos = c.h / 36.0f;
             const int b0 = static_cast<int>(std::floor(pos)) % 10, b1 = (b0 + 1) % 10;
             const float t = pos - std::floor(pos);

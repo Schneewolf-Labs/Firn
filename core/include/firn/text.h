@@ -5,7 +5,7 @@
 
 #include "firn/image.h"
 
-// Text rasterisation through stb_truetype. A Font wraps one .ttf/.otf file.
+// Text rasterization through stb_truetype. A Font wraps one .ttf/.otf file.
 namespace firn::text {
 
 struct FontInfo {
@@ -27,7 +27,7 @@ public:
         int width = 0, height = 0;   // pixel bounds of the rendered block
         int baseline = 0;            // y of the first baseline within the block
     };
-    enum class Align { Left, Centre, Right };
+    enum class Align { Left, Center, Right };
 
     // Renders UTF-8 text ('\n' separated lines) at `px` pixels tall into an
     // RGBA image of the block's size, in `color`, antialiased or not.

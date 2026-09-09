@@ -74,7 +74,7 @@ void FillCommand::apply(Image& img) { img.fill(color_); }
 
 void BoxBlurCommand::apply(Image& img) { raster::box_blur(img, radius_); }
 
-void GreyscaleCommand::apply(Image& img) { raster::greyscale(img); }
+void GrayscaleCommand::apply(Image& img) { raster::grayscale(img); }
 
 void BrightnessContrastCommand::apply(Image& img) { raster::brightness_contrast(img, brightness_, contrast_); }
 
@@ -364,7 +364,7 @@ void GeometryCommand::execute(Document& doc) {
 }
 
 namespace {
-// Fill fully transparent pixels of a Background layer with the fill colour.
+// Fill fully transparent pixels of a Background layer with the fill color.
 void fill_transparent(Image& img, Color fill) {
     uint8_t* p = img.data();
     for (size_t i = 0; i < img.size_bytes(); i += 4)

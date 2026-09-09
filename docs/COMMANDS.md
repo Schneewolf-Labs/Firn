@@ -130,7 +130,7 @@ to a spec for what the core has to implement. Count = occurrences in scripts.
 | JascTool{Paint,Select,Text,Warp,Object,Standard} | Interactive canvas tools | app/src/tools/ |
 | JascLayerPalette, JascHistoryPalette, JascMaterialPalette | Dockable palettes | app/src/ui/ |
 | JascFileFormats + *.FLT + ig*13d.dll (ImageGear) | Codecs incl. .PspImage | core/src/io/ |
-| JascColorMgr, JascCMYK | Colour management | core (later, LittleCMS) |
+| JascColorMgr, JascCMYK | Color management | core (later, LittleCMS) |
 | JascRender | Compositing / display | core/src/document.cpp composite() |
 | JascCommandBase, JascHistoryPalette | Undo stack | core/include/firn/commands.h |
 | JascCmdPyScript, Python Libraries | Scripting | out of scope for now |

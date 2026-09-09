@@ -202,7 +202,7 @@ void App::draw_adjust_dialogs() {
 
     adjust_modal(*this, "Threshold",
         [&] { draw_histogram(preview.histogram, ImVec2(256, 60)); return ImGui::SliderInt("Threshold", &threshold_value, 1, 255); },
-        [&](Image& img) { adjust::greyscale_then_threshold(img, threshold_value); });
+        [&](Image& img) { adjust::grayscale_then_threshold(img, threshold_value); });
 
     adjust_modal(*this, "Channel Mixer",
         [&] {

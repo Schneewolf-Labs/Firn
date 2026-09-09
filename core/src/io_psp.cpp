@@ -108,14 +108,14 @@ struct Header {
     int width = 0, height = 0;
     uint16_t compression = kCompLz77;
     uint16_t depth = 24;
-    bool greyscale = false;
+    bool grayscale = false;
     int active_layer = 0;
 };
 
 // Reads the channel sub-blocks of one raster bitmap into an RGBA image of
-// (w x h). Missing colour channels stay 0; missing alpha stays opaque.
+// (w x h). Missing color channels stay 0; missing alpha stays opaque.
 bool read_channels(const Reader& r, const std::vector<Block>& subs, uint16_t comp, uint16_t depth,
-                   const Palette* pal, bool grey, int w, int h, Image& out, std::string& err) {
+                   const Palette* pal, bool gray, int w, int h, Image& out, std::string& err) {
     out = Image(w, h, {0, 0, 0, 255});
     const size_t npx = static_cast<size_t>(w) * h;
     const int bytes_per_sample = depth == 48 ? 2 : 1;
@@ -141,11 +141,11 @@ bool read_channels(const Reader& r, const std::vector<Block>& subs, uint16_t com
             const int c = channel_type - 1;
             for (size_t i = 0; i < npx; ++i) px[i * 4 + c] = bps == 2 ? data[i * 2 + 1] : data[i];
         } else {
-            // Composite channel: palette index or grey level.
+            // Composite channel: palette index or gray level.
             for (size_t i = 0; i < npx; ++i) {
                 const uint8_t v = bps == 2 ? data[i * 2 + 1] : data[i];
                 Color c{v, v, v, 255};
-                if (pal && !grey && v < pal->entries.size()) c = pal->entries[v];
+                if (pal && !gray && v < pal->entries.size()) c = pal->entries[v];
                 else if (pal && v < pal->entries.size()) c = pal->entries[v];
                 px[i * 4 + 0] = c.r; px[i * 4 + 1] = c.g; px[i * 4 + 2] = c.b;
             }
@@ -156,7 +156,7 @@ bool read_channels(const Reader& r, const std::vector<Block>& subs, uint16_t com
 
 BlendMode map_blend(uint8_t v) {
     if (v <= 16) return static_cast<BlendMode>(v);
-    if (v >= 17 && v <= 20) return static_cast<BlendMode>(v - 14);  // "True" hue/sat/colour/lightness
+    if (v >= 17 && v <= 20) return static_cast<BlendMode>(v - 14);  // "True" hue/sat/color/lightness
     return BlendMode::Normal;
 }
 
@@ -279,7 +279,7 @@ bool read_layer(const Reader& r, const Block& lb, const Header& hdr, const Palet
     if (sw <= 0 || sh <= 0) return true;  // empty layer
 
     Image tile;
-    if (!read_channels(r, subs, hdr.compression, hdr.depth, pal, hdr.greyscale, sw, sh, tile, err)) return false;
+    if (!read_channels(r, subs, hdr.compression, hdr.depth, pal, hdr.grayscale, sw, sh, tile, err)) return false;
     Image& dst = L.pixels;
     for (int y = 0; y < sh; ++y) {
         const int dy = oy + y;
@@ -332,7 +332,7 @@ bool read_composite(const Reader& r, const Block& bank, const Header& hdr, const
         } else if (d.id == kCompositeImageBlock && r.ok(d.start, 8)) {
             const size_t bchunk = r.u32(d.start);
             const std::vector<Block> chans = blocks(r, d.start + bchunk, d.end);
-            if (chans.empty() || !read_channels(r, chans, comp, depth, pal, hdr.greyscale, w, h, img, err)) continue;
+            if (chans.empty() || !read_channels(r, chans, comp, depth, pal, hdr.grayscale, w, h, img, err)) continue;
         } else {
             continue;
         }
@@ -370,7 +370,7 @@ std::unique_ptr<Document> load_psp_from_memory(const uint8_t* data, size_t size,
             hdr.height = r.i32(b.start + 8);
             hdr.compression = r.u16(b.start + 21);
             hdr.depth = r.u16(b.start + 23);
-            hdr.greyscale = r.u8(b.start + 31) != 0;
+            hdr.grayscale = r.u8(b.start + 31) != 0;
             hdr.active_layer = r.i32(b.start + 36);
             have_header = true;
         } else if (b.id == kColorBlock && r.ok(b.start, 8)) {
@@ -452,7 +452,7 @@ std::optional<Image> load_psp_stored_composite(const uint8_t* data, size_t size)
     for (const Block& b : blocks(r, 36, size)) {
         if (b.id == kImageBlock && r.ok(b.start, 42)) {
             hdr.width = r.i32(b.start + 4); hdr.height = r.i32(b.start + 8);
-            hdr.compression = r.u16(b.start + 21); hdr.depth = r.u16(b.start + 23); hdr.greyscale = r.u8(b.start + 31) != 0;
+            hdr.compression = r.u16(b.start + 21); hdr.depth = r.u16(b.start + 23); hdr.grayscale = r.u8(b.start + 31) != 0;
         } else if (b.id == kColorBlock && r.ok(b.start, 8)) {
             const size_t chunk = r.u32(b.start);
             const uint32_t count = r.u32(b.start + 4);

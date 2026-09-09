@@ -87,7 +87,7 @@ void App::draw_menu() {
         if (ImGui::MenuItem("Resize...", nullptr, false, has_doc)) open_resize_dialog();
         if (ImGui::MenuItem("Canvas Size...", nullptr, false, has_doc)) open_canvas_dialog();
         ImGui::Separator();
-        if (ImGui::MenuItem("Greyscale", nullptr, false, has_layer)) run(std::make_unique<GreyscaleCommand>(layer));
+        if (ImGui::MenuItem("Grayscale", nullptr, false, has_layer)) run(std::make_unique<GrayscaleCommand>(layer));
         ImGui::EndMenu();
     }
     if (ImGui::BeginMenu("Adjust")) {
@@ -423,7 +423,7 @@ void App::draw_dialogs() {
             if (sel) ImGui::PopStyleColor();
             ImGui::PopID();
         }
-        ImGui::TextDisabled("Background layers are padded with the background colour.");
+        ImGui::TextDisabled("Background layers are padded with the background color.");
         if (ImGui::Button("OK") || enter()) {
             if (doc && (canvas_w != doc->width() || canvas_h != doc->height())) {
                 const int dx = canvas_w - doc->width(), dy = canvas_h - doc->height();
@@ -446,7 +446,7 @@ void App::draw_dialogs() {
         ImGui::RadioButton("Left", &rotate_cw, 0);
         ImGui::SetNextItemWidth(160);
         ImGui::SliderFloat("Degrees", &rotate_degrees, 0.0f, 359.99f, "%.2f");
-        ImGui::TextDisabled("Uncovered corners take the background colour on Background layers.");
+        ImGui::TextDisabled("Uncovered corners take the background color on Background layers.");
         if (ImGui::Button("OK") || enter()) { rotate(rotate_cw ? rotate_degrees : -rotate_degrees); ImGui::CloseCurrentPopup(); }
         ImGui::SameLine();
         if (ImGui::Button("Cancel")) ImGui::CloseCurrentPopup();

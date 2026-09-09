@@ -50,7 +50,7 @@ int main(int argc, char** argv) {
                     for (size_t k = 0; k < ours.size_bytes(); k += 4) {
                         const uint8_t* a = ours.data() + k; const uint8_t* b = stored->data() + k;
                         if (a[3] == 0 && b[3] == 0) continue;
-                        // Compare colour over a white background so alpha differences count too.
+                        // Compare color over a white background so alpha differences count too.
                         for (int c = 0; c < 3; ++c) {
                             const int ac = (a[c] * a[3] + 255 * (255 - a[3])) / 255, bc = (b[c] * b[3] + 255 * (255 - b[3])) / 255;
                             sum += std::abs(ac - bc); ++n;
@@ -76,13 +76,13 @@ int main(int argc, char** argv) {
                    std::abs(a.opacity - b.opacity) < 0.005f && a.pixels.size_bytes() == b.pixels.size_bytes();
             if (same && a.has_mask()) same = std::equal(a.mask.data(), a.mask.data() + a.mask.size(), b.mask.data());
             if (!same) break;
-            // Opaque layers are written without alpha; compare colour where alpha matches.
+            // Opaque layers are written without alpha; compare color where alpha matches.
             const uint8_t* pa = a.pixels.data();
             const uint8_t* pb = b.pixels.data();
             for (size_t k = 0; k < a.pixels.size_bytes(); k += 4) {
                 const bool alpha_ok = pa[k + 3] == pb[k + 3] || (a.background && pb[k + 3] == 255);
-                const bool colour_ok = pa[k + 3] == 0 || (pa[k] == pb[k] && pa[k + 1] == pb[k + 1] && pa[k + 2] == pb[k + 2]);
-                if (!alpha_ok || !colour_ok) { same = false; break; }
+                const bool color_ok = pa[k + 3] == 0 || (pa[k] == pb[k] && pa[k + 1] == pb[k + 1] && pa[k + 2] == pb[k + 2]);
+                if (!alpha_ok || !color_ok) { same = false; break; }
             }
         }
         if (!same) {

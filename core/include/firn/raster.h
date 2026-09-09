@@ -31,13 +31,13 @@ struct Brush {
     bool square = false;     // square stamp instead of round
 };
 
-// Paint: colour. Erase: clear alpha. Clone: pixels from a source image at an
+// Paint: color. Erase: clear alpha. Clone: pixels from a source image at an
 // offset. Filter: a per-pixel function of the existing pixel (retouch tools).
 enum class StrokeMode { Paint, Erase, Clone, Filter };
 
 // A brush stroke in progress. Same semantics as the original: opacity is per stroke, so
 // overlapping stamps do not build up. Coverage accumulates as max() into a
-// mask and the result is base composited with colour*mask*opacity.
+// mask and the result is base composited with color*mask*opacity.
 class Stroke {
 public:
     // `clip` (optional, must outlive the stroke) limits painting to a selection.
@@ -98,7 +98,7 @@ void paint_mask(Image& dst, const Mask& shape, Color color, const Mask* clip = n
 void blend_over(Image& img, int x, int y, Color c, float coverage);
 
 // Whole-image operations used by commands.
-void greyscale(Image& img);
+void grayscale(Image& img);
 void brightness_contrast(Image& img, int brightness, int contrast);  // -255..255, -100..100
 void gaussian_blur(Image& img, float radius);
 void box_blur(Image& img, int radius);  // the original's "Average"
@@ -124,7 +124,7 @@ Image shifted(const Image& src, int dx, int dy);
 // Exact rotations. Positive quarter turns are clockwise.
 Image rotate_quarter(const Image& src, int quarter_turns);
 
-// Rotates by `degrees` clockwise about the centre, expanding the canvas to
+// Rotates by `degrees` clockwise about the center, expanding the canvas to
 // fit; uncovered area is transparent. Bilinear, premultiplied.
 Image rotate(const Image& src, float degrees);
 

@@ -52,7 +52,7 @@ void App::draw_canvas() {
 
     const float img_w = static_cast<float>(doc->width());
     const float img_h = static_cast<float>(doc->height());
-    canvas_centre = ImVec2(view_pos.x + view_size.x * 0.5f, view_pos.y + view_size.y * 0.5f);
+    canvas_center = ImVec2(view_pos.x + view_size.x * 0.5f, view_pos.y + view_size.y * 0.5f);
 
     // Defer the fit until the window has been laid out; on the first frame the
     // dock node has not been sized yet and the view is a few pixels wide.
@@ -84,7 +84,7 @@ void App::draw_canvas() {
 
     // Image rect in screen space.
     const float dw = img_w * zoom, dh = img_h * zoom;
-    const ImVec2 p0(canvas_centre.x + pan_x - dw * 0.5f, canvas_centre.y + pan_y - dh * 0.5f);
+    const ImVec2 p0(canvas_center.x + pan_x - dw * 0.5f, canvas_center.y + pan_y - dh * 0.5f);
     const ImVec2 p1(p0.x + dw, p0.y + dh);
 
     // Tool dispatch. One gesture = one button held from press to release.
@@ -196,7 +196,7 @@ void App::draw_canvas() {
     }
 
     // Marching ants along the selection boundary. Each unit edge is one
-    // segment; colour alternates along the outline and cycles with time.
+    // segment; color alternates along the outline and cycles with time.
     sync_ants();
     if (!ants.empty()) {
         const int phase = static_cast<int>(ImGui::GetTime() * 10.0);

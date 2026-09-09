@@ -234,7 +234,7 @@ void App::zoom_about(ImVec2 screen, float factor) {
     const float old_zoom = zoom;
     zoom = std::clamp(zoom * factor, 0.01f, 64.0f);
     const float k = zoom / old_zoom;
-    const float mx = screen.x - canvas_centre.x, my = screen.y - canvas_centre.y;
+    const float mx = screen.x - canvas_center.x, my = screen.y - canvas_center.y;
     pan_x = mx - (mx - pan_x) * k;
     pan_y = my - (my - pan_y) * k;
 }
@@ -319,7 +319,7 @@ void App::copy() {
 void App::clear_selection() {
     if (!doc || active_layer() < 0) return;
     const Layer& L = doc->layer(active_layer());
-    // The original clears a Background layer to the background colour.
+    // The original clears a Background layer to the background color.
     auto c = [](float f) { return static_cast<uint8_t>(f * 255.0f + 0.5f); };
     const Color fill = L.background ? Color{c(bg_color[0]), c(bg_color[1]), c(bg_color[2]), 255} : Color{0, 0, 0, 0};
     run(std::make_unique<ClearCommand>(active_layer(), fill));

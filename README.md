@@ -58,7 +58,7 @@ Left button uses the foreground material, right button the background.
 Space + drag or middle-drag pans with any tool; Escape cancels a stroke.
 
 Layers can be grouped (Layers > New Layer Group) and carry masks (Layers >
-New Mask Layer); press Edit next to a mask to paint on it in greyscale.
+New Mask Layer); press Edit next to a mask to paint on it in grayscale.
 
 Selections: Shift adds, Ctrl subtracts, a plain click deselects. Ctrl+A all,
 Ctrl+D none, Ctrl+Shift+I invert, Delete clears. Every pixel command and the

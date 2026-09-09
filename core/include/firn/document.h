@@ -22,7 +22,7 @@ struct Layer {
     bool expanded = true;   // palette state only
     bool visible = true;
     // A Background layer has no transparency: the eraser paints the
-    // background colour on it instead of clearing alpha.
+    // background color on it instead of clearing alpha.
     bool background = false;
     float opacity = 1.0f;  // 0..1
     BlendMode blend = BlendMode::Normal;
@@ -86,7 +86,7 @@ public:
 
     // Flatten visible layers with their blend modes into one image.
     Image composite() const;
-    // Flatten layers [from, to] (inclusive, bottom to top) honouring
+    // Flatten layers [from, to] (inclusive, bottom to top) honoring
     // visibility, groups and masks. Members of a group must be included
     // with their group for the group's opacity and mask to apply.
     Image composite_range(size_t from, size_t to) const;

@@ -55,7 +55,7 @@ public:
 
 class DropperTool : public Tool {
 public:
-    const char* category() const override { return "Colour"; }
+    const char* category() const override { return "Color"; }
     const char* name() const override { return "Dropper"; }
     const char* shortcut() const override { return "E"; }
     void on_press(App& app, const ToolInput& in, ImGuiMouseButton b) override { pick(app, in, b); }
@@ -76,7 +76,7 @@ private:
 
 // --- Brush family ------------------------------------------------------
 // One class covers every tool that paints a stroke: what differs is the
-// stroke mode and which colour / filter / source feeds it.
+// stroke mode and which color / filter / source feeds it.
 
 class BrushTool : public Tool {
 public:
@@ -191,7 +191,7 @@ public:
                         }
                     const Color c = im.get(x, y);
                     auto mix = [&](uint8_t v, float avg) {
-                        // Soften moves towards the neighbourhood mean; sharpen away from it.
+                        // Soften moves towards the neighborhood mean; sharpen away from it.
                         const float out = soften ? v + (avg - v) * amount : v + (v - avg) * amount * 2.0f;
                         return static_cast<uint8_t>(std::clamp(out, 0.0f, 255.0f) + 0.5f);
                     };
@@ -209,7 +209,7 @@ public:
                 };
                 break;
             case Kind::ColorReplacer: {
-                // Replaces the background colour with the foreground (right button: the reverse).
+                // Replaces the background color with the foreground (right button: the reverse).
                 mode = raster::StrokeMode::Filter;
                 const Color from = to_color(primary ? app.bg_color : app.fg_color);
                 const Color to = to_color(primary ? app.fg_color : app.bg_color);
@@ -322,7 +322,7 @@ public:
                 ImGui::SetNextItemWidth(100);
                 ImGui::SliderInt("Tolerance", &app.replacer_tolerance, 0, 200);
                 ImGui::SameLine();
-                ImGui::TextDisabled("Paints foreground over background colour.");
+                ImGui::TextDisabled("Paints foreground over background color.");
                 break;
             default: break;
         }

@@ -13,7 +13,7 @@ namespace {
 
 uint8_t clamp8(float v) { return static_cast<uint8_t>(std::clamp(v, 0.0f, 255.0f) + 0.5f); }
 
-// Generic RGB neighbourhood pass with edge clamping. `fn(x, y, out)` gets
+// Generic RGB neighborhood pass with edge clamping. `fn(x, y, out)` gets
 // a sampler over the *source* copy and writes three channel values.
 template <class Fn>
 void rgb_pass(Image& img, Fn fn) {
@@ -187,7 +187,7 @@ void enhance_edges_more(Image& img) {
 void emboss(Image& img) {
     static const float k[9] = {-2, -1, 0, -1, 0, 1, 0, 1, 2};
     convolve3(img, k, 1.0f, 128.0f);
-    // The original's emboss is grey.
+    // The original's emboss is gray.
     uint8_t* p = img.data();
     for (size_t i = 0; i < img.size_bytes(); i += 4) {
         const uint8_t g = static_cast<uint8_t>((p[i] * 299 + p[i + 1] * 587 + p[i + 2] * 114 + 500) / 1000);
@@ -217,7 +217,7 @@ void dilate(Image& img) {
 
 void drop_shadow(Image& img, int ox, int oy, float opacity, float blur, Color color) {
     const int w = img.width(), h = img.height();
-    // Shadow image: the alpha mask, offset, coloured.
+    // Shadow image: the alpha mask, offset, colored.
     Image shadow(w, h, {color.r, color.g, color.b, 0});
     for (int y = 0; y < h; ++y)
         for (int x = 0; x < w; ++x) {
@@ -338,7 +338,7 @@ void spherize(Image& img, int strength) {
         const float d = std::hypot(dx, dy);
         if (d >= radius || d == 0.0f) { sx = x; sy = y; return; }
         const float t = d / radius;
-        // Bulge: sample nearer the centre (asin curve); dish: further out.
+        // Bulge: sample nearer the center (asin curve); dish: further out.
         const float f = s > 0 ? std::asin(t) * 2.0f / 3.14159265f : std::sin(t * 3.14159265f * 0.5f);
         const float tt = t + (f - t) * std::abs(s);
         sx = cx + dx * tt / t;
@@ -369,7 +369,7 @@ void halftone(Image& img, int cell, float angle_degrees, Color ink, Color paper)
     uint8_t* d = img.data();
     for (int y = 0; y < h; ++y)
         for (int x = 0; x < w; ++x) {
-            // Rotate into the screen grid, find the cell centre, rotate back.
+            // Rotate into the screen grid, find the cell center, rotate back.
             const float rx = x * cs + y * sn, ry = -x * sn + y * cs;
             const float gx = (std::floor(rx / cell) + 0.5f) * cell, gy = (std::floor(ry / cell) + 0.5f) * cell;
             const float ox = gx * cs - gy * sn, oy = gx * sn + gy * cs;

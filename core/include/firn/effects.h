@@ -4,7 +4,7 @@
 #include "firn/image.h"
 
 // Spatial effects, named after the original's Effects and Adjust menu
-// entries. In place on straight-alpha RGBA8; colour work is done in
+// entries. In place on straight-alpha RGBA8; color work is done in
 // premultiplied space where transparency matters.
 namespace firn::effects {
 
@@ -38,12 +38,12 @@ void drop_shadow(Image& img, int offset_x, int offset_y, float opacity, float bl
 // --- Distortion (inverse-mapped, bilinear, premultiplied) --------------
 // Wave: horizontal displacement varies with y, vertical with x.
 void wave(Image& img, float h_amplitude, float h_wavelength, float v_amplitude, float v_wavelength);
-// Pinch (strength > 0) pulls towards the centre, Punch (< 0) pushes out. -100..100.
+// Pinch (strength > 0) pulls towards the center, Punch (< 0) pushes out. -100..100.
 void pinch(Image& img, int strength);
-// Twirl about the centre by `degrees` at the middle, falling off to the edge.
+// Twirl about the center by `degrees` at the middle, falling off to the edge.
 void twirl(Image& img, float degrees);
 
-// Ripple: concentric waves from the centre. Spherize: bulge (positive) or
+// Ripple: concentric waves from the center. Spherize: bulge (positive) or
 // dish (negative) inside the largest inscribed circle. Lens: barrel
 // (positive) or pincushion (negative) distortion, -100..100.
 void ripple(Image& img, float amplitude, float wavelength);
@@ -52,12 +52,12 @@ void lens_distortion(Image& img, int strength);
 
 // Halftone: dots on a grid of `cell` px sized by luminance, ink over paper.
 void halftone(Image& img, int cell, float angle_degrees, Color ink, Color paper);
-// Chrome: greyscale run through a repeated brightness ramp (`bands`).
+// Chrome: grayscale run through a repeated brightness ramp (`bands`).
 void chrome(Image& img, int bands, float brightness);
 
 // --- 3D ---------------------------------------------------------------
 // Buttonize: bevelled border of `width` px in `color` at `opacity`;
-// `transparent_edge` lightens/darkens the image instead of painting colour.
+// `transparent_edge` lightens/darkens the image instead of painting color.
 void buttonize(Image& img, int width, float opacity, Color color, bool transparent_edge);
 // Inner Bevel on the region where `region` (document-sized mask, 0..255,
 // or the alpha channel when null) is set: shades by a height ramp of

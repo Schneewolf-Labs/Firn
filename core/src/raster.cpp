@@ -210,18 +210,18 @@ void apply_through_mask(Image& dst, const Image& before, const Mask& mask) {
 
 // --- Whole-image ops ---------------------------------------------------
 
-void greyscale(Image& img) {
+void grayscale(Image& img) {
     uint8_t* p = img.data();
     const size_t n = img.size_bytes();
     for (size_t i = 0; i < n; i += 4) {
-        // Rec.601 luma, matching the original's Greyscale command.
+        // Rec.601 luma, matching the original's Grayscale command.
         const int y = (p[i] * 299 + p[i + 1] * 587 + p[i + 2] * 114 + 500) / 1000;
         p[i] = p[i + 1] = p[i + 2] = static_cast<uint8_t>(y);
     }
 }
 
 void brightness_contrast(Image& img, int brightness, int contrast) {
-    // Contrast scales about mid-grey; brightness is a plain offset.
+    // Contrast scales about mid-gray; brightness is a plain offset.
     const float c = std::clamp(contrast, -100, 100) / 100.0f;
     const float k = c >= 0.0f ? 1.0f / std::max(1.0f - c, 0.01f) : 1.0f + c;
     uint8_t lut[256];
@@ -251,7 +251,7 @@ void gaussian_blur(Image& img, float radius) {
     }
     for (float& k : kernel) k /= sum;
 
-    // Blur premultiplied so transparent pixels don't bleed their colour in.
+    // Blur premultiplied so transparent pixels don't bleed their color in.
     std::vector<float> pre(static_cast<size_t>(w) * h * 4), tmp(pre.size());
     const uint8_t* src = img.data();
     for (size_t i = 0; i < static_cast<size_t>(w) * h; ++i) {
@@ -294,7 +294,7 @@ void gaussian_blur(Image& img, float radius) {
 }
 
 // Separable box blur on all four channels. Straight-alpha blur is not
-// colour-correct at transparent edges; premultiplied comes later.
+// color-correct at transparent edges; premultiplied comes later.
 void box_blur(Image& img, int radius) {
     const int w = img.width(), h = img.height(), r = std::max(0, radius);
     if (r == 0 || w == 0 || h == 0) return;
@@ -377,7 +377,7 @@ float triangle(float x) { x = std::abs(x); return x < 1.0f ? 1.0f - x : 0.0f; }
 struct Taps {
     std::vector<int> start;       // first source index per output index
     std::vector<int> count;       // number of taps
-    std::vector<float> weights;   // count taps per output, normalised
+    std::vector<float> weights;   // count taps per output, normalized
     int max_count = 0;
 };
 
@@ -389,14 +389,14 @@ Taps make_taps(int src_n, int dst_n, Filter filter) {
     t.start.resize(dst_n); t.count.resize(dst_n);
     std::vector<float> w;
     for (int i = 0; i < dst_n; ++i) {
-        const float centre = (i + 0.5f) * scale;
-        int lo = static_cast<int>(std::floor(centre - support)), hi = static_cast<int>(std::ceil(centre + support));
+        const float center = (i + 0.5f) * scale;
+        int lo = static_cast<int>(std::floor(center - support)), hi = static_cast<int>(std::ceil(center + support));
         lo = std::max(lo, 0); hi = std::min(hi, src_n - 1);
-        if (hi < lo) { lo = hi = std::clamp(static_cast<int>(centre), 0, src_n - 1); }
+        if (hi < lo) { lo = hi = std::clamp(static_cast<int>(center), 0, src_n - 1); }
         float sum = 0.0f;
         w.clear();
         for (int j = lo; j <= hi; ++j) {
-            const float x = ((j + 0.5f) - centre) / blur;
+            const float x = ((j + 0.5f) - center) / blur;
             float k;
             if (filter == Filter::Bicubic) k = catmull_rom(x);
             else if (filter == Filter::Bilinear) k = triangle(x);
@@ -405,7 +405,7 @@ Taps make_taps(int src_n, int dst_n, Filter filter) {
             sum += k;
         }
         if (sum == 0.0f) {  // nearest: pick the closest tap
-            int best = std::clamp(static_cast<int>(centre), lo, hi);
+            int best = std::clamp(static_cast<int>(center), lo, hi);
             std::fill(w.begin(), w.end(), 0.0f);
             w[best - lo] = 1.0f;
             sum = 1.0f;
@@ -470,7 +470,7 @@ Image resample(const Image& src, int w, int h, Filter filter) {
 }
 
 void resample_mask(const uint8_t* src, int sw, int sh, uint8_t* dst, int dw, int dh) {
-    // Go through an Image so the same filter code applies (grey in RGB, opaque alpha).
+    // Go through an Image so the same filter code applies (gray in RGB, opaque alpha).
     Image tmp(sw, sh);
     for (size_t i = 0; i < static_cast<size_t>(sw) * sh; ++i) {
         uint8_t* p = tmp.data() + i * 4;

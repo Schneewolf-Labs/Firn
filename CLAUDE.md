@@ -59,11 +59,11 @@ docs/    notes on the original: command inventory, module mapping, FORMAT.md
   texture. Anything that changes pixels or layer state must `touch()`.
 - **Straight-alpha RGBA8** everywhere in `Image`. Blur and resample in
   premultiplied space internally (see `raster::gaussian_blur`) so transparent
-  pixels don't bleed colour.
+  pixels don't bleed color.
 - **Brush opacity is per stroke, not per stamp** (`raster::Stroke` keeps a
   max-coverage mask). Do not "fix" overlapping stamps by blending them.
 - The **Background layer** (`Layer::background`) has no transparency: the
-  eraser paints the background colour on it and clears alpha elsewhere.
+  eraser paints the background color on it and clears alpha elsewhere.
 - **Selections are a `Mask` on the `Document`** (empty mask = none). Change
   it only through `SelectionCommand` (`App::set_selection`) so it is undoable.
   `LayerPixelCommand` clips its result to the selection automatically via
@@ -75,7 +75,7 @@ docs/    notes on the original: command inventory, module mapping, FORMAT.md
   true on change, `op` applies the parameters to an `Image`. The preview
   session re-applies `op` to the active layer live (on slider release for
   layers over 1 MP), OK commits one `LayerSnapshotCommand`, Cancel restores.
-  Add new pixel operations to `core` (`adjust.h` for colour, `raster.h` for
+  Add new pixel operations to `core` (`adjust.h` for color, `raster.h` for
   spatial) with a test, then one `adjust_modal` call and a menu item.
   Instant menu items use `AdjustCommand(layer, name, fn)`.
 - **Canvas-size changes** derive from `GeometryCommand`: implement
@@ -91,7 +91,7 @@ docs/    notes on the original: command inventory, module mapping, FORMAT.md
   alpha (or the group's composite) during compositing. Tools and pixel
   commands must check `Layer::is_raster()` / `App::active_is_raster()`.
 - **Mask edit mode**: tools never touch `layer.pixels` directly; they use
-  `App::paint_pixels(layer)` (the pixels, or a greyscale proxy of the mask
+  `App::paint_pixels(layer)` (the pixels, or a grayscale proxy of the mask
   while editing it), `App::paint_touched(layer)` after live edits, and
   `App::commit_pixels(...)` to record the gesture. That is what makes every
   painting tool work on masks for free.
@@ -109,7 +109,7 @@ docs/    notes on the original: command inventory, module mapping, FORMAT.md
 - **The original runs under Wine** from `WindowsInstall/`.
   `scripts/original-open.sh file.pspimage shot.png` opens a file in it and
   captures the window: the definitive check for anything the writer emits,
-  and a way to observe the original's behaviour when a port detail is unclear.
+  and a way to observe the original's behavior when a port detail is unclear.
 - File open/save go through `FileDialog` (`app/src/ui/FileDialog.*`), an
   ImGui modal, via `App::request_open` / `request_save_as`. No native dialogs
   or extra dependencies. `io::save` picks the format from the extension.

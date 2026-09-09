@@ -6,7 +6,7 @@
 
 #include "firn/image.h"
 
-// Colour adjustments, named after the original's commands. All operate in
+// Color adjustments, named after the original's commands. All operate in
 // place on straight-alpha RGBA8 and leave alpha alone.
 namespace firn::adjust {
 
@@ -29,7 +29,7 @@ void hsl_adjust(Image& img, int hue, int saturation, int lightness);
 Lut levels_lut(int in_low, float gamma, int in_high, int out_low, int out_high);
 Lut gamma_lut(float gamma);
 Lut threshold_lut(int value);           // < value -> 0, else 255
-void greyscale_then_threshold(Image& img, int value);  // the Threshold command: on luma
+void grayscale_then_threshold(Image& img, int value);  // the Threshold command: on luma
 Lut posterize_lut(int levels);          // 2..255
 Lut solarize_lut(int threshold);        // invert above threshold
 Lut brightness_contrast_lut(int brightness, int contrast);
@@ -58,7 +58,7 @@ void color_balance(Image& img, const ColorBalance& cb);
 void sepia(Image& img, int amount);
 
 // Hue Map: ten 36-degree bands starting at red; each band's hue is shifted
-// by `shift[band]` degrees (-180..180), interpolated between band centres.
+// by `shift[band]` degrees (-180..180), interpolated between band centers.
 // Saturation and lightness shifts apply to every pixel (-100..100).
 struct HueMap {
     int shift[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
