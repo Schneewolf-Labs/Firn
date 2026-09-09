@@ -118,9 +118,11 @@ for. Ranked by value per effort; work top to bottom, tick as they land.
       live-preview dialog (distortion, geometric, reflection, image, artistic,
       illumination, texture, art media, User Defined Filter)
 - [ ] Materials palette parity: swatches, recent colors, "all tools" lock
-- [x] Scripting: App.Do commands over the driver socket (about 110 of the
-      original's commands with its parameter names) and scripts/firn-script.py,
-      which runs .PspScript files unmodified; JascUtils helpers pending
+- [x] Scripting: App.Do commands over the driver socket (about 120 of the
+      original's commands with its parameter names), scripts/firn-script.py runs
+      .PspScript files unmodified with the original's JascUtils helpers,
+      terminal prompts for GetString/GetNumber; Thumbnail_150, CenterLayer and
+      SimpleCaption from the original run end to end
 - [ ] Plain printing
 - [ ] 16-bit channels and color management
 

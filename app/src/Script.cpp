@@ -19,6 +19,8 @@
 #include "firn/mask.h"
 #include "firn/photo.h"
 #include "firn/raster.h"
+#include "firn/text.h"
+#include "firn/vector.h"
 
 using namespace firn;
 using json::Value;
@@ -50,10 +52,23 @@ int layer_from_params(App& app, const Value& p) {
     const Value& name = p.get("SelectedLayerName");
     if (name.is_string() && !name.str.empty())
         for (size_t i = 0; i < app.doc->layer_count(); ++i) if (app.doc->layer(i).name == name.str) return static_cast<int>(i);
+    // Path: (level, relative index, [child indices...], flag). Large values
+    // mean "all the way"; child indices descend into the current group,
+    // counted from its first member (1-based).
     const Value& path = p.get("Path");
     if (path.is_array() && path.size() >= 2) {
+        const int n = static_cast<int>(app.doc->layer_count());
         const int rel = static_cast<int>(path[1].as_number());
-        return std::clamp(app.active_layer() + rel, 0, static_cast<int>(app.doc->layer_count()) - 1);
+        int target = rel <= -9999 ? 0 : rel >= 9999 ? n - 1 : std::clamp(app.active_layer() + rel, 0, n - 1);
+        const Value& kids = path[2];
+        if (kids.is_array()) {
+            for (size_t i = 0; i < kids.size(); ++i) {
+                if (target < 0 || target >= n || app.doc->layer(static_cast<size_t>(target)).type != LayerType::Group) break;
+                const int child = std::max(1, static_cast<int>(kids[i].as_number()));
+                target = std::clamp(target + child, 0, n - 1);
+            }
+        }
+        return target;
     }
     return app.active_layer();
 }
@@ -125,8 +140,79 @@ std::string App::do_command(const std::string& name, const Value& p, bool* ok) {
         r.set("LayerCount", Value::number(static_cast<double>(doc->layer_count())));
         r.set("ActiveLayer", Value::number(layer)); r.set("Title", Value::string(doc_title)); r.set("FileName", Value::string(doc_path));
         r.set("HasSelection", Value::boolean(doc->has_selection()));
+        bool alpha = false;
+        for (size_t i = 0; i < doc->layer_count() && !alpha; ++i) if (!doc->layer(i).background) alpha = true;
+        r.set("PixelFormat", Value::string(alpha ? "BGRA" : "BGR"));
+        r.set("LayerNum", Value::number(static_cast<double>(doc->layer_count())));
+        r.set("Name", Value::string(doc_title));
+        r.set("BitsPerPixel", Value::number(alpha ? 32 : 24));
         if (layer >= 0) { r.set("LayerName", Value::string(doc->layer(layer).name)); r.set("LayerType", Value::string(doc->layer(layer).is_vector() ? "Vector" : doc->layer(layer).is_adjustment() ? "Adjustment" : doc->layer(layer).type == LayerType::Group ? "Group" : "Raster")); }
         return json::dump(r);
+    }
+    if (name == "ReturnLayerProperties") {
+        if (auto e = need_doc(); !e.empty()) return e;
+        if (layer < 0) { *ok = false; return "no layer"; }
+        const Layer& L = doc->layer(layer);
+        Value r = result_ok();
+        r.set("Name", Value::string(L.name));
+        std::string type = "Raster";
+        if (L.is_vector()) type = "Vector"; else if (L.type == LayerType::Group) type = "Group";
+        else if (L.is_adjustment()) {
+            using K = Adjustment::Kind;
+            const K k = L.adjustment.kind;
+            type = k == K::Levels ? "Levels" : k == K::Curves ? "Curves" : k == K::BrightnessContrast ? "BrightnessContrast" : k == K::ColorBalance ? "ColorBalance" : k == K::HSL ? "HueSatLum" : k == K::ChannelMixer ? "ChannelMixer" : k == K::Invert ? "Invert" : k == K::Threshold ? "Threshold" : "Posterize";
+        }
+        r.set("LayerType", Value::string(type));
+        r.set("IsBackground", Value::boolean(L.background));
+        r.set("LayerNum", Value::number(layer));
+        r.set("IsVisible", Value::boolean(L.visible));
+        r.set("Opacity", Value::number(std::lround(L.opacity * 100)));
+        r.set("BlendMode", Value::string(blend_mode_name(L.blend)));
+        const raster::Rect b = L.pixels.empty() ? raster::Rect{0, 0, doc->width(), doc->height()} : raster::content_bounds(L.pixels);
+        Value rect = Value::array();
+        Value pos = Value::array(); pos.push(Value::number(b.x0)); pos.push(Value::number(b.y0));
+        rect.push(pos); rect.push(Value::number(b.x1 - b.x0)); rect.push(Value::number(b.y1 - b.y0));
+        r.set("LayerRect", rect);
+        Value general = Value::object();
+        general.set("Name", Value::string(L.name)); general.set("Opacity", Value::number(std::lround(L.opacity * 100)));
+        general.set("IsVisible", Value::boolean(L.visible)); general.set("BlendMode", Value::string(blend_mode_name(L.blend)));
+        r.set("General", general);
+        return json::dump(r);
+    }
+    if (name == "GetRasterSelectionRect") {
+        if (auto e = need_doc(); !e.empty()) return e;
+        Value r = result_ok();
+        raster::Rect b{0, 0, 0, 0};
+        if (doc->has_selection()) {
+            const Mask& m = doc->selection();
+            int x0 = m.width(), y0 = m.height(), x1 = -1, y1 = -1;
+            for (int y = 0; y < m.height(); ++y) for (int x = 0; x < m.width(); ++x) if (m.at(x, y)) { x0 = std::min(x0, x); x1 = std::max(x1, x); y0 = std::min(y0, y); y1 = std::max(y1, y); }
+            if (x1 >= x0) b = {x0, y0, x1 + 1, y1 + 1};
+        }
+        Value rect = Value::array();
+        for (int v : {b.x0, b.y0, b.x1, b.y1}) rect.push(Value::number(v));
+        r.set("Rect", rect); r.set("Left", Value::number(b.x0)); r.set("Top", Value::number(b.y0)); r.set("Right", Value::number(b.x1)); r.set("Bottom", Value::number(b.y1));
+        r.set("HasSelection", Value::boolean(doc->has_selection()));
+        r.set("Type", Value::string(doc->has_selection() ? "Rectangle" : "None"));
+        return json::dump(r);
+    }
+    if (name == "Mover" || name == "AdjustPosition") {
+        if (auto e = need_doc(); !e.empty()) return e;
+        const Value& off = p.get("Offset");
+        const int dx = static_cast<int>(off[0].as_number()), dy = static_cast<int>(off[1].as_number());
+        if (p.get("Object").as_string("Layer") == "Selection" && doc->has_selection()) {
+            const Mask& src = doc->selection();
+            Mask m(src.width(), src.height());
+            for (int y = 0; y < m.height(); ++y) for (int x = 0; x < m.width(); ++x) { const int sx = x - dx, sy = y - dy; if (sx >= 0 && sy >= 0 && sx < m.width() && sy < m.height()) m.at(x, y) = src.at(sx, sy); }
+            set_selection("Move Selection", std::move(m));
+            return json::dump(result_ok());
+        }
+        if (auto e = need_raster(); !e.empty()) return e;
+        const Layer& L = doc->layer(layer);
+        Image moved = raster::shifted(L.pixels, dx, dy);
+        if (L.background) { const Color fill = background_fill(); uint8_t* q = moved.data(); for (size_t i = 0; i < moved.size_bytes(); i += 4) if (q[i + 3] == 0) { q[i] = fill.r; q[i + 1] = fill.g; q[i + 2] = fill.b; q[i + 3] = 255; } }
+        run(std::make_unique<LayerSnapshotCommand>(layer, "Move", L.pixels, std::move(moved)));
+        return json::dump(result_ok());
     }
     if (name == "CountImageColors") {
         if (auto e = need_doc(); !e.empty()) return e;
@@ -210,6 +296,32 @@ std::string App::do_command(const std::string& name, const Value& p, bool* ok) {
         else layer_arrange(name == "LayerArrangeMoveUp" || flag("MoveAboveSibling", true) ? 1 : -1);
         return json::dump(result_ok());
     }
+    if (name == "LayerArrangeMoveIn" || name == "LayerArrangeMoveOut") {
+        if (auto e = need_doc(); !e.empty()) return e;
+        const size_t idx = static_cast<size_t>(layer);
+        if (name == "LayerArrangeMoveIn") {
+            if (idx == 0) return json::dump(result_ok());
+            const Layer& below = doc->layer(idx - 1);
+            const int depth = below.type == LayerType::Group ? below.depth + 1 : below.depth;
+            if (depth <= doc->layer(idx).depth) return json::dump(result_ok());
+            run(std::make_unique<StateEditCommand>("Move Into Group", [idx, depth](Document& d) { d.layer(idx).depth = depth; }));
+        } else {
+            if (doc->layer(idx).depth == 0) return json::dump(result_ok());
+            run(std::make_unique<StateEditCommand>("Move Out Of Group", [idx](Document& d) {
+                const int depth = d.layer(idx).depth - 1;
+                // Find the enclosing group and place the layer just above its span.
+                size_t g = idx;
+                while (g > 0 && !(d.layer(g).type == LayerType::Group && d.layer(g).depth == depth)) --g;
+                const size_t end = d.group_end(g);
+                std::unique_ptr<Layer> moved = d.remove_layer(idx);
+                moved->depth = depth;
+                d.insert_layer(std::move(moved), end - 1);
+                d.set_active_layer(static_cast<int>(end - 1));
+            }));
+        }
+        return json::dump(result_ok());
+    }
+    if (name == "LayerArrangeUngroup") { if (auto e = need_doc(); !e.empty()) return e; layer_ungroup(); return json::dump(result_ok()); }
     if (name == "LayerSetVisibility") {
         if (auto e = need_doc(); !e.empty()) return e;
         const int target = layer_from_params(*this, p);
@@ -299,6 +411,17 @@ std::string App::do_command(const std::string& name, const Value& p, bool* ok) {
     }
     if (name == "Flip") { if (auto e = need_doc(); !e.empty()) return e; run(std::make_unique<FlipCommand>()); return json::dump(result_ok()); }
     if (name == "Mirror") { if (auto e = need_doc(); !e.empty()) return e; run(std::make_unique<MirrorCommand>()); return json::dump(result_ok()); }
+    if (name == "ResizeCanvas") {
+        if (auto e = need_doc(); !e.empty()) return e;
+        const int nw = std::max(1, static_cast<int>(num("NewWidth", doc->width()))), nh = std::max(1, static_cast<int>(num("NewHeight", doc->height())));
+        const std::string hp = p.get("HoriPlace").as_string("Center"), vp = p.get("VertPlace").as_string("Center");
+        int ox = (nw - doc->width()) / 2, oy = (nh - doc->height()) / 2;
+        if (hp == "Left") ox = 0; else if (hp == "Right") ox = nw - doc->width(); else if (hp == "Custom") ox = static_cast<int>(num("PlaceLeft", ox));
+        if (vp == "Top") oy = 0; else if (vp == "Bottom") oy = nh - doc->height(); else if (vp == "Custom") oy = static_cast<int>(num("PlaceTop", oy));
+        run(std::make_unique<CanvasSizeCommand>(nw, nh, ox, oy, color_param(p.get("FillColor"), background_fill())));
+        fit_requested = true;
+        return json::dump(result_ok());
+    }
     if (name == "AddBorders") {
         if (auto e = need_doc(); !e.empty()) return e;
         const int l = static_cast<int>(num("Left", 10)), r = static_cast<int>(num("Right", 10)), t = static_cast<int>(num("Top", 10)), b = static_cast<int>(num("Bottom", 10));
@@ -381,7 +504,20 @@ std::string App::do_command(const std::string& name, const Value& p, bool* ok) {
         const int ox = static_cast<int>(num("Horizontal", 10)), oy = static_cast<int>(num("Vertical", 10));
         const float op = static_cast<float>(num("Opacity", 50) / 100.0), blur = static_cast<float>(num("Blur", 5));
         const Color c = color_param(p.get("Color"), {0, 0, 0, 255});
-        if (new_layer && active_is_raster()) { layer_new(); }
+        if (new_layer) {
+            if (auto e = need_raster(); !e.empty()) return e;
+            // The shadow alone on a layer beneath this one.
+            Image shadow = doc->layer(active_layer()).pixels;
+            const Image original = shadow;
+            effects::drop_shadow(shadow, ox, oy, op, blur, c);
+            uint8_t* d = shadow.data(); const uint8_t* o = original.data();
+            for (size_t i = 0; i < shadow.size_bytes(); i += 4) if (o[i + 3]) { d[i] = d[i + 1] = d[i + 2] = 0; d[i + 3] = 0; }
+            const int above = active_layer();
+            run(std::make_unique<PasteLayerCommand>("Drop Shadow", std::move(shadow)));
+            layer_arrange(-1);
+            doc->set_active_layer(std::min(above + 1, static_cast<int>(doc->layer_count()) - 1));
+            return json::dump(result_ok());
+        }
         return adjust("Drop Shadow", [=](Image& i) { effects::drop_shadow(i, ox, oy, op, blur, c); });
     }
     if (name == "UserDefinedFilter") {
@@ -405,7 +541,64 @@ std::string App::do_command(const std::string& name, const Value& p, bool* ok) {
     if (name == "Blinds") return adjust("Blinds", [w = static_cast<int>(num("Width", 8)), o = static_cast<int>(num("Opacity", 60)), h = flag("Horizontal", false), l = flag("LightFromLeftTop", true), c = color_param(p.get("Color"), {0, 0, 0, 255})](Image& i) { effects::blinds(i, w, o, h, l, c); });
     if (name == "Weave") return adjust("Weave", [g = static_cast<int>(num("GapWidth", 3)), w = static_cast<int>(num("WeaveWidth", 4)), o = static_cast<int>(num("WeaveOpacity", 70)), gc = color_param(p.get("GapColor"), {0, 0, 0, 255}), wc = color_param(p.get("WeaveColor"), {255, 255, 255, 255}), f = flag("FillGaps", true)](Image& i) { effects::weave(i, g, w, o, gc, wc, f); });
 
+    // --- text ---
+    if (name == "TextEx") {
+        if (auto e = need_doc(); !e.empty()) return e;
+        ensure_fonts();
+        std::string text = p.get("Characters").as_string();
+        const Value& strings = p.get("Strings");
+        if (text.empty() && strings.is_array()) for (size_t i = 0; i < strings.size(); ++i) { if (i) text += '\n'; text += strings[i].as_string(); }
+        const std::string font_name = p.get("Font").as_string();
+        int fi = font_index;
+        for (size_t i = 0; i < fonts.size(); ++i) if (!font_name.empty() && fonts[i].family == font_name && (fonts[i].style == "Regular" || fi == font_index)) { fi = static_cast<int>(i); if (fonts[i].style == "Regular") break; }
+        if (fonts.empty()) { *ok = false; return "TextEx: no fonts found"; }
+        fi = std::clamp(fi, 0, static_cast<int>(fonts.size()) - 1);
+        if (!text_font || text_font->info().path != fonts[static_cast<size_t>(fi)].path) { font_index = fi; text_font = text::Font::load(fonts[static_cast<size_t>(fi)].path); }
+        if (!text_font) { *ok = false; return "TextEx: cannot load font"; }
+        const Value& start = p.get("Start");
+        const float x = static_cast<float>(start[0].as_number()), y = static_cast<float>(start[1].as_number());
+        const float size = static_cast<float>(num("PointSize", 24) * 4.0 / 3.0);   // points to pixels at 96 dpi
+        const std::string just = p.get("SetText").as_string("Left");
+        const int align = just == "Center" ? 1 : just == "Right" ? 2 : 0;
+        vec::TextInfo t;
+        t.text = text; t.font_path = text_font->info().path; t.font_family = fonts[static_cast<size_t>(fi)].family + "  " + fonts[static_cast<size_t>(fi)].style;
+        t.size = size; t.align = align; t.antialias = p.get("AntialiasStyle").as_string("Sharp") != "Off";
+        vec::Object o;
+        o.name = text.substr(0, text.find('\n')).substr(0, 32);
+        place_text_object(o, t, x, y);
+        // The original's Start is the baseline start; move the block up by the ascent (approximated by the size).
+        o.translate(0, -size * 0.8f);
+        o.fill = vec::PaintStyle{}; o.stroke = vec::PaintStyle{};
+        if (const Value* fc = p.get("Fill").find("Color")) { o.fill.kind = vec::PaintStyle::Kind::Solid; o.fill.color = color_param(*fc, {0, 0, 0, 255}); }
+        else { o.fill.kind = vec::PaintStyle::Kind::Solid; o.fill.color = background_fill(); }
+        const float lw = static_cast<float>(num("LineWidth", 0));
+        if (lw > 0 && p.get("Stroke").find("Color")) { o.stroke.kind = vec::PaintStyle::Kind::Solid; o.stroke.color = color_param(p.get("Stroke.Color"), {0, 0, 0, 255}); o.stroke_width = lw; }
+        o.antialias = t.antialias;
+        if (p.get("CreateAs").as_string("Vector") == "Vector") {
+            add_vector_object(o, "Text");
+        } else {
+            Image px(doc->width(), doc->height(), {0, 0, 0, 0});
+            vec::rasterize({o}, px);
+            if (p.get("CreateAs").as_string() == "Selection") {
+                Mask m(doc->width(), doc->height());
+                for (size_t i = 0; i < m.size(); ++i) m.data()[i] = px.data()[i * 4 + 3];
+                set_selection("Text Selection", std::move(m));
+            } else run(std::make_unique<PasteLayerCommand>(o.name.empty() ? "Text" : o.name, std::move(px)));
+        }
+        return json::dump(result_ok());
+    }
+
     // --- materials, colors ---
+    if (name == "GetMaterial") {
+        const float* src = flag("IsPrimary", true) ? fg_color : bg_color;
+        Value r = result_ok();
+        Value mat = Value::object();
+        Value col = Value::array();
+        for (int i = 0; i < 3; ++i) col.push(Value::number(std::lround(src[i] * 255)));
+        mat.set("Color", col); mat.set("Pattern", Value::null()); mat.set("Gradient", Value::null()); mat.set("Texture", Value::null()); mat.set("Art", Value::null());
+        r.set("CurrentMaterial", mat);
+        return json::dump(r);
+    }
     if (name == "SetMaterial") {
         const Value& m = p.get("Material");
         const Color c = color_param(m.get("Color"), {0, 0, 0, 255});

@@ -347,6 +347,20 @@ private:
 
 // Moves a layer (or group block) past its neighboring sibling: +1 up
 // towards the top, -1 down; large steps go to the end of the siblings.
+// Any layer-stack restructuring expressed as a function on the document;
+// undo restores the whole state.
+class StateEditCommand : public Command {
+public:
+    StateEditCommand(std::string name, std::function<void(Document&)> fn) : name_(std::move(name)), fn_(std::move(fn)) {}
+    std::string name() const override { return name_; }
+    void execute(Document& doc) override { before_ = doc.snapshot(); fn_(doc); doc.touch(); }
+    void undo(Document& doc) override { doc.restore(before_); }
+private:
+    std::string name_;
+    std::function<void(Document&)> fn_;
+    Document::State before_;
+};
+
 class ArrangeLayerCommand : public Command {
 public:
     ArrangeLayerCommand(size_t index, int steps) : index_(index), steps_(steps) {}
