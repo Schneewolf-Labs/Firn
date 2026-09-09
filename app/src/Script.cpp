@@ -624,7 +624,15 @@ std::string App::do_command(const std::string& name, const Value& p, bool* ok) {
         image_decrease_depth(colors, p.get("ReductionMethod").as_string("ErrorDiffusionDither") != "NearestColorMatch");
         return json::dump(result_ok());
     }
-    if (name == "ColorInc16" || name == "ColorInc256" || name == "IncreaseColorsTo16Million" || name == "DecreaseColorsTo16Million") return json::dump(result_ok());
+    if (name == "ColorInc16" || name == "ColorInc256" || name == "IncreaseColorsTo16Million") return json::dump(result_ok());
+    // The next version's 16-bits-per-channel commands: 16 million colors
+    // means 8 bits per channel there.
+    if (name == "IncreaseColorsTo16Bit" || name == "DecreaseColorsTo16Million") {
+        const int bits = name == "IncreaseColorsTo16Bit" ? 16 : 8;
+        if (doc->bit_depth() != bits)
+            run(std::make_unique<StateEditCommand>(bits == 16 ? "Increase to 16 Bits per Channel" : "Decrease to 8 Bits per Channel", [bits](Document& d) { d.set_bit_depth(bits); }));
+        return json::dump(result_ok());
+    }
 
     *ok = false;
     return "unsupported command " + name;
