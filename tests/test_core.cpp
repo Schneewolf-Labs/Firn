@@ -455,6 +455,18 @@ static std::vector<uint8_t> make_psp_file() {
     return f;
 }
 
+static void test_tube_info() {
+    std::vector<uint8_t> file = make_psp_file();
+    CHECK(!io::load_psp_tube_info(file.data(), file.size()));
+    // Append a tube block: chunk 30, u16 0, step 200, 4 columns, 4 rows, 16 cells, random placement, incremental selection.
+    const uint8_t tube[] = {'~', 'B', 'K', 0, 11, 0, 30, 0, 0, 0, 30, 0, 0, 0, 0, 0, 200, 0, 0, 0, 4, 0, 0, 0, 4, 0, 0, 0, 16, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0};
+    file.insert(file.end(), tube, tube + sizeof(tube));
+    auto t = io::load_psp_tube_info(file.data(), file.size());
+    CHECK(t && t->step == 200 && t->columns == 4 && t->rows == 4 && t->total == 16 && t->placement == 1 && t->selection == 2);
+    auto doc = io::load_psp_from_memory(file.data(), file.size(), nullptr, nullptr);
+    CHECK(doc && doc->layer_count() == 2);  // the extra block does not disturb image loading
+}
+
 static void test_psp_reader() {
     std::vector<uint8_t> file = make_psp_file();
     std::string err;
@@ -1144,6 +1156,7 @@ static void test_photo_fixes() {
 }
 
 int main() {
+    test_tube_info();
     test_photo_fixes();
     test_composite_region_and_speed();
     test_effects_round3();

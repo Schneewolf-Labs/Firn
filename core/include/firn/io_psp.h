@@ -26,6 +26,17 @@ std::unique_ptr<Document> load_document(const std::string& path, std::string* er
 
 bool is_psp_extension(const std::string& path);
 
+// Picture tube metadata (block id 11): how a tube image is divided into
+// cells and how the tool should place them.
+struct TubeInfo {
+    int step = 0;         // stamp spacing in pixels
+    int columns = 1, rows = 1, total = 1;
+    int placement = 1;    // 1 random, 2 continuous
+    int selection = 1;    // 1 random, 2 incremental, 3 angular, 4 pressure, 5 velocity
+};
+std::optional<TubeInfo> load_psp_tube_info(const uint8_t* data, size_t size);
+std::optional<TubeInfo> load_psp_tube_info(const std::string& path);
+
 // The full-size composite the original stored in the file, if it has one
 // in channel (non-JPEG) form. Used by tests to check our compositing.
 std::optional<Image> load_psp_stored_composite(const uint8_t* data, size_t size);

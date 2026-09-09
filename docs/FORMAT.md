@@ -33,6 +33,7 @@ always use the stored length rather than a constant.
 | 4 | Layer | info chunk + bitmap chunk + channel sub-blocks |
 | 5 | Channel | chunk `{len, compressed_len, uncompressed_len, dib_type u16, channel_type u16}` then data |
 | 6 | Selection | not read yet |
+| 11 | Picture tube | chunk `{len=30, u16 0, step u32, columns u32, rows u32, total cells u32, placement u32, selection u32}`; placement 1 random / 2 continuous, selection 1 random / 2 incremental / 3 angular / 4 pressure / 5 velocity; cells are the image divided into columns x rows |
 | 9 | Composite image | bitmap chunk `{len, bitmap_count u16, channel_count u16}` + channel blocks |
 | 16 | Composite bank | chunk `{len, count}` then attribute blocks, then one data block each |
 | 17 | Composite attributes | chunk `{len, width, height, depth u16, compression u16, planes u16, colors u32, type u16}`; type 0 full size, 1 thumbnail |

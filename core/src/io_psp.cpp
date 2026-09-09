@@ -22,7 +22,7 @@ namespace {
 enum : uint16_t {
     kImageBlock = 0, kCreatorBlock = 1, kColorBlock = 2, kLayerStartBlock = 3, kLayerBlock = 4,
     kChannelBlock = 5, kSelectionBlock = 6, kCompositeImageBlock = 9, kCompositeBankBlock = 16,
-    kCompositeAttrBlock = 17, kJpegBlock = 18, kGroupExtBlock = 25, kMaskExtBlock = 26,
+    kCompositeAttrBlock = 17, kJpegBlock = 18, kGroupExtBlock = 25, kMaskExtBlock = 26, kTubeBlock = 11,
 };
 enum : uint16_t { kCompNone = 0, kCompRle = 1, kCompLz77 = 2, kCompJpeg = 3 };
 // Bitmap (DIB) types. Layers use 0/1; thumbnails 5/6; composites 8/9.
@@ -440,6 +440,32 @@ std::unique_ptr<Document> load_psp_from_memory(const uint8_t* data, size_t size,
     }
     doc->set_active_layer(std::clamp(hdr.active_layer, 0, static_cast<int>(doc->layer_count()) - 1));
     return doc;
+}
+
+std::optional<TubeInfo> load_psp_tube_info(const uint8_t* data, size_t size) {
+    const Reader r{data, size};
+    if (size < 36 || std::memcmp(data, kSignature, sizeof(kSignature) - 1) != 0) return std::nullopt;
+    for (const Block& b : blocks(r, 36, size)) {
+        if (b.id != kTubeBlock || !r.ok(b.start, 30)) continue;
+        // chunk_len u32, u16 (0 in every sample), step u32, columns u32, rows u32,
+        // total cells u32, placement mode u32, selection mode u32.
+        TubeInfo t;
+        t.step = r.i32(b.start + 6);
+        t.columns = std::max(1, r.i32(b.start + 10));
+        t.rows = std::max(1, r.i32(b.start + 14));
+        t.total = std::clamp(r.i32(b.start + 18), 1, t.columns * t.rows);
+        t.placement = r.i32(b.start + 22);
+        t.selection = r.i32(b.start + 26);
+        return t;
+    }
+    return std::nullopt;
+}
+
+std::optional<TubeInfo> load_psp_tube_info(const std::string& path) {
+    std::ifstream f(path, std::ios::binary);
+    if (!f) return std::nullopt;
+    std::vector<uint8_t> data((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+    return load_psp_tube_info(data.data(), data.size());
 }
 
 std::optional<Image> load_psp_stored_composite(const uint8_t* data, size_t size) {

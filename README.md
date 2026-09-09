@@ -57,6 +57,10 @@ Hue brushes have no key. `[` and `]` resize the brush.
 Left button uses the foreground material, right button the background.
 Space + drag or middle-drag pans with any tool; Escape cancels a stroke.
 
+Picture Tubes: the Picture Tube tool stamps cells from `.PspTube` files found
+in `~/.config/firn/tubes` (or `FIRN_TUBE_DIRS`), with the original's random,
+incremental and angular selection and random or continuous placement.
+
 Layers can be grouped (Layers > New Layer Group) and carry masks (Layers >
 New Mask Layer); press Edit next to a mask to paint on it in grayscale.
 

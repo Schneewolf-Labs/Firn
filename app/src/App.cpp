@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <filesystem>
 
 #include "imgui.h"
 #include "firn/io.h"
@@ -420,6 +421,54 @@ void App::layer_mask_from_image() {
             m.at(x, y) = static_cast<uint8_t>((c.r * 299 + c.g * 587 + c.b * 114 + 500) / 1000 * c.a / 255);
         }
     layer_set_mask("New Mask Layer", std::move(m));
+}
+
+// --- Picture tubes ---------------------------------------------------------
+
+void App::ensure_tubes() {
+    if (tubes_loaded) return;
+    tubes_loaded = true;
+    namespace fs = std::filesystem;
+    std::vector<fs::path> dirs;
+    if (const char* extra = std::getenv("FIRN_TUBE_DIRS")) {
+        std::string s = extra;
+        size_t start = 0;
+        while (start <= s.size()) {
+            const size_t end = s.find(':', start);
+            dirs.emplace_back(s.substr(start, end == std::string::npos ? std::string::npos : end - start));
+            if (end == std::string::npos) break;
+            start = end + 1;
+        }
+    }
+    dirs.emplace_back(fs::path(Config::directory()) / "tubes");
+#ifdef FIRN_SOURCE_DIR
+    dirs.emplace_back(fs::path(FIRN_SOURCE_DIR) / "WindowsInstall" / "Picture Tubes");
+#endif
+    for (const fs::path& d : dirs) {
+        std::error_code ec;
+        if (!fs::is_directory(d, ec)) continue;
+        for (const auto& de : fs::recursive_directory_iterator(d, fs::directory_options::skip_permission_denied, ec)) {
+            if (!de.is_regular_file(ec)) continue;
+            std::string ext = de.path().extension().string();
+            for (char& c : ext) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+            if (ext != ".psptube") continue;
+            tubes.push_back({de.path().string(), de.path().stem().string()});
+        }
+    }
+    std::sort(tubes.begin(), tubes.end(), [](const TubeEntry& a, const TubeEntry& b) { return a.name < b.name; });
+    if (!tubes.empty() && tube_index < 0) load_tube(0);
+}
+
+bool App::load_tube(int index) {
+    if (index < 0 || index >= static_cast<int>(tubes.size())) return false;
+    std::string err;
+    auto d = io::load_psp(tubes[index].path, &err, nullptr);
+    if (!d) { status = "Tube failed: " + err; return false; }
+    tube_image = d->composite();
+    tube_info = io::load_psp_tube_info(tubes[index].path).value_or(io::TubeInfo{});
+    tube_index = index;
+    tube_loaded_path = tubes[index].path;
+    return true;
 }
 
 // --- Mask editing ----------------------------------------------------------

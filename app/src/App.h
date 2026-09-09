@@ -10,6 +10,7 @@
 #include "imgui.h"
 #include "firn/adjust.h"
 #include "firn/commands.h"
+#include "firn/io_psp.h"
 #include "firn/document.h"
 #include "firn/raster.h"
 #include "firn/text.h"
@@ -194,6 +195,19 @@ struct App {
     float shape_radius = 10.0f;         // rounded rectangle corner radius
     int shape_sides = 6, star_points = 5;
     float star_inner = 0.5f;
+    // Picture tubes
+    struct TubeEntry { std::string path, name; };
+    std::vector<TubeEntry> tubes;
+    bool tubes_loaded = false;
+    int tube_index = -1;
+    firn::Image tube_image;              // the loaded tube sheet
+    firn::io::TubeInfo tube_info;
+    std::string tube_loaded_path;
+    float tube_scale = 1.0f;
+    int tube_step_override = 0;          // 0 = use the tube's own step
+    int tube_placement = 0, tube_selection = 0;  // 0 = as in the file
+    void ensure_tubes();
+    bool load_tube(int index);
     // Text tool
     std::vector<firn::text::FontInfo> fonts;
     bool fonts_loaded = false;

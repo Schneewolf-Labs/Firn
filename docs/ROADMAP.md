@@ -53,6 +53,7 @@ what to work on next.
 - [x] Airbrush, Lighten/Darken, Saturation, Hue, Color Replacer
 - [x] Smudge / Push, Dodge / Burn, Soften / Sharpen brushes
 - [x] Round and square brush shapes
+- [x] Picture Tube tool (.PspTube cells, scale, step, placement, selection modes)
 - [ ] Custom brush tips and stamp textures
 
 ## 6. Text and shapes

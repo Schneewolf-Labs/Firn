@@ -8,6 +8,7 @@
 #include "App.h"
 #include "firn/adjust.h"
 #include "firn/commands.h"
+#include "firn/io_psp.h"
 #include "firn/mask.h"
 #include "firn/raster.h"
 #include "tools/Tool.h"
@@ -807,6 +808,128 @@ private:
     float x0_ = 0, y0_ = 0;
 };
 
+// --- Picture Tube ------------------------------------------------------
+// Stamps cells of a tube sheet along the stroke. Placement: random jitter
+// or continuous spacing; selection: random, incremental or angular (by the
+// direction of motion), as in the original.
+
+class PictureTubeTool : public Tool {
+public:
+    const char* category() const override { return "Fill"; }
+    const char* name() const override { return "Picture Tube"; }
+    void on_press(App& app, const ToolInput& in, ImGuiMouseButton) override {
+        app.ensure_tubes();
+        if (!app.active_is_raster() || app.tube_image.empty()) { if (app.tube_image.empty()) app.status = "No picture tubes found (put .PspTube files in ~/.config/firn/tubes)."; return; }
+        layer_ = app.active_layer();
+        before_ = app.paint_pixels(layer_);
+        active_ = true;
+        last_x_ = in.img_x; last_y_ = in.img_y;
+        carry_ = 0.0f;
+        stamp(app, in.img_x, in.img_y, 0.0f);
+    }
+    void on_drag(App& app, const ToolInput& in, ImGuiMouseButton) override {
+        if (!active_) return;
+        const float step = std::max(1.0f, (app.tube_step_override > 0 ? app.tube_step_override : std::max(1, app.tube_info.step)) * app.tube_scale);
+        const float dx = in.img_x - last_x_, dy = in.img_y - last_y_;
+        const float len = std::hypot(dx, dy);
+        if (len <= 0.0f) return;
+        const float angle = std::atan2(-dy, dx);
+        float t = step - carry_;
+        while (t <= len) {
+            stamp(app, last_x_ + dx * t / len, last_y_ + dy * t / len, angle);
+            t += step;
+        }
+        carry_ = len - (t - step);
+        last_x_ = in.img_x; last_y_ = in.img_y;
+    }
+    void on_release(App& app, const ToolInput&, ImGuiMouseButton) override {
+        if (!active_) return;
+        active_ = false;
+        app.commit_pixels(layer_, name(), before_, app.paint_pixels(layer_));
+    }
+    void cancel(App& app) override {
+        if (active_ && app.doc && layer_ < app.doc->layer_count()) { app.paint_pixels(layer_) = before_; app.paint_touched(layer_); }
+        active_ = false;
+    }
+    void draw_overlay(App& app, const ToolInput& in) override {
+        if (app.tube_image.empty()) return;
+        const float cw = app.tube_image.width() / static_cast<float>(app.tube_info.columns) * app.tube_scale * in.zoom;
+        const float ch = app.tube_image.height() / static_cast<float>(app.tube_info.rows) * app.tube_scale * in.zoom;
+        in.dl->AddRect(ImVec2(in.screen.x - cw * 0.5f, in.screen.y - ch * 0.5f), ImVec2(in.screen.x + cw * 0.5f, in.screen.y + ch * 0.5f), IM_COL32(255, 255, 255, 160));
+    }
+    void draw_options(App& app) override {
+        app.ensure_tubes();
+        ImGui::SetNextItemWidth(200);
+        const char* current = app.tube_index >= 0 ? app.tubes[app.tube_index].name.c_str() : "(none)";
+        if (ImGui::BeginCombo("Tube", current)) {
+            for (size_t i = 0; i < app.tubes.size(); ++i)
+                if (ImGui::Selectable(app.tubes[i].name.c_str(), static_cast<int>(i) == app.tube_index)) app.load_tube(static_cast<int>(i));
+            ImGui::EndCombo();
+        }
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(90);
+        float pct = app.tube_scale * 100.0f;
+        if (ImGui::SliderFloat("Scale", &pct, 10.0f, 250.0f, "%.0f%%")) app.tube_scale = pct / 100.0f;
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(80);
+        ImGui::InputInt("Step", &app.tube_step_override);
+        app.tube_step_override = std::max(0, app.tube_step_override);
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(110);
+        ImGui::Combo("Placement", &app.tube_placement, "As tube\0Random\0Continuous\0");
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(110);
+        ImGui::Combo("Selection", &app.tube_selection, "As tube\0Random\0Incremental\0Angular\0");
+        if (app.tube_index >= 0) {
+            ImGui::SameLine();
+            ImGui::TextDisabled("%d cells, step %d", app.tube_info.total, app.tube_info.step);
+        }
+    }
+
+private:
+    void stamp(App& app, float cx, float cy, float angle) {
+        const io::TubeInfo& t = app.tube_info;
+        const int placement = app.tube_placement ? app.tube_placement : t.placement;
+        const int selection = app.tube_selection ? app.tube_selection : t.selection;
+        // Random placement jitters the position by up to a quarter step.
+        if (placement == 1) {
+            const float step = std::max(1.0f, (app.tube_step_override > 0 ? app.tube_step_override : std::max(1, t.step)) * app.tube_scale);
+            cx += (rnd() - 0.5f) * step * 0.5f;
+            cy += (rnd() - 0.5f) * step * 0.5f;
+        }
+        int cell;
+        if (selection == 2) cell = next_cell_++ % t.total;
+        else if (selection == 3) { float a = angle; if (a < 0) a += 6.2831853f; cell = static_cast<int>(a / 6.2831853f * t.total) % t.total; }
+        else cell = static_cast<int>(rnd() * t.total) % t.total;
+        const int cw = app.tube_image.width() / t.columns, ch = app.tube_image.height() / t.rows;
+        const int col = cell % t.columns, row = cell / t.columns;
+        Image tile = raster::crop(app.tube_image, {col * cw, row * ch, (col + 1) * cw, (row + 1) * ch});
+        const int ow = std::max(1, static_cast<int>(cw * app.tube_scale + 0.5f)), oh = std::max(1, static_cast<int>(ch * app.tube_scale + 0.5f));
+        if (ow != cw || oh != ch) tile = raster::resample(tile, ow, oh, raster::Filter::Bilinear);
+        Image& target = app.paint_pixels(layer_);
+        const int ox = static_cast<int>(std::floor(cx)) - ow / 2, oy = static_cast<int>(std::floor(cy)) - oh / 2;
+        const Mask& clip = app.doc->selection();
+        for (int y = 0; y < oh; ++y)
+            for (int x = 0; x < ow; ++x) {
+                const int dx = ox + x, dy = oy + y;
+                if (dx < 0 || dy < 0 || dx >= target.width() || dy >= target.height()) continue;
+                const Color c = tile.get(x, y);
+                if (c.a == 0) continue;
+                const float cov = clip.empty() ? 1.0f : clip.at(dx, dy) / 255.0f;
+                raster::blend_over(target, dx, dy, c, cov);
+            }
+        const raster::Rect r{ox, oy, ox + ow, oy + oh};
+        app.paint_touched(layer_, &r);
+    }
+    float rnd() { seed_ ^= seed_ << 13; seed_ ^= seed_ >> 17; seed_ ^= seed_ << 5; return (seed_ & 0xFFFFFF) / 16777216.0f; }
+    bool active_ = false;
+    size_t layer_ = 0;
+    Image before_;
+    float last_x_ = 0, last_y_ = 0, carry_ = 0;
+    int next_cell_ = 0;
+    uint32_t seed_ = 0x9E3779B9u;
+};
+
 // --- Text --------------------------------------------------------------
 
 class TextTool : public Tool {
@@ -971,6 +1094,7 @@ std::vector<std::unique_ptr<Tool>> make_default_tools() {
     t.push_back(std::make_unique<BrushTool>(BrushTool::Kind::ColorReplacer));
     t.push_back(std::make_unique<BrushTool>(BrushTool::Kind::Eraser));
     t.push_back(std::make_unique<FloodFillTool>());
+    t.push_back(std::make_unique<PictureTubeTool>());
     t.push_back(std::make_unique<TextTool>());
     t.push_back(std::make_unique<LineTool>());
     t.push_back(std::make_unique<PresetShapeTool>());

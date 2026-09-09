@@ -21,6 +21,8 @@ add_executable(firn
   src/tools/Tools.cpp
 )
 target_include_directories(firn PRIVATE src)
+# Lets a development build find the sample tubes in the (gitignored) backup.
+target_compile_definitions(firn PRIVATE FIRN_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 target_link_libraries(firn PRIVATE firncore imgui SDL2::SDL2 OpenGL::GL)
 if(WIN32)
   # Plain main(); SDL's own entry point is not used.
