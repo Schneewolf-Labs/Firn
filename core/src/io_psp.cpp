@@ -1,5 +1,6 @@
 #include "firn/adjust.h"
 #include "firn/io_psp.h"
+#include "firn/raster16.h"
 
 #include <algorithm>
 #include <cctype>
@@ -118,9 +119,12 @@ struct Header {
 
 // Reads the channel sub-blocks of one raster bitmap into an RGBA image of
 // (w x h). Missing color channels stay 0; missing alpha stays opaque.
+// 16-bit samples are kept when `deep` is given (48-bit files).
 bool read_channels(const Reader& r, const std::vector<Block>& subs, uint16_t comp, uint16_t depth,
-                   const Palette* pal, bool gray, int w, int h, Image& out, std::string& err) {
+                   const Palette* pal, bool gray, int w, int h, Image& out, std::string& err, Image16* deep = nullptr) {
     out = Image(w, h, {0, 0, 0, 255});
+    if (deep && depth == 48) *deep = Image16(w, h, 0, 0, 0, 65535);
+    else deep = nullptr;
     const size_t npx = static_cast<size_t>(w) * h;
     const int bytes_per_sample = depth == 48 ? 2 : 1;
     for (const Block& b : subs) {
@@ -141,9 +145,11 @@ bool read_channels(const Reader& r, const std::vector<Block>& subs, uint16_t com
         uint8_t* px = out.data();
         if (is_trans_dib(bitmap_type)) {
             for (size_t i = 0; i < npx; ++i) px[i * 4 + 3] = data[i];
+            if (deep) for (size_t i = 0; i < npx; ++i) deep->data()[i * 4 + 3] = static_cast<uint16_t>(data[i] * 257);
         } else if (channel_type >= 1 && channel_type <= 3) {
             const int c = channel_type - 1;
             for (size_t i = 0; i < npx; ++i) px[i * 4 + c] = bps == 2 ? data[i * 2 + 1] : data[i];
+            if (deep && bps == 2) for (size_t i = 0; i < npx; ++i) deep->data()[i * 4 + c] = static_cast<uint16_t>(data[i * 2] | (data[i * 2 + 1] << 8));
         } else {
             // Composite channel: palette index or gray level.
             for (size_t i = 0; i < npx; ++i) {
@@ -577,7 +583,19 @@ bool read_layer(const Reader& r, const Block& lb, const Header& hdr, const Palet
     if (sw <= 0 || sh <= 0) return true;  // empty layer
 
     Image tile;
-    if (!read_channels(r, subs, hdr.compression, hdr.depth, pal, hdr.grayscale, sw, sh, tile, err)) return false;
+    Image16 tile16;
+    if (!read_channels(r, subs, hdr.compression, hdr.depth, pal, hdr.grayscale, sw, sh, tile, err, hdr.depth == 48 ? &tile16 : nullptr)) return false;
+    if (hdr.depth == 48 && !tile16.empty()) {
+        Image16 full(doc.width(), doc.height());
+        for (int y = 0; y < sh; ++y) {
+            const int dy = oy + y;
+            if (dy < 0 || dy >= full.height()) continue;
+            const int x0 = std::max(0, -ox), x1 = std::min(sw, full.width() - ox);
+            if (x1 <= x0) continue;
+            std::memcpy(full.data() + (static_cast<size_t>(dy) * full.width() + ox + x0) * 4, tile16.data() + (static_cast<size_t>(y) * sw + x0) * 4, static_cast<size_t>(x1 - x0) * 8);
+        }
+        L.deep = std::make_shared<const Image16>(std::move(full));
+    }
     Image& dst = L.pixels;
     for (int y = 0; y < sh; ++y) {
         const int dy = oy + y;
@@ -947,6 +965,13 @@ bool is_psp_extension(const std::string& path) {
 
 std::unique_ptr<Document> load_document(const std::string& path, std::string* err, std::vector<std::string>* warnings) {
     if (is_psp_extension(path)) return load_psp(path, err, warnings);
+    if (auto deep = load16(path, nullptr)) {
+        auto doc = std::make_unique<Document>(deep->width(), deep->height());
+        Layer& bg = doc->add_layer("Background");
+        bg.background = true;
+        bg.set_deep(std::move(*deep));
+        return doc;
+    }
     auto img = load(path, err);
     if (!img) return nullptr;
     auto doc = std::make_unique<Document>(img->width(), img->height());
@@ -1023,6 +1048,26 @@ std::vector<uint8_t> bitmap_and_channels(const Image& tile, bool with_alpha, uin
     const size_t padded = (static_cast<size_t>(tile.width()) + 3) / 4 * 4 * tile.height();
     for (int c = 0; c < 3; ++c) w.bytes(channel_block(dib_image, static_cast<uint16_t>(c + 1), planes[c], padded * 3));
     if (with_alpha) w.bytes(channel_block(dib_trans, 0, planes[3], padded));
+    return w.out;
+}
+
+// 48-bit variant: 16-bit samples little-endian, alpha stays 8-bit.
+std::vector<uint8_t> bitmap_and_channels16(const Image16& tile, bool with_alpha, uint16_t dib_image, uint16_t dib_trans) {
+    const size_t npx = static_cast<size_t>(tile.width()) * tile.height();
+    std::vector<uint8_t> planes[3], alpha(npx);
+    for (auto& p : planes) p.resize(npx * 2);
+    const uint16_t* s = tile.data();
+    for (size_t i = 0; i < npx; ++i) {
+        for (int c = 0; c < 3; ++c) { planes[c][i * 2] = static_cast<uint8_t>(s[i * 4 + c] & 255); planes[c][i * 2 + 1] = static_cast<uint8_t>(s[i * 4 + c] >> 8); }
+        alpha[i] = static_cast<uint8_t>((s[i * 4 + 3] + 128) / 257);
+    }
+    Writer w;
+    w.u32(8);
+    w.u16(with_alpha ? 2 : 1);
+    w.u16(with_alpha ? 4 : 3);
+    const size_t padded = (static_cast<size_t>(tile.width()) * 2 + 3) / 4 * 4 * tile.height();
+    for (int c = 0; c < 3; ++c) w.bytes(channel_block(dib_image, static_cast<uint16_t>(c + 1), planes[c], padded * 3));
+    if (with_alpha) w.bytes(channel_block(dib_trans, 0, alpha, (static_cast<size_t>(tile.width()) + 3) / 4 * 4 * tile.height()));
     return w.out;
 }
 
@@ -1300,7 +1345,7 @@ std::vector<uint8_t> mask_block(const std::string& owner_name, const Mask& m, bo
     return w.out;
 }
 
-std::vector<uint8_t> layer_block(const Layer& L, int doc_w, int doc_h) {
+std::vector<uint8_t> layer_block(const Layer& L, int doc_w, int doc_h, bool deep_file) {
     const int32_t rect[4] = {0, 0, doc_w, doc_h};
     // Only a Background layer omits the transparency channel; the original
     // writes one for every other layer even when it is fully opaque, and the
@@ -1310,7 +1355,11 @@ std::vector<uint8_t> layer_block(const Layer& L, int doc_w, int doc_h) {
     const int32_t saved_rect[4] = {saved.x0, saved.y0, saved.x1, saved.y1};
     Writer payload;
     payload.bytes(layer_info(L.name, kLayerRaster, rect, saved_rect, L.opacity, L.blend, L.visible, kZeroRect, kZeroRect, false));
-    if (!saved.empty()) {
+    if (!saved.empty() && deep_file) {
+        Image16 tile = raster16::crop(L.is_deep() ? *L.deep : to_image16(L.pixels), saved);
+        if (!with_alpha) { uint16_t* p = tile.data(); for (size_t i = 3; i < tile.size(); i += 4) p[i] = 65535; }
+        payload.bytes(bitmap_and_channels16(tile, with_alpha, kDibImage, kDibTransMask));
+    } else if (!saved.empty()) {
         Image tile = raster::crop(L.pixels, saved);
         if (!with_alpha) {  // opaque layer: drop alpha so readers see a solid Background
             uint8_t* p = tile.data();
@@ -1400,6 +1449,7 @@ std::vector<uint8_t> save_psp_to_memory(const Document& doc) {
     // Layer bank first: the header needs the number of layer blocks written,
     // which exceeds the document's layer count when groups and masks are
     // expanded into their own blocks.
+    const bool deep_file = doc.bit_depth() == 16;
     Writer bank;
     uint32_t block_count = 0;
     bool has_groups = false, has_masks = false, has_vectors = false, has_adjustments = false;
@@ -1446,11 +1496,11 @@ std::vector<uint8_t> save_psp_to_memory(const Document& doc) {
                 bank.bytes(group_block(g, 2));
                 Layer plain = L;
                 plain.opacity = 1.0f; plain.blend = BlendMode::Normal; plain.visible = true;
-                bank.bytes(layer_block(plain, doc.width(), doc.height()));
+                bank.bytes(layer_block(plain, doc.width(), doc.height(), deep_file));
                 bank.bytes(mask_block(L.name, L.mask, L.mask_enabled, doc.width(), doc.height()));
                 block_count += 3; has_groups = true; has_masks = true;
             } else {
-                bank.bytes(layer_block(L, doc.width(), doc.height()));
+                bank.bytes(layer_block(L, doc.width(), doc.height(), deep_file));
                 ++block_count;
             }
             ++i;
@@ -1472,7 +1522,7 @@ std::vector<uint8_t> save_psp_to_memory(const Document& doc) {
 
     Writer img;
     img.u32(46); img.i32(doc.width()); img.i32(doc.height()); img.f64(72.0); img.u8(1);
-    img.u16(kCompLz77); img.u16(24); img.u16(1); img.u32(16777216); img.u8(0);
+    img.u16(kCompLz77); img.u16(deep_file ? 48 : 24); img.u16(1); img.u32(16777216); img.u8(0);
     img.u32(static_cast<uint32_t>(doc.width()) * doc.height() * 3);
     img.i32(std::max(0, doc.active_layer())); img.u16(static_cast<int>(block_count)); img.u32(contents);
     w.block(kImageBlock, img.out);
@@ -1526,6 +1576,11 @@ bool save_psp(const Document& doc, const std::string& path, std::string* err) {
 
 bool save_document(const Document& doc, const std::string& path, std::string* err, int jpeg_quality) {
     if (is_psp_extension(path)) return save_psp(doc, path, err);
+    if (doc.bit_depth() == 16) {
+        std::string ext = path.substr(path.find_last_of('.') == std::string::npos ? path.size() : path.find_last_of('.') + 1);
+        for (char& c : ext) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        if (ext == "png") return save_png16(doc.composite16(), path, err);
+    }
     return save(doc.composite(), path, err, jpeg_quality);
 }
 

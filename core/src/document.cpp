@@ -82,6 +82,42 @@ void Document::restore(const State& s) {
     alpha_ = s.alpha;
 }
 
+Image16 Document::composite16() const {
+    bool simple = true;
+    for (const auto& L : layers_) if (L->visible && (!L->is_raster() || L->blend != BlendMode::Normal || L->has_mask() || L->depth > 0)) simple = false;
+    if (!simple) return to_image16(composite());
+    Image16 out(width_, height_);
+    for (const auto& L : layers_) {
+        if (!L->visible || L->opacity <= 0.0f || L->pixels.empty()) continue;
+        const Image16 src = L->is_deep() ? *L->deep : to_image16(L->pixels);
+        const float op = L->opacity;
+        uint16_t* d = out.data();
+        const uint16_t* s = src.data();
+        for (size_t i = 0; i < out.size(); i += 4) {
+            const float sa = s[i + 3] / 65535.0f * op, da = d[i + 3] / 65535.0f;
+            const float oa = sa + da * (1.0f - sa);
+            if (oa <= 0.0f) continue;
+            for (int c = 0; c < 3; ++c) d[i + c] = static_cast<uint16_t>(std::clamp((s[i + c] * sa + d[i + c] * da * (1.0f - sa)) / oa, 0.0f, 65535.0f) + 0.5f);
+            d[i + 3] = static_cast<uint16_t>(oa * 65535.0f + 0.5f);
+        }
+    }
+    return out;
+}
+
+int Document::bit_depth() const {
+    for (const auto& L : layers_) if (L->is_deep()) return 16;
+    return 8;
+}
+
+void Document::set_bit_depth(int bits) {
+    for (auto& L : layers_) {
+        if (!L->is_raster()) continue;
+        if (bits == 16 && !L->is_deep()) L->deep = std::make_shared<const Image16>(to_image16(L->pixels));
+        else if (bits != 16) L->deep.reset();
+    }
+    touch();
+}
+
 void Document::rasterize_vector_layer(size_t i) {
     Layer& L = layer(i);
     if (!L.is_vector()) return;

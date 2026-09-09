@@ -15,6 +15,7 @@ add_library(firncore STATIC
   src/effects_art.cpp
   src/json.cpp
   src/print.cpp
+  src/raster16.cpp
   src/io.cpp
   src/io_psp.cpp
 )

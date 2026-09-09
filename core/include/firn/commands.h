@@ -58,8 +58,12 @@ public:
 
 protected:
     virtual void apply(Image& img) = 0;
+    // 16-bit layers: return true after applying to the deep copy; false
+    // (the default) drops the layer to 8 bits first, undoably.
+    virtual bool apply16(Image16&) { return false; }
     size_t layer_;
     Image before_;
+    std::shared_ptr<const Image16> before_deep_;
 };
 
 class InvertCommand : public LayerPixelCommand {
@@ -67,6 +71,7 @@ public:
     using LayerPixelCommand::LayerPixelCommand;
     std::string name() const override { return "Invert"; }
 protected:
+    bool apply16(Image16& img) override;
     void apply(Image& img) override;
 };
 
@@ -76,6 +81,7 @@ public:
     std::string name() const override { return "Fill"; }
 protected:
     void apply(Image& img) override;
+    bool apply16(Image16& img) override;
     Color color_;
 };
 
@@ -91,13 +97,15 @@ protected:
 // Any in-place pixel function as an undoable, selection-clipped command.
 class AdjustCommand : public LayerPixelCommand {
 public:
-    AdjustCommand(size_t layer, std::string name, std::function<void(Image&)> fn)
-        : LayerPixelCommand(layer), name_(std::move(name)), fn_(std::move(fn)) {}
+    AdjustCommand(size_t layer, std::string name, std::function<void(Image&)> fn, std::function<void(Image16&)> fn16 = nullptr)
+        : LayerPixelCommand(layer), name_(std::move(name)), fn_(std::move(fn)), fn16_(std::move(fn16)) {}
     std::string name() const override { return name_; }
 protected:
     void apply(Image& img) override { fn_(img); }
+    bool apply16(Image16& img) override { if (!fn16_) return false; fn16_(img); return true; }
     std::string name_;
     std::function<void(Image&)> fn_;
+    std::function<void(Image16&)> fn16_;
 };
 
 class GrayscaleCommand : public LayerPixelCommand {
@@ -168,6 +176,7 @@ private:
 
 // Records an edit made live by a tool (brush stroke, flood fill). The tool
 // snapshots the layer before it starts and hands both images over on commit.
+// Tools paint at 8 bits: the layer's deep data is dropped, undoably.
 class LayerSnapshotCommand : public Command {
 public:
     LayerSnapshotCommand(size_t layer, std::string name, Image before, Image after)
@@ -175,10 +184,13 @@ public:
     std::string name() const override { return name_; }
     void execute(Document& doc) override;
     void undo(Document& doc) override;
+    // For edits already applied live: remembers and drops the layer's deep data.
+    void capture_deep(Document& doc);
 private:
     size_t layer_;
     std::string name_;
     Image before_, after_;
+    std::shared_ptr<const Image16> before_deep_;
 };
 
 // Whole-document geometry that keeps the canvas size. These are involutions,

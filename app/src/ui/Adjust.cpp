@@ -73,9 +73,23 @@ void App::preview_update(const std::function<void(Image&)>& op, bool force) {
     preview.approximate = true;
 }
 
-void App::preview_commit() {
+void App::preview_commit(const std::function<void(Image16&)>& op16) {
     if (!preview.active || !doc) return;
-    commit(std::make_unique<LayerSnapshotCommand>(preview.layer, preview.name, preview.before, doc->layer(preview.layer).pixels));
+    Layer& L = doc->layer(preview.layer);
+    if (L.is_deep() && op16) {
+        // Re-run the operation on the 16-bit data through a command (the
+        // 8-bit preview is discarded).
+        const Image after = L.pixels;
+        L.pixels = preview.before;
+        const std::string name = preview.name;
+        run(std::make_unique<AdjustCommand>(preview.layer, name, [after](Image& img) { img = after; }, op16));
+        preview = Preview{};
+        return;
+    }
+    auto cmd = std::make_unique<LayerSnapshotCommand>(preview.layer, preview.name, preview.before, L.pixels);
+    cmd->capture_deep(*doc);
+    if (L.is_deep() == false && preview.before.width() > 0 && before_was_deep_) status = preview.name + ": the layer is now 8 bits per channel";
+    commit(std::move(cmd));
     preview = Preview{};
 }
 
@@ -92,9 +106,9 @@ namespace {
 // One modal dialog: `body` draws the controls and returns true when a
 // parameter changed; `op` applies the current parameters to an image.
 template <class Body, class Op>
-void adjust_modal(App& app, const char* title, Body body, Op op) {
+void adjust_modal(App& app, const char* title, Body body, Op op, std::function<void(Image16&)> op16 = nullptr) {
     if (!ImGui::BeginPopupModal(title, nullptr, ImGuiWindowFlags_AlwaysAutoResize)) return;
-    if (ImGui::IsWindowAppearing()) app.preview_begin(title);
+    if (ImGui::IsWindowAppearing()) { app.preview_begin(title); app.before_was_deep_ = app.doc && app.doc->layer(app.preview.layer).is_deep(); }
     if (body()) app.preview.dirty = true;
     app.preview_update(op);
     ImGui::Separator();
@@ -104,7 +118,7 @@ void adjust_modal(App& app, const char* title, Body body, Op op) {
     const bool cancel = ImGui::Button("Cancel", ImVec2(80, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape, false);
     if (ok) {
         app.preview_update(op, true);
-        app.preview_commit();
+        app.preview_commit(op16);
         ImGui::CloseCurrentPopup();
     } else if (cancel) {
         app.preview_cancel();
@@ -231,7 +245,8 @@ void App::draw_adjust_dialogs() {
 
     adjust_modal(*this, "Brightness/Contrast",
         [&] { bool c = ImGui::SliderInt("Brightness", &bc_brightness, -255, 255); c |= ImGui::SliderInt("Contrast", &bc_contrast, -100, 100); return c; },
-        [&](Image& img) { adjust::apply_lut(img, adjust::brightness_contrast_lut(bc_brightness, bc_contrast)); });
+        [&](Image& img) { adjust::apply_lut(img, adjust::brightness_contrast_lut(bc_brightness, bc_contrast)); },
+        [&](Image16& img) { raster16::brightness_contrast(img, bc_brightness, bc_contrast); });
 
     adjust_modal(*this, "Curves",
         [&] {
@@ -240,7 +255,8 @@ void App::draw_adjust_dialogs() {
             if (ImGui::SmallButton("Reset")) { curve_points = {{0, 0}, {255, 255}}; c = true; }
             return c;
         },
-        [&](Image& img) { adjust::apply_lut(img, adjust::curve_lut(curve_points)); });
+        [&](Image& img) { adjust::apply_lut(img, adjust::curve_lut(curve_points)); },
+        [&](Image16& img) { raster16::curves(img, curve_points); });
 
     adjust_modal(*this, "Gamma Correction",
         [&] {
@@ -255,7 +271,8 @@ void App::draw_adjust_dialogs() {
             }
             return c;
         },
-        [&](Image& img) { adjust::apply_luts(img, adjust::gamma_lut(gamma_rgb[0]), adjust::gamma_lut(gamma_rgb[1]), adjust::gamma_lut(gamma_rgb[2])); });
+        [&](Image& img) { adjust::apply_luts(img, adjust::gamma_lut(gamma_rgb[0]), adjust::gamma_lut(gamma_rgb[1]), adjust::gamma_lut(gamma_rgb[2])); },
+        [&](Image16& img) { raster16::gamma(img, gamma_link ? gamma_value : gamma_rgb[0], gamma_link ? gamma_value : gamma_rgb[1], gamma_link ? gamma_value : gamma_rgb[2]); });
 
     adjust_modal(*this, "Levels",
         [&] {
@@ -272,11 +289,13 @@ void App::draw_adjust_dialogs() {
             if (ImGui::SmallButton("Reset")) { lv_in_lo = 0; lv_in_hi = 255; lv_gamma = 1; lv_out_lo = 0; lv_out_hi = 255; c = true; }
             return c;
         },
-        [&](Image& img) { adjust::apply_lut(img, adjust::levels_lut(lv_in_lo, lv_gamma, lv_in_hi, lv_out_lo, lv_out_hi)); });
+        [&](Image& img) { adjust::apply_lut(img, adjust::levels_lut(lv_in_lo, lv_gamma, lv_in_hi, lv_out_lo, lv_out_hi)); },
+        [&](Image16& img) { raster16::levels(img, lv_in_lo, lv_gamma, lv_in_hi, lv_out_lo, lv_out_hi); });
 
     adjust_modal(*this, "Threshold",
         [&] { draw_histogram(preview.histogram, ImVec2(256, 60)); return ImGui::SliderInt("Threshold", &threshold_value, 1, 255); },
-        [&](Image& img) { adjust::grayscale_then_threshold(img, threshold_value); });
+        [&](Image& img) { adjust::grayscale_then_threshold(img, threshold_value); },
+        [&](Image16& img) { raster16::threshold(img, threshold_value); });
 
     adjust_modal(*this, "Channel Mixer",
         [&] {
@@ -290,7 +309,8 @@ void App::draw_adjust_dialogs() {
             if (ImGui::SmallButton("Reset")) { mixer = adjust::ChannelMix{}; c = true; }
             return c;
         },
-        [&](Image& img) { adjust::channel_mixer(img, mixer); });
+        [&](Image& img) { adjust::channel_mixer(img, mixer); },
+        [&](Image16& img) { raster16::channel_mixer(img, mixer); });
 
     adjust_modal(*this, "Colorize",
         [&] {
@@ -298,7 +318,8 @@ void App::draw_adjust_dialogs() {
             c |= ImGui::SliderInt("Saturation", &colorize_sat, 0, 255);
             return c;
         },
-        [&](Image& img) { adjust::colorize(img, colorize_hue, colorize_sat); });
+        [&](Image& img) { adjust::colorize(img, colorize_hue, colorize_sat); },
+        [&](Image16& img) { raster16::colorize(img, colorize_hue, colorize_sat); });
 
     adjust_modal(*this, "Hue/Saturation/Lightness",
         [&] {
@@ -307,7 +328,8 @@ void App::draw_adjust_dialogs() {
             c |= ImGui::SliderInt("Lightness", &hsl_l, -100, 100);
             return c;
         },
-        [&](Image& img) { adjust::hsl_adjust(img, hsl_h, hsl_s, hsl_l); });
+        [&](Image& img) { adjust::hsl_adjust(img, hsl_h, hsl_s, hsl_l); },
+        [&](Image16& img) { raster16::hsl_adjust(img, hsl_h, hsl_s, hsl_l); });
 
     adjust_modal(*this, "Average",
         [&] { return ImGui::SliderInt("Radius", &box_radius, 1, 50); },
@@ -315,11 +337,13 @@ void App::draw_adjust_dialogs() {
 
     adjust_modal(*this, "Gaussian Blur",
         [&] { return ImGui::SliderFloat("Radius", &blur_radius, 0.1f, 100.0f, "%.1f", ImGuiSliderFlags_Logarithmic); },
-        [&](Image& img) { raster::gaussian_blur(img, blur_radius); });
+        [&](Image& img) { raster::gaussian_blur(img, blur_radius); },
+        [&](Image16& img) { raster16::gaussian_blur(img, blur_radius); });
 
     adjust_modal(*this, "Posterize",
         [&] { return ImGui::SliderInt("Levels", &posterize_levels, 2, 255, "%d", ImGuiSliderFlags_Logarithmic); },
-        [&](Image& img) { adjust::apply_lut(img, adjust::posterize_lut(posterize_levels)); });
+        [&](Image& img) { adjust::apply_lut(img, adjust::posterize_lut(posterize_levels)); },
+        [&](Image16& img) { raster16::posterize(img, posterize_levels); });
 
     adjust_modal(*this, "Solarize",
         [&] { return ImGui::SliderInt("Threshold", &solarize_threshold, 1, 254); },
@@ -396,7 +420,8 @@ void App::draw_adjust_dialogs() {
             if (ImGui::SmallButton("Reset")) { color_balance = adjust::ColorBalance{}; c = true; }
             return c;
         },
-        [&](Image& img) { adjust::color_balance(img, color_balance); });
+        [&](Image& img) { adjust::color_balance(img, color_balance); },
+        [&](Image16& img) { raster16::color_balance(img, color_balance); });
 
     adjust_modal(*this, "Sepia Toning",
         [&] { return ImGui::SliderInt("Amount to age", &sepia_amount, 1, 100); },

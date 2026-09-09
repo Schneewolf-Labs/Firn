@@ -31,4 +31,26 @@ void Image::fill(Color c) {
     }
 }
 
+
+Image16::Image16(int width, int height, uint16_t r, uint16_t g, uint16_t b, uint16_t a)
+    : width_(width), height_(height), pixels_(static_cast<size_t>(width) * height * 4) {
+    for (size_t i = 0; i < pixels_.size(); i += 4) { pixels_[i] = r; pixels_[i + 1] = g; pixels_[i + 2] = b; pixels_[i + 3] = a; }
+}
+
+Image to_image8(const Image16& deep) {
+    Image out(deep.width(), deep.height());
+    const uint16_t* s = deep.data();
+    uint8_t* d = out.data();
+    for (size_t i = 0; i < deep.size(); ++i) d[i] = static_cast<uint8_t>((s[i] + 128) / 257);
+    return out;
+}
+
+Image16 to_image16(const Image& img) {
+    Image16 out(img.width(), img.height());
+    const uint8_t* s = img.data();
+    uint16_t* d = out.data();
+    for (size_t i = 0; i < out.size(); ++i) d[i] = static_cast<uint16_t>(s[i] * 257);
+    return out;
+}
+
 }  // namespace firn

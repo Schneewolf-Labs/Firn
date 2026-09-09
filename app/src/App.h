@@ -15,6 +15,7 @@
 #include "firn/json.h"
 #include "firn/document.h"
 #include "firn/raster.h"
+#include "firn/raster16.h"
 #include "firn/text.h"
 #include "firn/vector.h"
 #include "Config.h"
@@ -139,10 +140,11 @@ struct App {
         bool live = true;               // small layer: exact re-apply on every change
         bool approximate = false;       // the layer holds a region/proxy preview, not the exact result
     } preview;
+    bool before_was_deep_ = false;
     firn::raster::Rect visible_image_rect;  // part of the image inside the canvas view, updated by draw_canvas
     void preview_begin(const char* name);
     void preview_update(const std::function<void(firn::Image&)>& op, bool force = false);
-    void preview_commit();
+    void preview_commit(const std::function<void(firn::Image16&)>& op16 = nullptr);   // with op16, 16-bit layers get an exact re-run
     void preview_cancel();
     void draw_adjust_dialogs();
     bool open_adjust_by_title(const char* title);   // opens an adjust/effect dialog by its title (scripting, driver)

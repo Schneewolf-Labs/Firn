@@ -58,9 +58,9 @@ void App::draw_status_bar() {
     if (doc) {
         char right[160];
         if (cursor_inside)
-            std::snprintf(right, sizeof(right), "(%d, %d)   %d%%   %d x %d   %zu layer(s)", cursor_x, cursor_y, static_cast<int>(zoom * 100 + 0.5f), doc->width(), doc->height(), doc->layer_count());
+            std::snprintf(right, sizeof(right), "(%d, %d)   %d%%   %d x %d x %d   %zu layer(s)", cursor_x, cursor_y, static_cast<int>(zoom * 100 + 0.5f), doc->width(), doc->height(), doc->bit_depth() * 3, doc->layer_count());
         else
-            std::snprintf(right, sizeof(right), "%d%%   %d x %d   %zu layer(s)", static_cast<int>(zoom * 100 + 0.5f), doc->width(), doc->height(), doc->layer_count());
+            std::snprintf(right, sizeof(right), "%d%%   %d x %d x %d   %zu layer(s)", static_cast<int>(zoom * 100 + 0.5f), doc->width(), doc->height(), doc->bit_depth() * 3, doc->layer_count());
         const float w = ImGui::CalcTextSize(right).x;
         ImGui::SameLine(ImGui::GetWindowWidth() - w - 12.0f);
         ImGui::TextUnformatted(right);

@@ -8,6 +8,7 @@
 #include "firn/effects.h"
 #include "firn/photo.h"
 #include "firn/mask.h"
+#include "firn/raster16.h"
 #include "imgui.h"
 
 using namespace firn;
@@ -98,17 +99,19 @@ void App::draw_menu() {
         if (ImGui::MenuItem("Add Borders...", nullptr, false, has_doc)) show_borders_dialog = true;
         if (ImGui::MenuItem("Picture Frame...", nullptr, false, has_doc)) show_frame_dialog = true;
         ImGui::Separator();
-        if (ImGui::MenuItem("Grayscale", nullptr, false, has_layer)) run(std::make_unique<GrayscaleCommand>(layer));
+        if (ImGui::MenuItem("Grayscale", nullptr, false, has_layer)) run(std::make_unique<AdjustCommand>(layer, "Grayscale", raster::grayscale, raster16::grayscale));
         if (ImGui::BeginMenu("Decrease Color Depth", has_layer)) {
             if (ImGui::MenuItem("2 Colors...")) { depth_colors = 2; show_depth_dialog = true; }
             if (ImGui::MenuItem("16 Colors...")) { depth_colors = 16; show_depth_dialog = true; }
             if (ImGui::MenuItem("256 Colors...")) { depth_colors = 256; show_depth_dialog = true; }
             if (ImGui::MenuItem("32K Colors")) image_decrease_depth(32, false);
             if (ImGui::MenuItem("64K Colors")) image_decrease_depth(64, false);
+            if (ImGui::MenuItem("8 Bits per Channel", nullptr, false, doc->bit_depth() == 16)) run(std::make_unique<StateEditCommand>("Decrease to 8 Bits per Channel", [](Document& d) { d.set_bit_depth(8); }));
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("Increase Color Depth", has_doc)) {
-            ImGui::TextDisabled("Images are always 16 million colors here.");
+            ImGui::TextDisabled("Images are 16 million colors; 16 bits per channel is optional.");
+            if (ImGui::MenuItem("16 Bits per Channel", nullptr, false, doc->bit_depth() == 8)) run(std::make_unique<StateEditCommand>("Increase to 16 Bits per Channel", [](Document& d) { d.set_bit_depth(16); }));
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("Palette", has_layer)) {

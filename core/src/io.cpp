@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cstring>
+#include <vector>
 
 #define STB_IMAGE_IMPLEMENTATION
 #define STBI_NO_HDR
@@ -25,6 +26,63 @@ std::optional<Image> load(const std::string& path, std::string* err) {
     std::memcpy(img.data(), px, img.size_bytes());
     stbi_image_free(px);
     return img;
+}
+
+std::optional<Image16> load16(const std::string& path, std::string* err) {
+    if (!stbi_is_16_bit(path.c_str())) return std::nullopt;
+    int w = 0, h = 0, n = 0;
+    stbi_us* px = stbi_load_16(path.c_str(), &w, &h, &n, 4);
+    if (!px) { if (err) *err = stbi_failure_reason() ? stbi_failure_reason() : "unknown error"; return std::nullopt; }
+    Image16 img(w, h);
+    std::memcpy(img.data(), px, img.size() * 2);
+    stbi_image_free(px);
+    return img;
+}
+
+namespace {
+uint32_t crc32_of(const uint8_t* data, size_t n, uint32_t crc = 0xFFFFFFFFu) {
+    static uint32_t table[256];
+    static bool init = false;
+    if (!init) { for (uint32_t i = 0; i < 256; ++i) { uint32_t c = i; for (int k = 0; k < 8; ++k) c = (c & 1) ? 0xEDB88320u ^ (c >> 1) : c >> 1; table[i] = c; } init = true; }
+    for (size_t i = 0; i < n; ++i) crc = table[(crc ^ data[i]) & 255] ^ (crc >> 8);
+    return crc;
+}
+void png_chunk(std::vector<uint8_t>& out, const char* type, const std::vector<uint8_t>& data) {
+    auto be32 = [&](uint32_t v) { out.push_back(static_cast<uint8_t>(v >> 24)); out.push_back(static_cast<uint8_t>(v >> 16)); out.push_back(static_cast<uint8_t>(v >> 8)); out.push_back(static_cast<uint8_t>(v)); };
+    be32(static_cast<uint32_t>(data.size()));
+    std::vector<uint8_t> td(type, type + 4);
+    td.insert(td.end(), data.begin(), data.end());
+    out.insert(out.end(), td.begin(), td.end());
+    be32(crc32_of(td.data(), td.size()) ^ 0xFFFFFFFFu);
+}
+}  // namespace
+
+bool save_png16(const Image16& img, const std::string& path, std::string* err) {
+    // Filter type 0 rows of big-endian RGBA16, deflated with stb's encoder.
+    const size_t row = static_cast<size_t>(img.width()) * 8;
+    std::vector<uint8_t> raw((row + 1) * img.height());
+    for (int y = 0; y < img.height(); ++y) {
+        uint8_t* d = raw.data() + static_cast<size_t>(y) * (row + 1);
+        *d++ = 0;
+        const uint16_t* s = img.data() + static_cast<size_t>(y) * img.width() * 4;
+        for (size_t i = 0; i < static_cast<size_t>(img.width()) * 4; ++i) { *d++ = static_cast<uint8_t>(s[i] >> 8); *d++ = static_cast<uint8_t>(s[i] & 255); }
+    }
+    int zlen = 0;
+    unsigned char* z = stbi_zlib_compress(raw.data(), static_cast<int>(raw.size()), &zlen, 8);
+    if (!z) { if (err) *err = "deflate failed"; return false; }
+    std::vector<uint8_t> out{0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A};
+    std::vector<uint8_t> ihdr;
+    auto be32 = [&](uint32_t v) { ihdr.push_back(static_cast<uint8_t>(v >> 24)); ihdr.push_back(static_cast<uint8_t>(v >> 16)); ihdr.push_back(static_cast<uint8_t>(v >> 8)); ihdr.push_back(static_cast<uint8_t>(v)); };
+    be32(static_cast<uint32_t>(img.width())); be32(static_cast<uint32_t>(img.height()));
+    ihdr.push_back(16); ihdr.push_back(6); ihdr.push_back(0); ihdr.push_back(0); ihdr.push_back(0);   // 16-bit RGBA
+    png_chunk(out, "IHDR", ihdr);
+    png_chunk(out, "IDAT", std::vector<uint8_t>(z, z + zlen));
+    STBIW_FREE(z);
+    png_chunk(out, "IEND", {});
+    std::ofstream f(path, std::ios::binary);
+    if (!f) { if (err) *err = "cannot write " + path; return false; }
+    f.write(reinterpret_cast<const char*>(out.data()), static_cast<std::streamsize>(out.size()));
+    return static_cast<bool>(f);
 }
 
 bool save_png(const Image& img, const std::string& path, std::string* err) {

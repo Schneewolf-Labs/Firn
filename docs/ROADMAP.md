@@ -126,7 +126,12 @@ for. Ranked by value per effort; work top to bottom, tick as they land.
       SimpleCaption from the original run end to end
 - [x] Plain printing: File > Print (Ctrl+P) writes a one-page PDF (paper, orientation,
       margins, fit or scale) and hands it to the system spooler, or saves the PDF
-- [ ] 16-bit channels and color management
+- [x] 16-bit channels: Image16 layer data beside the 8-bit display pixels, exact
+      16-bit adjustments (levels, curves, brightness/contrast, gamma, HSL, colorize,
+      color balance, channel mixer, threshold, posterize, invert, grayscale, blur,
+      fill), geometry, 48-bit native and 16-bit PNG I/O; 8-bit-only operations
+      reduce the layer undoably with a status note
+- [ ] Color management: ICC profiles (read, embed, assign, convert), managed display
 
 ## Dropped (not worth the effort for this port)
 

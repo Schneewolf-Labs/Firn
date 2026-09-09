@@ -242,7 +242,11 @@ void App::save() {
 void App::run(std::unique_ptr<Command> cmd) {
     if (!doc) return;
     status = cmd->name();
+    const int a = active_layer();
+    const bool was_deep = a >= 0 && doc->layer(a).is_deep();
     history.run(*doc, std::move(cmd));
+    if (was_deep && a < static_cast<int>(doc->layer_count()) && !doc->layer(a).is_deep() && doc->layer(a).is_raster())
+        status += " (this operation runs at 8 bits per channel; the layer was reduced)";
 }
 
 void App::commit(std::unique_ptr<Command> cmd) {
@@ -672,7 +676,9 @@ void App::commit_pixels(size_t layer, const std::string& name, Image before, con
         run(std::make_unique<SetMaskCommand>(layer, name + " (Mask)", std::move(after_mask), doc->layer(layer).mask_enabled));
         return;
     }
-    commit(std::make_unique<LayerSnapshotCommand>(layer, name, std::move(before), after));
+    auto cmd = std::make_unique<LayerSnapshotCommand>(layer, name, std::move(before), after);
+    if (doc->layer(layer).is_deep()) { cmd->capture_deep(*doc); status = name + ": the layer is now 8 bits per channel (painting runs at 8 bits)"; }
+    commit(std::move(cmd));
 }
 
 void App::layer_promote_background() {

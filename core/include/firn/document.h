@@ -32,6 +32,12 @@ struct Layer {
     Mask mask;
     bool mask_enabled = true;
     Image pixels;           // empty for groups; the rendered cache for vector layers
+    // 16-bit layers keep their true pixels here; `pixels` is derived from it
+    // for display. Shared between snapshots, so never modify in place:
+    // replace it with a new Image16 (see set_deep).
+    std::shared_ptr<const Image16> deep;
+    bool is_deep() const { return deep != nullptr; }
+    void set_deep(Image16 img) { pixels = to_image8(img); deep = std::make_shared<const Image16>(std::move(img)); }
     std::vector<vec::Object> objects;  // vector layers only
     Adjustment adjustment;             // adjustment layers only; its mask limits where it applies
     bool is_raster() const { return type == LayerType::Raster; }
@@ -97,6 +103,9 @@ public:
 
     // Flatten visible layers with their blend modes into one image.
     Image composite() const;
+    // 16-bit flatten: exact when every visible layer is a plain Normal raster
+    // layer without a mask; otherwise the 8-bit composite widened.
+    Image16 composite16() const;
     // Flatten layers [from, to] (inclusive, bottom to top) honoring
     // visibility, groups and masks. Members of a group must be included
     // with their group for the group's opacity and mask to apply.
@@ -107,6 +116,9 @@ public:
 
     // Re-renders a vector layer's objects into its pixel cache.
     void rasterize_vector_layer(size_t i);
+    // Bits per channel: 16 when any raster layer carries deep data.
+    int bit_depth() const;
+    void set_bit_depth(int bits);   // 16 promotes every raster layer, 8 drops the deep data
 
     std::vector<AlphaChannel>& alpha_channels() { return alpha_; }
     const std::vector<AlphaChannel>& alpha_channels() const { return alpha_; }

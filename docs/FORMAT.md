@@ -253,9 +253,10 @@ all layers intact; `scripts/original-open.sh` automates that check.
 
 ## Not read
 
-The current selection block (id 6), adjustment layer contents, vector
-text shapes (no sample carries one), color profiles, and the 16-bit path
-beyond truncation to 8 bits.
+The current selection block (id 6), vector text shapes (no sample carries
+one), and color profiles. 48-bit files are read into 16-bit layer data
+(little-endian samples per channel block; transparency stays 8-bit) and
+written back the same way when a document is 16 bits per channel.
 
 ## References
 

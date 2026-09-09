@@ -141,7 +141,7 @@ std::string Driver::state_text(App& app) const {
     o << " docs=" << app.docs.size();
     if (app.doc) {
         o << " title=\"" << app.doc_title << "\" modified=" << (app.modified() ? 1 : 0);
-        o << " size=" << app.doc->width() << "x" << app.doc->height() << " layers=" << app.doc->layer_count();
+        o << " size=" << app.doc->width() << "x" << app.doc->height() << " depth=" << app.doc->bit_depth() << " layers=" << app.doc->layer_count();
         const int a = app.active_layer();
         o << " active=" << a;
         if (a >= 0) {

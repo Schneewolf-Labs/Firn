@@ -1,6 +1,7 @@
 #include "firn/commands.h"
 
 #include "firn/raster.h"
+#include "firn/raster16.h"
 
 #include <algorithm>
 #include <cmath>
@@ -53,9 +54,21 @@ void CommandStack::clear() {
 // --- LayerPixelCommand -------------------------------------------------
 
 void LayerPixelCommand::execute(Document& doc) {
-    if (!doc.layer(layer_).is_raster()) return;
-    Image& img = doc.layer(layer_).pixels;
-    before_ = img;
+    Layer& L = doc.layer(layer_);
+    if (!L.is_raster()) return;
+    before_ = L.pixels;
+    before_deep_ = L.deep;
+    if (L.is_deep()) {
+        Image16 work = *L.deep;
+        if (apply16(work)) {
+            if (doc.has_selection()) raster16::apply_through_mask(work, *L.deep, doc.selection());
+            L.set_deep(std::move(work));
+            doc.touch();
+            return;
+        }
+        L.deep.reset();   // this operation runs at 8 bits
+    }
+    Image& img = L.pixels;
     apply(img);
     raster::apply_through_mask(img, before_, doc.selection());
     doc.touch();
@@ -64,10 +77,13 @@ void LayerPixelCommand::execute(Document& doc) {
 void LayerPixelCommand::undo(Document& doc) {
     if (!doc.layer(layer_).is_raster()) return;
     doc.layer(layer_).pixels = before_;
+    doc.layer(layer_).deep = before_deep_;
     doc.touch();
 }
 
 // --- Pixel ops ---------------------------------------------------------
+
+bool InvertCommand::apply16(Image16& img) { raster16::invert(img); return true; }
 
 void InvertCommand::apply(Image& img) {
     uint8_t* p = img.data();
@@ -78,6 +94,8 @@ void InvertCommand::apply(Image& img) {
         p[i + 2] = 255 - p[i + 2];
     }
 }
+
+bool FillCommand::apply16(Image16& img) { raster16::fill(img, color_); return true; }
 
 void FillCommand::apply(Image& img) { img.fill(color_); }
 
@@ -93,13 +111,22 @@ void GaussianBlurCommand::apply(Image& img) { raster::gaussian_blur(img, radius_
 // --- Snapshot / geometry -----------------------------------------------
 
 void LayerSnapshotCommand::execute(Document& doc) {
-    doc.layer(layer_).pixels = after_;
+    Layer& L = doc.layer(layer_);
+    if (L.is_deep() && !before_deep_) before_deep_ = L.deep;
+    L.deep.reset();
+    L.pixels = after_;
     doc.touch();
 }
 
 void LayerSnapshotCommand::undo(Document& doc) {
     doc.layer(layer_).pixels = before_;
+    doc.layer(layer_).deep = before_deep_;
     doc.touch();
+}
+
+void LayerSnapshotCommand::capture_deep(Document& doc) {
+    Layer& L = doc.layer(layer_);
+    if (L.is_deep()) { before_deep_ = L.deep; L.deep.reset(); }
 }
 
 namespace {
@@ -114,6 +141,7 @@ void flip_mask(Mask& m, bool vertical) {
 void FlipCommand::execute(Document& doc) {
     for (size_t i = 0; i < doc.layer_count(); ++i) {
         if (doc.layer(i).is_raster()) raster::flip_vertical(doc.layer(i).pixels);
+        if (doc.layer(i).is_deep()) { Image16 d = *doc.layer(i).deep; raster16::flip_vertical(d); doc.layer(i).deep = std::make_shared<const Image16>(std::move(d)); }
         if (doc.layer(i).has_mask()) flip_mask(doc.layer(i).mask, true);
     }
     doc.touch();
@@ -122,6 +150,7 @@ void FlipCommand::execute(Document& doc) {
 void MirrorCommand::execute(Document& doc) {
     for (size_t i = 0; i < doc.layer_count(); ++i) {
         if (doc.layer(i).is_raster()) raster::mirror_horizontal(doc.layer(i).pixels);
+        if (doc.layer(i).is_deep()) { Image16 d = *doc.layer(i).deep; raster16::mirror_horizontal(d); doc.layer(i).deep = std::make_shared<const Image16>(std::move(d)); }
         if (doc.layer(i).has_mask()) flip_mask(doc.layer(i).mask, false);
     }
     doc.touch();
@@ -386,6 +415,7 @@ void MergeLayersCommand::execute(Document& doc) {
             doc.layer(index_).depth != doc.layer(index_ - 1).depth) return;
         // Both layers composited against nothing; the lower keeps its identity.
         Layer merged = doc.layer(index_ - 1);
+        merged.deep.reset();   // merges are 8-bit
         merged.pixels = doc.composite_range(index_ - 1, index_);
         merged.opacity = 1.0f;
         merged.blend = BlendMode::Normal;
@@ -468,6 +498,7 @@ void CropCommand::transform(const Document::State& in, Document::State& out) {
     for (const Layer& L : in.layers) {
         Layer n = L;
         if (L.is_raster()) n.pixels = raster::crop(L.pixels, r);
+        if (L.is_deep()) n.deep = std::make_shared<const Image16>(raster16::crop(*L.deep, r));
         if (L.has_mask()) { Mask m(out.width, out.height); for (int y = 0; y < out.height; ++y) for (int x = 0; x < out.width; ++x) { const int sx = x + r.x0, sy = y + r.y0; m.at(x, y) = (sx >= 0 && sy >= 0 && sx < in.width && sy < in.height) ? L.mask.at(sx, sy) : 255; } n.mask = std::move(m); }
         out.layers.push_back(std::move(n));
     }
@@ -485,6 +516,7 @@ void ResizeCommand::transform(const Document::State& in, Document::State& out) {
     for (const Layer& L : in.layers) {
         Layer n = L;
         if (L.is_raster()) n.pixels = raster::resample(L.pixels, w_, h_, filter_);
+        if (L.is_deep()) n.deep = std::make_shared<const Image16>(raster16::resample(*L.deep, w_, h_, filter_));
         if (L.has_mask()) { Mask m(w_, h_); raster::resample_mask(L.mask.data(), in.width, in.height, m.data(), w_, h_); n.mask = std::move(m); }
         out.layers.push_back(std::move(n));
     }
@@ -505,6 +537,11 @@ void CanvasSizeCommand::transform(const Document::State& in, Document::State& ou
         if (L.is_raster()) {
             n.pixels = raster::crop(L.pixels, r);
             if (L.background) fill_transparent(n.pixels, fill_);
+        }
+        if (L.is_deep()) {
+            Image16 d = raster16::crop(*L.deep, r);
+            if (L.background) { uint16_t* q = d.data(); for (size_t i = 0; i < d.size(); i += 4) if (q[i + 3] == 0) { q[i] = static_cast<uint16_t>(fill_.r * 257); q[i + 1] = static_cast<uint16_t>(fill_.g * 257); q[i + 2] = static_cast<uint16_t>(fill_.b * 257); q[i + 3] = 65535; } }
+            n.deep = std::make_shared<const Image16>(std::move(d));
         }
         if (L.has_mask()) { Mask m(w_, h_, 255); const raster::Rect c = r.clipped(in.width, in.height); for (int y = c.y0; y < c.y1; ++y) for (int x = c.x0; x < c.x1; ++x) m.at(x - r.x0, y - r.y0) = L.mask.at(x, y); n.mask = std::move(m); }
         out.layers.push_back(std::move(n));
@@ -541,6 +578,8 @@ void WarpLayersCommand::transform(const Document::State& in, Document::State& ou
         const Layer& L = in.layers[li];
         Layer n = L;
         const bool touch = layer_ < 0 || static_cast<int>(li) == layer_;
+        if (touch) n.deep.reset();   // warps run at 8 bits
+        else if (L.is_deep() && !crop_.empty()) n.deep = std::make_shared<const Image16>(raster16::crop(*L.deep, crop));
         if (L.is_raster() && !L.pixels.empty()) {
             if (touch) {
                 n.pixels = raster::warp(L.pixels, H, out.width, out.height);
@@ -583,6 +622,11 @@ void RotateCommand::transform(const Document::State& in, Document::State& out) {
         if (L.is_raster()) {
             n.pixels = quarter ? raster::rotate_quarter(L.pixels, q) : raster::rotate(L.pixels, d);
             if (!quarter && L.background) fill_transparent(n.pixels, fill_);
+        }
+        if (L.is_deep()) {
+            Image16 dd = quarter ? raster16::rotate_quarter(*L.deep, q) : raster16::rotate(*L.deep, d);
+            if (!quarter && L.background) { uint16_t* qq = dd.data(); for (size_t i = 0; i < dd.size(); i += 4) if (qq[i + 3] == 0) { qq[i] = static_cast<uint16_t>(fill_.r * 257); qq[i + 1] = static_cast<uint16_t>(fill_.g * 257); qq[i + 2] = static_cast<uint16_t>(fill_.b * 257); qq[i + 3] = 65535; } }
+            n.deep = std::make_shared<const Image16>(std::move(dd));
         }
         if (L.has_mask()) n.mask = rotate_mask(L.mask);
         out.layers.push_back(std::move(n));

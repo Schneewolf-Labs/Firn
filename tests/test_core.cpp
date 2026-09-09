@@ -18,6 +18,7 @@
 #include "firn/io_psp.h"
 #include "firn/mask.h"
 #include "firn/raster.h"
+#include "firn/raster16.h"
 #include "firn/text.h"
 #include "firn/photo.h"
 #include "firn/vector.h"
@@ -1789,7 +1790,63 @@ static void test_print() {
     CHECK(data.find("/Width 40 /Height 30") != std::string::npos && data.find("\xFF\xD8") != std::string::npos);
 }
 
+static void test_16bit() {
+    Image16 d(4, 4, 1000, 30000, 65535, 65535);
+    Image e = to_image8(d);
+    CHECK(e.get(0, 0).r == 4 && e.get(0, 0).g == 117 && e.get(0, 0).b == 255);
+    Image16 back = to_image16(e);
+    CHECK(back.data()[2] == 65535 && back.data()[0] == 4 * 257);
+    // LUT precision beyond 8 bits survives.
+    raster16::brightness_contrast(d, 0, 0);
+    CHECK(d.data()[0] == 1000);
+    raster16::levels(d, 0, 1.0f, 255, 0, 255);
+    CHECK(std::abs(d.data()[0] - 1000) <= 1);
+    raster16::invert(d);
+    CHECK(std::abs(d.data()[0] - 64535) <= 1);
+    // Document depth, commands and undo.
+    Document doc(8, 8);
+    doc.add_layer("Background").pixels = Image(8, 8, {100, 100, 100, 255});
+    doc.set_active_layer(0);
+    CHECK(doc.bit_depth() == 8);
+    doc.set_bit_depth(16);
+    CHECK(doc.bit_depth() == 16 && doc.layer(0).is_deep() && doc.layer(0).deep->data()[0] == 25700);
+    CommandStack stack;
+    stack.run(doc, std::make_unique<AdjustCommand>(0, "Levels", [](Image& i) { adjust::apply_lut(i, adjust::levels_lut(0, 1.0f, 200, 0, 255)); }, [](Image16& i) { raster16::levels(i, 0, 1.0f, 200, 0, 255); }));
+    CHECK(doc.layer(0).is_deep() && doc.layer(0).deep->data()[0] > 25700 && doc.layer(0).pixels.get(0, 0).r > 100);
+    stack.run(doc, std::make_unique<AdjustCommand>(0, "Emboss", [](Image& i) { effects::emboss(i); }));   // 8-bit only
+    CHECK(!doc.layer(0).is_deep() && doc.bit_depth() == 8);
+    stack.undo(doc);
+    CHECK(doc.layer(0).is_deep());
+    stack.run(doc, std::make_unique<ResizeCommand>(4, 4, raster::Filter::Bilinear));
+    CHECK(doc.layer(0).is_deep() && doc.layer(0).deep->width() == 4);
+    stack.run(doc, std::make_unique<RotateCommand>(90.0f, Color{0, 0, 0, 255}));
+    CHECK(doc.layer(0).is_deep());
+    // Native and PNG round trips keep 16-bit values.
+    Image16 fine(6, 5);
+    for (size_t i = 0; i < fine.size(); i += 4) { fine.data()[i] = static_cast<uint16_t>(i * 37 % 65536); fine.data()[i + 1] = 12345; fine.data()[i + 2] = 60000; fine.data()[i + 3] = 65535; }
+    Document d16(6, 5);
+    Layer& L = d16.add_layer("Background");
+    L.background = true;
+    L.set_deep(fine);
+    const std::string tmp = "/tmp/firn_test_16.pspimage";
+    CHECK(io::save_psp(d16, tmp, nullptr));
+    std::string err; std::vector<std::string> warnings;
+    auto rt = io::load_psp(tmp, &err, &warnings);
+    std::remove(tmp.c_str());
+    CHECK(rt && rt->bit_depth() == 16 && rt->layer(0).is_deep());
+    CHECK(rt->layer(0).deep->data()[1] == 12345 && rt->layer(0).deep->data()[2] == 60000 && rt->layer(0).deep->data()[4 * 7] == fine.data()[4 * 7]);
+    const std::string png = "/tmp/firn_test_16.png";
+    CHECK(io::save_png16(fine, png));
+    auto p16 = io::load16(png);
+    CHECK(p16 && p16->width() == 6 && p16->data()[1] == 12345 && p16->data()[2] == 60000);
+    auto dpng = io::load_document(png, &err, &warnings);
+    std::remove(png.c_str());
+    CHECK(dpng && dpng->bit_depth() == 16);
+    CHECK(!io::load16(std::string(FIRN_SOURCE_DIR) + "/README.md"));
+}
+
 int main() {
+    test_16bit();
     test_print();
     test_json();
     test_art_effects();
