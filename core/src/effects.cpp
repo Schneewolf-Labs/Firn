@@ -236,4 +236,191 @@ void drop_shadow(Image& img, int ox, int oy, float opacity, float blur, Color co
     img = std::move(shadow);
 }
 
+// --- Distortion --------------------------------------------------------
+
+namespace {
+
+// Rebuilds img by sampling src at map(x, y) -> (sx, sy) with premultiplied
+// bilinear filtering; samples outside the image are transparent.
+template <class Map>
+void remap(Image& img, Map map) {
+    const Image src = img;
+    const int w = img.width(), h = img.height();
+    uint8_t* d = img.data();
+    for (int y = 0; y < h; ++y)
+        for (int x = 0; x < w; ++x) {
+            float sx, sy;
+            map(x + 0.5f, y + 0.5f, sx, sy);
+            sx -= 0.5f; sy -= 0.5f;
+            const int x0 = static_cast<int>(std::floor(sx)), y0 = static_cast<int>(std::floor(sy));
+            const float fx = sx - x0, fy = sy - y0;
+            float acc[4] = {0, 0, 0, 0};
+            for (int j = 0; j < 2; ++j)
+                for (int i = 0; i < 2; ++i) {
+                    const int px = std::clamp(x0 + i, 0, w - 1), py = std::clamp(y0 + j, 0, h - 1);
+                    const float wt = (i ? fx : 1 - fx) * (j ? fy : 1 - fy);
+                    const uint8_t* s = src.data() + (static_cast<size_t>(py) * w + px) * 4;
+                    const float a = s[3] / 255.0f;
+                    acc[0] += s[0] * a * wt; acc[1] += s[1] * a * wt; acc[2] += s[2] * a * wt; acc[3] += s[3] * wt;
+                }
+            uint8_t* p = d + (static_cast<size_t>(y) * w + x) * 4;
+            const float a = std::clamp(acc[3], 0.0f, 255.0f);
+            for (int c = 0; c < 3; ++c) p[c] = a > 0 ? clamp8(acc[c] / (a / 255.0f)) : 0;
+            p[3] = clamp8(a);
+        }
+}
+
+}  // namespace
+
+void wave(Image& img, float ha, float hw, float va, float vw) {
+    const float kh = hw > 0 ? 6.2831853f / hw : 0.0f, kv = vw > 0 ? 6.2831853f / vw : 0.0f;
+    remap(img, [&](float x, float y, float& sx, float& sy) {
+        sx = x + (kh > 0 ? ha * std::sin(y * kh) : 0.0f);
+        sy = y + (kv > 0 ? va * std::sin(x * kv) : 0.0f);
+    });
+}
+
+void pinch(Image& img, int strength) {
+    const float s = std::clamp(strength, -100, 100) / 100.0f;
+    if (s == 0.0f) return;
+    const float cx = img.width() * 0.5f, cy = img.height() * 0.5f;
+    const float radius = std::min(cx, cy);
+    remap(img, [&](float x, float y, float& sx, float& sy) {
+        const float dx = x - cx, dy = y - cy;
+        const float d = std::hypot(dx, dy);
+        if (d >= radius || d == 0.0f) { sx = x; sy = y; return; }
+        const float t = d / radius;
+        // Pinch samples further out (pulls pixels in); punch samples closer in.
+        const float f = s > 0 ? std::pow(t, 1.0f - s * 0.75f) : std::pow(t, 1.0f + (-s) * 1.5f);
+        const float scale = f / t;
+        sx = cx + dx * scale;
+        sy = cy + dy * scale;
+    });
+}
+
+void twirl(Image& img, float degrees) {
+    const float cx = img.width() * 0.5f, cy = img.height() * 0.5f;
+    const float radius = std::min(cx, cy);
+    const float rad = degrees * 3.14159265f / 180.0f;
+    remap(img, [&](float x, float y, float& sx, float& sy) {
+        const float dx = x - cx, dy = y - cy;
+        const float d = std::hypot(dx, dy);
+        if (d >= radius) { sx = x; sy = y; return; }
+        const float t = 1.0f - d / radius;
+        const float a = rad * t * t;
+        const float c = std::cos(a), s = std::sin(a);
+        sx = cx + dx * c - dy * s;
+        sy = cy + dx * s + dy * c;
+    });
+}
+
+// --- 3D ----------------------------------------------------------------
+
+void buttonize(Image& img, int width, float opacity, Color color, bool transparent_edge) {
+    const int w = img.width(), h = img.height();
+    width = std::clamp(width, 1, std::max(1, std::min(w, h) / 2));
+    opacity = std::clamp(opacity, 0.0f, 1.0f);
+    uint8_t* p = img.data();
+    for (int y = 0; y < h; ++y)
+        for (int x = 0; x < w; ++x) {
+            const int dl = x, dr = w - 1 - x, dt = y, db = h - 1 - y;
+            const int d = std::min({dl, dr, dt, db});
+            if (d >= width) continue;
+            // Which edge are we on? Top/left are lit, bottom/right in shadow.
+            const bool lit = (dl == d && dl <= dt) || (dt == d && dt < dl);
+            const float t = 1.0f - static_cast<float>(d) / width;  // 1 at the border
+            uint8_t* px = p + (static_cast<size_t>(y) * w + x) * 4;
+            if (transparent_edge) {
+                const float k = lit ? 1.0f + 0.6f * t * opacity : 1.0f - 0.6f * t * opacity;
+                for (int c = 0; c < 3; ++c) px[c] = clamp8(px[c] * k);
+            } else {
+                const float shade = lit ? 1.3f : 0.7f;
+                const Color edge{clamp8(color.r * shade), clamp8(color.g * shade), clamp8(color.b * shade), 255};
+                raster::blend_over(img, x, y, edge, opacity * (0.4f + 0.6f * t));
+            }
+        }
+}
+
+namespace {
+
+// Chamfer (3-4) distance to the nearest unset pixel, in pixel units.
+std::vector<float> distance_inside(const uint8_t* region, const Image& img, int w, int h) {
+    std::vector<float> d(static_cast<size_t>(w) * h, 1e9f);
+    auto inside = [&](int x, int y) {
+        const uint8_t v = region ? region[static_cast<size_t>(y) * w + x] : img.data()[(static_cast<size_t>(y) * w + x) * 4 + 3];
+        return v >= 128;
+    };
+    for (int y = 0; y < h; ++y)
+        for (int x = 0; x < w; ++x)
+            if (!inside(x, y) || x == 0 || y == 0 || x == w - 1 || y == h - 1) d[static_cast<size_t>(y) * w + x] = inside(x, y) ? 1.0f : 0.0f;
+    auto at = [&](int x, int y) -> float& { return d[static_cast<size_t>(y) * w + x]; };
+    for (int y = 1; y < h; ++y)
+        for (int x = 0; x < w; ++x) {
+            float v = at(x, y);
+            v = std::min(v, at(x, y - 1) + 1.0f);
+            if (x > 0) v = std::min({v, at(x - 1, y) + 1.0f, at(x - 1, y - 1) + 1.4142f});
+            if (x + 1 < w) v = std::min(v, at(x + 1, y - 1) + 1.4142f);
+            at(x, y) = v;
+        }
+    for (int y = h - 2; y >= 0; --y)
+        for (int x = w - 1; x >= 0; --x) {
+            float v = at(x, y);
+            v = std::min(v, at(x, y + 1) + 1.0f);
+            if (x + 1 < w) v = std::min({v, at(x + 1, y) + 1.0f, at(x + 1, y + 1) + 1.4142f});
+            if (x > 0) v = std::min(v, at(x - 1, y + 1) + 1.4142f);
+            at(x, y) = v;
+        }
+    return d;
+}
+
+}  // namespace
+
+void inner_bevel(Image& img, const uint8_t* region, int width, float angle_degrees, float depth, float ambient) {
+    const int w = img.width(), h = img.height();
+    width = std::max(1, width);
+    const std::vector<float> dist = distance_inside(region, img, w, h);
+    // Height ramp: 0 at the edge, 1 at `width` inwards (smoothstep).
+    std::vector<float> height(dist.size());
+    for (size_t i = 0; i < dist.size(); ++i) {
+        const float t = std::clamp(dist[i] / width, 0.0f, 1.0f);
+        height[i] = t * t * (3 - 2 * t);
+    }
+    const float rad = angle_degrees * 3.14159265f / 180.0f;
+    const float lx = std::cos(rad), ly = -std::sin(rad);  // light from `angle` (0 = right, 90 = top)
+    uint8_t* p = img.data();
+    for (int y = 0; y < h; ++y)
+        for (int x = 0; x < w; ++x) {
+            const size_t i = static_cast<size_t>(y) * w + x;
+            if (dist[i] <= 0.0f || dist[i] > width) continue;
+            const float gx = height[static_cast<size_t>(y) * w + std::min(x + 1, w - 1)] - height[static_cast<size_t>(y) * w + std::max(x - 1, 0)];
+            const float gy = height[static_cast<size_t>(std::min(y + 1, h - 1)) * w + x] - height[static_cast<size_t>(std::max(y - 1, 0)) * w + x];
+            // The surface normal is (-gx, -gy, 1); facing the light brightens.
+            const float shade = -(gx * lx + gy * ly) * depth * 4.0f;
+            const float k = ambient + shade;
+            uint8_t* px = p + i * 4;
+            for (int c = 0; c < 3; ++c) px[c] = clamp8(px[c] * k);
+        }
+}
+
+void cutout(Image& img, const uint8_t* region, int ox, int oy, float opacity, float blur, Color color) {
+    const int w = img.width(), h = img.height();
+    // Shadow mask: where the offset region does NOT cover, inside the region.
+    Image shadow(w, h, {color.r, color.g, color.b, 0});
+    auto inside = [&](int x, int y) {
+        if (x < 0 || y < 0 || x >= w || y >= h) return false;
+        const uint8_t v = region ? region[static_cast<size_t>(y) * w + x] : img.data()[(static_cast<size_t>(y) * w + x) * 4 + 3];
+        return v >= 128;
+    };
+    for (int y = 0; y < h; ++y)
+        for (int x = 0; x < w; ++x)
+            shadow.data()[(static_cast<size_t>(y) * w + x) * 4 + 3] = inside(x - ox, y - oy) ? 0 : 255;
+    if (blur > 0.0f) raster::gaussian_blur(shadow, blur);
+    for (int y = 0; y < h; ++y)
+        for (int x = 0; x < w; ++x) {
+            if (!inside(x, y)) continue;
+            const uint8_t a = shadow.data()[(static_cast<size_t>(y) * w + x) * 4 + 3];
+            if (a) raster::blend_over(img, x, y, {color.r, color.g, color.b, 255}, a / 255.0f * std::clamp(opacity, 0.0f, 1.0f));
+        }
+}
+
 }  // namespace firn::effects

@@ -865,7 +865,49 @@ static void test_adjust_round2() {
     CHECK(out.get(1, 0).r == 255 && out.get(0, 0).r == 0);
 }
 
+static void test_effects_round2() {
+    // Zero-strength distortions are identities (up to rounding at the edge).
+    Image g(9, 9);
+    for (int y = 0; y < 9; ++y) for (int x = 0; x < 9; ++x) g.set(x, y, {static_cast<uint8_t>(x * 28), static_cast<uint8_t>(y * 28), 0, 255});
+    Image w = g; effects::wave(w, 0, 10, 0, 10);
+    Image p = g; effects::pinch(p, 0);
+    Image t = g; effects::twirl(t, 0);
+    for (int y = 1; y < 8; ++y) for (int x = 1; x < 8; ++x) {
+        CHECK(w.get(x, y).r == g.get(x, y).r && p.get(x, y).r == g.get(x, y).r && t.get(x, y).r == g.get(x, y).r);
+    }
+    // Wave shifts rows; twirl moves an off-centre pixel around.
+    Image wv = g; effects::wave(wv, 2, 4, 0, 0);
+    bool moved = false;
+    for (int y = 0; y < 9; ++y) moved |= wv.get(4, y).r != g.get(4, y).r;
+    CHECK(moved);
+    Image tw = g; effects::twirl(tw, 90);
+    CHECK(tw.get(4, 4).r == g.get(4, 4).r && tw.get(6, 4).r != g.get(6, 4).r);
+    // Pinch pulls edge colour towards the centre.
+    Image pi = g; effects::pinch(pi, 80);
+    CHECK(pi.get(6, 4).r > g.get(6, 4).r);
+    // Buttonize: top-left edge lighter, bottom-right darker (transparent edge).
+    Image bt(20, 20, {100, 100, 100, 255});
+    effects::buttonize(bt, 4, 1.0f, {0, 0, 0, 255}, true);
+    CHECK(bt.get(0, 10).r > 100 && bt.get(19, 10).r < 100 && bt.get(10, 10).r == 100);
+    Image bs(20, 20, {100, 100, 100, 255});
+    effects::buttonize(bs, 4, 1.0f, {200, 0, 0, 255}, false);
+    CHECK(bs.get(0, 10).r > 100 && bs.get(10, 10).r == 100);
+    // Inner bevel on an opaque square in a transparent layer: lit from the left
+    // brightens the left edge and darkens the right edge; centre untouched.
+    Image bv(30, 30, {0, 0, 0, 0});
+    for (int y = 5; y < 25; ++y) for (int x = 5; x < 25; ++x) bv.set(x, y, {128, 128, 128, 255});
+    effects::inner_bevel(bv, nullptr, 5, 180.0f, 1.0f, 1.0f);
+    CHECK(bv.get(6, 15).r > 128 && bv.get(23, 15).r < 128 && bv.get(15, 15).r == 128);
+    CHECK(bv.get(2, 2).a == 0);
+    // Cutout with a selection region: darkens near the top-left inside edge, not the centre.
+    Image co(30, 30, {200, 200, 200, 255});
+    Mask sel = mask::rectangle(30, 30, 5, 5, 25, 25, false);
+    effects::cutout(co, sel.data(), 3, 3, 1.0f, 0.0f, {0, 0, 0, 255});
+    CHECK(co.get(6, 6).r < 50 && co.get(15, 15).r == 200 && co.get(2, 2).r == 200);
+}
+
 int main() {
+    test_effects_round2();
     test_adjust_round2();
     test_text_and_polyline();
     test_stroke_modes();

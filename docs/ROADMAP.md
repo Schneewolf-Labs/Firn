@@ -43,7 +43,8 @@ what to work on next.
 - [x] Median, Motion Blur, Blur More, Soften
 - [x] Find Edges, Enhance Edges, Emboss, Erode / Dilate
 - [x] Drop Shadow, Mosaic (pixelate)
-- [ ] Inner/Outer Bevel, Cutout, Buttonize, Sepia, Wave, Pinch/Punch, Twirl
+- [x] Inner Bevel, Cutout, Buttonize, Sepia, Wave, Pinch/Punch, Twirl
+- [ ] Outer Bevel, Chrome, Halftone, Page Curl, Ripple, Spherize, Lens Distortion
 
 ## 5. Retouch and paint tools
 

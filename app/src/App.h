@@ -107,7 +107,7 @@ struct App {
     // Adjustment / effect dialogs with live preview (ui/Adjust.cpp)
     enum class Adj { None, BrightnessContrast, Curves, Gamma, Levels, Threshold, ChannelMixer, Colorize, HSL,
                      Average, Gaussian, Posterize, Solarize, UnsharpMask, Median, MotionBlur, Mosaic, AddNoise, DropShadow,
-                     ColorBalance, Sepia, HueMap };
+                     ColorBalance, Sepia, HueMap, Wave, Pinch, Twirl, Buttonize, InnerBevel, Cutout };
     Adj open_adjust = Adj::None;
     struct Preview {
         bool active = false;
@@ -142,6 +142,12 @@ struct App {
     firn::adjust::ColorBalance color_balance; int cb_range = 1;
     int sepia_amount = 50;
     firn::adjust::HueMap hue_map_params;
+    float wave_ha = 5, wave_hw = 40, wave_va = 0, wave_vw = 40;
+    int pinch_strength = 50;
+    float twirl_degrees = 90;
+    int button_width = 10; float button_opacity = 0.75f; float button_color[3] = {0.5f, 0.5f, 0.5f}; bool button_transparent = false;
+    int bevel_width = 10; float bevel_angle = 315, bevel_depth = 1.0f, bevel_ambient = 1.0f;
+    int cutout_x = 5, cutout_y = 5; float cutout_opacity = 0.6f, cutout_blur = 5; float cutout_color[3] = {0, 0, 0};
     int show_sel_dialog = 0;            // 1 expand, 2 contract, 3 feather
     bool show_layer_props_dialog = false;
     bool show_resize_dialog = false;

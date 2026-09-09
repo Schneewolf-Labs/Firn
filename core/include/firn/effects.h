@@ -35,4 +35,23 @@ void dilate(Image& img);          // 3x3 maximum
 // existing pixels. Meant for layers with transparency.
 void drop_shadow(Image& img, int offset_x, int offset_y, float opacity, float blur, Color color);
 
+// --- Distortion (inverse-mapped, bilinear, premultiplied) --------------
+// Wave: horizontal displacement varies with y, vertical with x.
+void wave(Image& img, float h_amplitude, float h_wavelength, float v_amplitude, float v_wavelength);
+// Pinch (strength > 0) pulls towards the centre, Punch (< 0) pushes out. -100..100.
+void pinch(Image& img, int strength);
+// Twirl about the centre by `degrees` at the middle, falling off to the edge.
+void twirl(Image& img, float degrees);
+
+// --- 3D ---------------------------------------------------------------
+// Buttonize: bevelled border of `width` px in `color` at `opacity`;
+// `transparent_edge` lightens/darkens the image instead of painting colour.
+void buttonize(Image& img, int width, float opacity, Color color, bool transparent_edge);
+// Inner Bevel on the region where `region` (document-sized mask, 0..255,
+// or the alpha channel when null) is set: shades by a height ramp of
+// `width` px lit from `angle` degrees.
+void inner_bevel(Image& img, const uint8_t* region, int width, float angle_degrees, float depth, float ambient);
+// Cutout: a shadow cast into the region by its edge (the inverse of Drop Shadow).
+void cutout(Image& img, const uint8_t* region, int offset_x, int offset_y, float opacity, float blur, Color color);
+
 }  // namespace firn::effects

@@ -140,7 +140,16 @@ void App::draw_menu() {
     }
     if (ImGui::BeginMenu("Effects")) {
         if (ImGui::BeginMenu("3D Effects", has_layer)) {
+            if (ImGui::MenuItem("Buttonize...")) open_adjust = Adj::Buttonize;
+            if (ImGui::MenuItem("Cutout...")) open_adjust = Adj::Cutout;
             if (ImGui::MenuItem("Drop Shadow...")) open_adjust = Adj::DropShadow;
+            if (ImGui::MenuItem("Inner Bevel...")) open_adjust = Adj::InnerBevel;
+            ImGui::EndMenu();
+        }
+        if (ImGui::BeginMenu("Distortion Effects", has_layer)) {
+            if (ImGui::MenuItem("Pinch / Punch...")) open_adjust = Adj::Pinch;
+            if (ImGui::MenuItem("Twirl...")) open_adjust = Adj::Twirl;
+            if (ImGui::MenuItem("Wave...")) open_adjust = Adj::Wave;
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("Artistic Effects", has_layer)) {

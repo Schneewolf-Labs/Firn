@@ -158,7 +158,8 @@ void App::draw_adjust_dialogs() {
     static const char* kTitles[] = {nullptr, "Brightness/Contrast", "Curves", "Gamma Correction", "Levels", "Threshold",
                                     "Channel Mixer", "Colorize", "Hue/Saturation/Lightness", "Average", "Gaussian Blur",
                                     "Posterize", "Solarize", "Unsharp Mask", "Median", "Motion Blur", "Mosaic",
-                                    "Add Noise", "Drop Shadow", "Color Balance", "Sepia Toning", "Hue Map"};
+                                    "Add Noise", "Drop Shadow", "Color Balance", "Sepia Toning", "Hue Map", "Wave",
+                                    "Pinch", "Twirl", "Buttonize", "Inner Bevel", "Cutout"};
     if (open_adjust != Adj::None) {
         if (doc && active_layer() >= 0) ImGui::OpenPopup(kTitles[static_cast<int>(open_adjust)]);
         open_adjust = Adj::None;
@@ -343,4 +344,66 @@ void App::draw_adjust_dialogs() {
             return c;
         },
         [&](Image& img) { adjust::hue_map(img, hue_map_params); });
+
+    adjust_modal(*this, "Wave",
+        [&] {
+            bool c = ImGui::SliderFloat("Horizontal amplitude", &wave_ha, 0.0f, 100.0f, "%.0f");
+            c |= ImGui::SliderFloat("Horizontal wavelength", &wave_hw, 1.0f, 500.0f, "%.0f");
+            c |= ImGui::SliderFloat("Vertical amplitude", &wave_va, 0.0f, 100.0f, "%.0f");
+            c |= ImGui::SliderFloat("Vertical wavelength", &wave_vw, 1.0f, 500.0f, "%.0f");
+            return c;
+        },
+        [&](Image& img) { effects::wave(img, wave_ha, wave_hw, wave_va, wave_vw); });
+
+    adjust_modal(*this, "Pinch",
+        [&] { return ImGui::SliderInt("Strength (negative = punch)", &pinch_strength, -100, 100); },
+        [&](Image& img) { effects::pinch(img, pinch_strength); });
+
+    adjust_modal(*this, "Twirl",
+        [&] { return ImGui::SliderFloat("Degrees", &twirl_degrees, -720.0f, 720.0f, "%.0f"); },
+        [&](Image& img) { effects::twirl(img, twirl_degrees); });
+
+    adjust_modal(*this, "Buttonize",
+        [&] {
+            bool c = ImGui::SliderInt("Edge width", &button_width, 1, 200);
+            float op = button_opacity * 100.0f;
+            if (ImGui::SliderFloat("Opacity", &op, 0.0f, 100.0f, "%.0f%%")) { button_opacity = op / 100.0f; c = true; }
+            c |= ImGui::Checkbox("Transparent edge", &button_transparent);
+            if (!button_transparent) { ImGui::SameLine(); c |= ImGui::ColorEdit3("Color", button_color, ImGuiColorEditFlags_NoInputs); }
+            return c;
+        },
+        [&](Image& img) {
+            auto c8 = [](float f) { return static_cast<uint8_t>(f * 255.0f + 0.5f); };
+            effects::buttonize(img, button_width, button_opacity, {c8(button_color[0]), c8(button_color[1]), c8(button_color[2]), 255}, button_transparent);
+        });
+
+    adjust_modal(*this, "Inner Bevel",
+        [&] {
+            bool c = ImGui::SliderInt("Width", &bevel_width, 1, 100);
+            c |= ImGui::SliderFloat("Light angle", &bevel_angle, 0.0f, 359.0f, "%.0f");
+            c |= ImGui::SliderFloat("Depth", &bevel_depth, 0.1f, 3.0f, "%.1f");
+            c |= ImGui::SliderFloat("Ambience", &bevel_ambient, 0.3f, 1.5f, "%.2f");
+            ImGui::TextDisabled(doc && doc->has_selection() ? "Applies inside the selection." : "Applies inside the layer's opaque area.");
+            return c;
+        },
+        [&](Image& img) {
+            effects::inner_bevel(img, doc && doc->has_selection() ? doc->selection().data() : nullptr, bevel_width, bevel_angle, bevel_depth, bevel_ambient);
+        });
+
+    adjust_modal(*this, "Cutout",
+        [&] {
+            bool c = ImGui::SliderInt("Vertical offset", &cutout_y, -100, 100);
+            c |= ImGui::SliderInt("Horizontal offset", &cutout_x, -100, 100);
+            float op = cutout_opacity * 100.0f;
+            if (ImGui::SliderFloat("Opacity", &op, 0.0f, 100.0f, "%.0f%%")) { cutout_opacity = op / 100.0f; c = true; }
+            c |= ImGui::SliderFloat("Blur", &cutout_blur, 0.0f, 100.0f, "%.1f");
+            c |= ImGui::ColorEdit3("Shadow color", cutout_color, ImGuiColorEditFlags_NoInputs);
+            ImGui::TextDisabled(doc && doc->has_selection() ? "Cut into the selection." : "Cut into the layer's opaque area.");
+            return c;
+        },
+        [&](Image& img) {
+            auto c8 = [](float f) { return static_cast<uint8_t>(f * 255.0f + 0.5f); };
+            effects::cutout(img, doc && doc->has_selection() ? doc->selection().data() : nullptr, cutout_x, cutout_y, cutout_opacity, cutout_blur,
+                            {c8(cutout_color[0]), c8(cutout_color[1]), c8(cutout_color[2]), 255});
+        });
 }
