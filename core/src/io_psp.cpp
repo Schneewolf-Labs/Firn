@@ -165,22 +165,17 @@ BlendMode map_blend(uint8_t v) {
 // every layer below it at top level).
 struct GroupCtx {
     int remaining = 0;          // children still to read
-    bool visible = true;
-    float opacity = 1.0f;
-    size_t first_child = 0;     // document index of the group's first child
+    size_t group_index = 0;     // document index of the Group layer
 };
 
 struct BankCtx {
     std::vector<GroupCtx> groups;
-    size_t masked_layers = 0;
 };
 
-// Reads the mask layer's single channel into a document-sized 8-bit mask
-// (outside the mask rect takes `outside`), then multiplies it into the alpha
-// of every layer in [first, doc.layer_count()).
-bool apply_mask_layer(const Reader& r, const Block& lb, size_t info_end, const Header& hdr, const int32_t mask_rect[4],
-                      const int32_t saved_mask[4], Document& doc, size_t first, const std::string& name,
-                      std::vector<std::string>* warnings, std::string& err) {
+// Reads a mask layer's single channel into a document-sized mask; pixels
+// outside the saved mask rect take the extension block's `outside` value.
+bool read_mask_layer(const Reader& r, const Block& lb, size_t info_end, const Header& hdr, const int32_t mask_rect[4],
+                     const int32_t saved_mask[4], int W, int H, Mask& out, std::string& err) {
     const std::vector<Block> subs = blocks(r, info_end, lb.end);
     uint8_t outside = 255;
     size_t bitmap_at = info_end;
@@ -201,19 +196,12 @@ bool apply_mask_layer(const Reader& r, const Block& lb, size_t info_end, const H
         if (!decompress(hdr.compression, r.p + b.start + chunk, clen, static_cast<size_t>(sw) * sh, tile, err)) return false;
         break;
     }
-    const int W = doc.width(), H = doc.height();
-    for (size_t li = first; li < doc.layer_count(); ++li) {
-        uint8_t* px = doc.layer(li).pixels.data();
-        for (int y = 0; y < H; ++y)
-            for (int x = 0; x < W; ++x) {
-                uint8_t m = outside;
-                const int tx = x - ox, ty = y - oy;
-                if (!tile.empty() && tx >= 0 && ty >= 0 && tx < sw && ty < sh) m = tile[static_cast<size_t>(ty) * sw + tx];
-                uint8_t& a = px[(static_cast<size_t>(y) * W + x) * 4 + 3];
-                a = static_cast<uint8_t>((a * m + 127) / 255);
-            }
-    }
-    if (warnings) warnings->push_back("Applied mask \"" + name + "\" to the " + std::to_string(doc.layer_count() - first) + " layer(s) beneath it");
+    out = Mask(W, H, outside);
+    for (int y = 0; y < H; ++y)
+        for (int x = 0; x < W; ++x) {
+            const int tx = x - ox, ty = y - oy;
+            if (!tile.empty() && tx >= 0 && ty >= 0 && tx < sw && ty < sh) out.at(x, y) = tile[static_cast<size_t>(ty) * sw + tx];
+        }
     return true;
 }
 
@@ -236,28 +224,38 @@ bool read_layer(const Reader& r, const Block& lb, const Header& hdr, const Palet
     const bool mask_disabled = r.ok(o, 2) && r.u8(o + 1) != 0;
 
     // Group bookkeeping: this layer is a child of the innermost open group.
-    GroupCtx* group = nullptr;
     while (!ctx.groups.empty() && ctx.groups.back().remaining == 0) ctx.groups.pop_back();
-    if (!ctx.groups.empty()) { group = &ctx.groups.back(); --group->remaining; }
-    const bool group_visible = !group || group->visible;
-    const float group_opacity = group ? group->opacity : 1.0f;
+    GroupCtx* group = ctx.groups.empty() ? nullptr : &ctx.groups.back();
+    if (group) --group->remaining;
+    const int depth = static_cast<int>(ctx.groups.size());
 
     static const char* kTypeNames[] = {"undefined", "raster", "floating selection", "vector", "adjustment", "group", "mask", "art media"};
     if (type == kLayerGroup) {
+        Layer& G = doc.add_layer(name);
+        G.type = LayerType::Group;
+        G.pixels = Image();
+        G.depth = depth;
+        G.opacity = opacity / 255.0f;
+        G.blend = map_blend(blend);
+        G.visible = visible != 0;
         GroupCtx g;
-        g.visible = group_visible && visible != 0;
-        g.opacity = group_opacity * opacity / 255.0f;
-        g.first_child = doc.layer_count();
+        g.group_index = doc.layer_count() - 1;
         for (const Block& b : blocks(r, lb.start + chunk, lb.end))
             if (b.id == kGroupExtBlock && r.ok(b.start, 8)) g.remaining = static_cast<int>(r.u32(b.start + 4));
-        if (blend != 0 && warnings) warnings->push_back("Group \"" + name + "\" uses a blend mode; its layers are composited individually");
         ctx.groups.push_back(g);
         return true;
     }
     if (type == kLayerMask) {
-        if (!visible || mask_disabled) return true;
-        const size_t first = group ? group->first_child : 0;
-        return apply_mask_layer(r, lb, lb.start + chunk, hdr, mask_rect, saved_mask, doc, first, name, warnings, err);
+        // A mask inside a group masks the group; at top level it masks the
+        // layer directly beneath it.
+        Mask m;
+        if (!read_mask_layer(r, lb, lb.start + chunk, hdr, mask_rect, saved_mask, doc.width(), doc.height(), m, err)) return false;
+        int target = group ? static_cast<int>(group->group_index) : static_cast<int>(doc.layer_count()) - 1;
+        if (target < 0) { if (warnings) warnings->push_back("Skipped mask \"" + name + "\" with nothing to mask"); return true; }
+        Layer& T = doc.layer(target);
+        T.mask = std::move(m);
+        T.mask_enabled = visible != 0 && !mask_disabled;
+        return true;
     }
     if (type != kLayerRaster) {
         if (warnings) warnings->push_back("Skipped " + std::string(type < 8 ? kTypeNames[type] : "unknown") + " layer \"" + name + "\"");
@@ -274,9 +272,10 @@ bool read_layer(const Reader& r, const Block& lb, const Header& hdr, const Palet
     const int sw = saved[2] - saved[0], sh = saved[3] - saved[1];
     const int ox = rect[0] + saved[0], oy = rect[1] + saved[1];
     Layer& L = doc.add_layer(name);
-    L.opacity = opacity / 255.0f * group_opacity;
+    L.depth = depth;
+    L.opacity = opacity / 255.0f;
     L.blend = map_blend(blend);
-    L.visible = visible != 0 && group_visible;
+    L.visible = visible != 0;
     if (sw <= 0 || sh <= 0) return true;  // empty layer
 
     Image tile;
@@ -405,6 +404,31 @@ std::unique_ptr<Document> load_psp_from_memory(const uint8_t* data, size_t size,
         for (const Block& lb : blocks(r, start, layer_bank->end)) {
             if (lb.id != kLayerBlock) continue;
             if (!read_layer(r, lb, hdr, have_palette ? &pal : nullptr, *doc, ctx, warnings, e)) return fail(e);
+        }
+        // The original expresses "a layer with a mask" as a group holding
+        // that one layer plus a mask layer. Collapse those back to a masked
+        // layer so the palette shows what the user made.
+        {
+            std::vector<Layer> layers = doc->clone_layers();
+            auto group_end_of = [&](size_t g) {
+                size_t j = g + 1;
+                while (j < layers.size() && layers[j].depth > layers[g].depth) ++j;
+                return j;
+            };
+            for (size_t i = 0; i < layers.size(); ++i) {
+                if (layers[i].type != LayerType::Group || !layers[i].has_mask()) continue;
+                const size_t end = group_end_of(i);
+                if (end != i + 2 || !layers[i + 1].is_raster() || layers[i + 1].has_mask()) continue;
+                Layer merged = layers[i + 1];
+                merged.depth = layers[i].depth;
+                merged.mask = std::move(layers[i].mask);
+                merged.mask_enabled = layers[i].mask_enabled;
+                merged.visible = merged.visible && layers[i].visible;
+                merged.opacity *= layers[i].opacity;
+                layers.erase(layers.begin() + i + 1);
+                layers[i] = std::move(merged);
+            }
+            if (layers.size() != doc->layer_count()) doc->replace_layers(layers, 0);
         }
     }
     if (doc->layer_count() == 0) {
@@ -570,33 +594,71 @@ const uint8_t kLayerInfoTail[43] = {
     0xff, 0xff, 0x00, 0x00, 0xff, 0xff, 0x00, 0x00, 0xff, 0xff, 0x00, 0x00, 0xff, 0xff, 0x00, 0x00, 0xff, 0xff, 0x00, 0x00,
     0xff, 0xff, 0x00};
 
-std::vector<uint8_t> layer_block(const Layer& L, int doc_w, int doc_h) {
+// Layer info chunk shared by raster, group and mask layer blocks.
+std::vector<uint8_t> layer_info(const std::string& raw_name, uint8_t type, const int32_t rect[4], const int32_t saved[4],
+                                float opacity, BlendMode blend, bool visible, const int32_t mask_rect[4], const int32_t saved_mask[4],
+                                bool mask_disabled) {
     Writer info;
-    std::string name = L.name.substr(0, 255);
+    std::string name = raw_name.substr(0, 255);
     info.u32(0);  // chunk length, patched below
     info.u16(static_cast<int>(name.size()));
     info.bytes(reinterpret_cast<const uint8_t*>(name.data()), name.size());
-    info.u8(kLayerRaster);
-    info.i32(0); info.i32(0); info.i32(doc_w); info.i32(doc_h);
+    info.u8(type);
+    for (int i = 0; i < 4; ++i) info.i32(rect[i]);
+    for (int i = 0; i < 4; ++i) info.i32(saved[i]);
+    info.u8(static_cast<int>(std::clamp(opacity, 0.0f, 1.0f) * 255.0f + 0.5f));
+    info.u8(static_cast<int>(blend));
+    info.u8(visible ? 1 : 0);
+    info.u8(0);  // transparency protected
+    info.u8(0);  // link group
+    for (int i = 0; i < 4; ++i) info.i32(mask_rect[i]);
+    for (int i = 0; i < 4; ++i) info.i32(saved_mask[i]);
+    info.u8(0); info.u8(mask_disabled ? 1 : 0);  // mask linked, mask disabled
+    info.bytes(kLayerInfoTail, sizeof(kLayerInfoTail));
+    const uint32_t len = static_cast<uint32_t>(info.out.size());
+    for (int i = 0; i < 4; ++i) info.out[i] = static_cast<uint8_t>((len >> (8 * i)) & 255);
+    return info.out;
+}
+
+const int32_t kZeroRect[4] = {0, 0, 0, 0};
+
+std::vector<uint8_t> group_block(const Layer& G, uint32_t member_count) {
+    Writer payload;
+    payload.bytes(layer_info(G.name, kLayerGroup, kZeroRect, kZeroRect, G.opacity, G.blend, G.visible, kZeroRect, kZeroRect, false));
+    Writer ext;
+    ext.u32(9); ext.u32(member_count); ext.u8(0);
+    payload.block(kGroupExtBlock, ext.out);
+    payload.u32(8); payload.u16(0); payload.u16(0);  // empty bitmap chunk, as the original writes
+    Writer w;
+    w.block(kLayerBlock, payload.out);
+    return w.out;
+}
+
+std::vector<uint8_t> mask_block(const std::string& owner_name, const Mask& m, bool enabled, int doc_w, int doc_h) {
+    const int32_t full[4] = {0, 0, doc_w, doc_h};
+    Writer payload;
+    payload.bytes(layer_info("Mask - " + owner_name, kLayerMask, kZeroRect, kZeroRect, 1.0f, BlendMode::Normal, true, full, full, !enabled));
+    Writer ext;
+    ext.u32(9); ext.u32(255); ext.u8(0x32);
+    payload.block(kMaskExtBlock, ext.out);
+    payload.u32(8); payload.u16(1); payload.u16(1);
+    std::vector<uint8_t> plane(m.data(), m.data() + m.size());
+    payload.bytes(channel_block(kDibUserMask, 0, plane, (static_cast<size_t>(doc_w) + 3) / 4 * 4 * doc_h));
+    Writer w;
+    w.block(kLayerBlock, payload.out);
+    return w.out;
+}
+
+std::vector<uint8_t> layer_block(const Layer& L, int doc_w, int doc_h) {
+    const int32_t rect[4] = {0, 0, doc_w, doc_h};
     // Only a Background layer omits the transparency channel; the original
     // writes one for every other layer even when it is fully opaque, and the
     // reader relies on that to tell them apart.
     const bool with_alpha = !L.background;
     raster::Rect saved = with_alpha ? content_bounds(L.pixels) : raster::Rect{0, 0, doc_w, doc_h};
-    info.i32(saved.x0); info.i32(saved.y0); info.i32(saved.x1); info.i32(saved.y1);
-    info.u8(static_cast<int>(std::clamp(L.opacity, 0.0f, 1.0f) * 255.0f + 0.5f));
-    info.u8(static_cast<int>(L.blend));
-    info.u8(L.visible ? 1 : 0);
-    info.u8(0);  // transparency protected
-    info.u8(0);  // link group
-    for (int i = 0; i < 8; ++i) info.i32(0);  // mask rect, saved mask rect
-    info.u8(0); info.u8(0);                    // mask linked, mask disabled
-    info.bytes(kLayerInfoTail, sizeof(kLayerInfoTail));
-    const uint32_t len = static_cast<uint32_t>(info.out.size());
-    for (int i = 0; i < 4; ++i) info.out[i] = static_cast<uint8_t>((len >> (8 * i)) & 255);
-
+    const int32_t saved_rect[4] = {saved.x0, saved.y0, saved.x1, saved.y1};
     Writer payload;
-    payload.bytes(info.out);
+    payload.bytes(layer_info(L.name, kLayerRaster, rect, saved_rect, L.opacity, L.blend, L.visible, kZeroRect, kZeroRect, false));
     if (!saved.empty()) {
         Image tile = raster::crop(L.pixels, saved);
         if (!with_alpha) {  // opaque layer: drop alpha so readers see a solid Background
@@ -666,11 +728,63 @@ std::vector<uint8_t> save_psp_to_memory(const Document& doc) {
     if (single_opaque) contents |= 0x10000000u;                    // flat image
     if (any_transparency(flat)) contents |= 0x08000000u;          // composite transparency
 
+    // Layer bank first: the header needs the number of layer blocks written,
+    // which exceeds the document's layer count when groups and masks are
+    // expanded into their own blocks.
+    Writer bank;
+    uint32_t block_count = 0;
+    bool has_groups = false, has_masks = false;
+    {
+        size_t i = 0;
+        while (i < doc.layer_count()) {
+            const Layer& L = doc.layer(i);
+            if (L.type == LayerType::Group) {
+                const size_t end = doc.group_end(i);
+                uint32_t members = 0;
+                for (size_t j = i + 1; j < end;) {
+                    ++members;
+                    const Layer& M = doc.layer(j);
+                    j = M.type == LayerType::Group ? doc.group_end(j) : j + 1;
+                }
+                if (L.has_mask()) ++members;
+                bank.bytes(group_block(L, members));
+                ++block_count; has_groups = true;
+                ++i;
+                continue;
+            }
+            if (L.has_mask()) {
+                Layer g = L;
+                g.type = LayerType::Group;
+                g.mask = Mask();
+                bank.bytes(group_block(g, 2));
+                Layer plain = L;
+                plain.opacity = 1.0f; plain.blend = BlendMode::Normal; plain.visible = true;
+                bank.bytes(layer_block(plain, doc.width(), doc.height()));
+                bank.bytes(mask_block(L.name, L.mask, L.mask_enabled, doc.width(), doc.height()));
+                block_count += 3; has_groups = true; has_masks = true;
+            } else {
+                bank.bytes(layer_block(L, doc.width(), doc.height()));
+                ++block_count;
+            }
+            ++i;
+            // Emit the mask layer of any group that has just closed at this index.
+            for (int g = doc.parent_group(i - 1); g >= 0; g = doc.parent_group(g)) {
+                if (doc.group_end(g) != i) break;
+                if (doc.layer(g).has_mask()) {
+                    bank.bytes(mask_block(doc.layer(g).name, doc.layer(g).mask, doc.layer(g).mask_enabled, doc.width(), doc.height()));
+                    ++block_count; has_masks = true;
+                }
+            }
+        }
+    }
+    if (has_groups) contents |= 0x00000008u;  // group layers
+    if (has_masks) contents |= 0x00000010u;   // mask layers
+
     Writer img;
     img.u32(46); img.i32(doc.width()); img.i32(doc.height()); img.f64(72.0); img.u8(1);
     img.u16(kCompLz77); img.u16(24); img.u16(1); img.u32(16777216); img.u8(0);
     img.u32(static_cast<uint32_t>(doc.width()) * doc.height() * 3);
-    img.i32(std::max(0, doc.active_layer())); img.u16(static_cast<int>(doc.layer_count())); img.u32(contents);
+    img.i32(std::max(0, doc.active_layer())); img.u16(static_cast<int>(block_count)); img.u32(contents);
     w.block(kImageBlock, img.out);
 
     Writer creator;
@@ -686,8 +800,6 @@ std::vector<uint8_t> save_psp_to_memory(const Document& doc) {
 
     w.bytes(composite_bank(flat));
 
-    Writer bank;
-    for (size_t i = 0; i < doc.layer_count(); ++i) bank.bytes(layer_block(doc.layer(i), doc.width(), doc.height()));
     w.block(kLayerStartBlock, bank.out);
     return w.out;
 }

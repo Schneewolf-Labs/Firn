@@ -15,6 +15,9 @@ Steps (coordinates are window-relative pixels):
     sleep:SECONDS
 
 Find the window id with: xwininfo -root -tree | grep '"Firn"'
+`drive.py --kill` stops every running instance (use it before launching and
+after finishing; an instance parked on the unsaved-changes prompt will not
+exit on its own).
 Requires python3-xlib, xwininfo, and ImageMagick.
 """
 import time, sys, subprocess, re
@@ -22,6 +25,10 @@ from Xlib import display, X, XK
 from Xlib.ext import xtest
 d = display.Display()
 wid = sys.argv[1]
+if wid == "--kill":
+    # Housekeeping: stop every running Firn instance (including ones parked on a dialog).
+    subprocess.run(["pkill", "-x", "firn"])
+    sys.exit(0)
 info = subprocess.run(["xwininfo","-id",wid],capture_output=True,text=True).stdout
 ox = int(re.search(r"Absolute upper-left X:\s+(\d+)",info).group(1))
 oy = int(re.search(r"Absolute upper-left Y:\s+(\d+)",info).group(1))

@@ -70,8 +70,8 @@ what to work on next.
 
 ## 8. Format completeness
 
-- [x] Masks attached to groups and layers (baked into alpha on load)
-- [x] Group visibility and opacity on load
+- [x] Masks attached to groups and layers, kept editable (enable, invert, delete, from selection/image)
+- [x] Layer groups in the model, palette (indent, collapse) and file round trip
 - [x] Selections: load from / save to disk (.PspSelection or any image)
 - [ ] Alpha channels in files
-- [ ] Layer groups in the model and palette, editable masks
+- [ ] Painting directly on masks; mask overlay view

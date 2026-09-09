@@ -607,6 +607,30 @@ static void test_psp_writer_roundtrip() {
     CHECK(p.r == 255 && p.g == 0 && p.a == 128);
     CHECK(t.pixels.get(3, 2).g == 255 && t.pixels.get(0, 0).a == 0 && t.pixels.get(4, 3).a == 0);
     CHECK(back->layer(2).name == "Empty" && back->layer(2).pixels.get(0, 0).a == 0);
+
+    // Groups and masks survive a round trip; a masked raster layer comes back
+    // as a masked raster layer even though the file stores a group.
+    Document g(4, 2);
+    g.add_layer("Background").background = true;
+    Layer& grp = g.add_layer("Group A");
+    grp.type = LayerType::Group; grp.pixels = Image(); grp.opacity = 0.5f; grp.blend = BlendMode::Multiply;
+    Layer& m1 = g.add_layer("Member 1"); m1.depth = 1; m1.pixels.fill({10, 20, 30, 200});
+    Layer& m2 = g.add_layer("Member 2"); m2.depth = 1; m2.visible = false;
+    Mask gm(4, 2, 255); gm.at(0, 0) = 0;
+    g.layer(1).mask = gm;
+    Layer& top2 = g.add_layer("Masked top");
+    Mask tm(4, 2, 255); tm.at(3, 1) = 7;
+    top2.mask = tm; top2.mask_enabled = false; top2.pixels.fill({1, 2, 3, 255});
+    std::vector<uint8_t> gf = io::save_psp_to_memory(g);
+    auto gb = io::load_psp_from_memory(gf.data(), gf.size(), &err, &warnings);
+    CHECK(gb != nullptr);
+    CHECK(gb->layer_count() == 5);
+    CHECK(gb->layer(1).type == LayerType::Group && gb->layer(1).name == "Group A" && gb->layer(1).blend == BlendMode::Multiply);
+    CHECK(gb->layer(1).has_mask() && gb->layer(1).mask.at(0, 0) == 0 && gb->layer(1).mask.at(1, 0) == 255);
+    CHECK(gb->layer(2).depth == 1 && gb->layer(3).depth == 1 && !gb->layer(3).visible && gb->group_end(1) == 4);
+    CHECK(gb->layer(2).pixels.get(1, 1).a == 200);
+    CHECK(gb->layer(4).is_raster() && gb->layer(4).depth == 0 && gb->layer(4).has_mask() && gb->layer(4).mask.at(3, 1) == 7 && !gb->layer(4).mask_enabled);
+    CHECK(gb->layer(4).name == "Masked top" && gb->layer(4).pixels.get(0, 0).r == 1);
 }
 
 static void test_adjust_module() {
@@ -921,7 +945,73 @@ static void test_more_shapes() {
     CHECK(st.at(4, 4) == 0 && st.at(20, 36) == 0);           // between points below
 }
 
+static void test_groups_and_masks() {
+    Document doc(2, 1);
+    Layer& bg = doc.add_layer("Background");
+    bg.background = true;
+    bg.pixels.fill({255, 255, 255, 255});
+    Layer& r1 = doc.add_layer("Raster 1");
+    r1.pixels.fill({0, 0, 0, 255});
+    CommandStack hist;
+    doc.set_active_layer(1);
+
+    // Group the top layer; the group composites its member.
+    hist.run(doc, std::make_unique<NewLayerGroupCommand>(1));
+    CHECK(doc.layer_count() == 3 && doc.layer(1).type == LayerType::Group && doc.layer(2).depth == 1);
+    CHECK(doc.group_end(1) == 3 && doc.parent_group(2) == 1 && doc.parent_group(0) == -1);
+    CHECK(doc.composite().get(0, 0).r == 0);
+    // Group opacity applies to the whole group; hidden group hides members.
+    doc.layer(1).opacity = 0.5f;
+    CHECK(doc.composite().get(0, 0).r >= 127 && doc.composite().get(0, 0).r <= 128);
+    doc.layer(1).opacity = 1.0f;
+    doc.layer(1).visible = false;
+    CHECK(doc.composite().get(0, 0).r == 255);
+    doc.layer(1).visible = true;
+    // Group mask hides half.
+    Mask m(2, 1);
+    m.at(0, 0) = 0; m.at(1, 0) = 255;
+    hist.run(doc, std::make_unique<SetMaskCommand>(1, "Mask", m));
+    CHECK(doc.composite().get(0, 0).r == 255 && doc.composite().get(1, 0).r == 0);
+    doc.layer(1).mask_enabled = false;
+    CHECK(doc.composite().get(0, 0).r == 0);
+    doc.layer(1).mask_enabled = true;
+    hist.undo(doc);
+    CHECK(!doc.layer(1).has_mask());
+    hist.redo(doc);
+
+    // Add a layer inside the group above the member; duplicate the group block.
+    doc.set_active_layer(2);
+    hist.run(doc, std::make_unique<AddLayerCommand>("Raster 2"));
+    CHECK(doc.layer_count() == 4 && doc.layer(3).name == "Raster 2" && doc.layer(3).depth == 1 && doc.group_end(1) == 4);
+    hist.run(doc, std::make_unique<DuplicateLayerCommand>(1));
+    CHECK(doc.layer_count() == 7 && doc.layer(4).type == LayerType::Group && doc.layer(4).name == "Copy of Group" && doc.layer(6).depth == 1);
+    hist.undo(doc);
+    CHECK(doc.layer_count() == 4);
+    // Arrange: move the group block below the background.
+    hist.run(doc, std::make_unique<ArrangeLayerCommand>(1, -1));
+    CHECK(doc.layer(0).type == LayerType::Group && doc.layer(2).name == "Raster 2" && doc.layer(3).name == "Background");
+    hist.undo(doc);
+    CHECK(doc.layer(0).name == "Background");
+    // Remove the group removes its members; ungroup promotes them.
+    hist.run(doc, std::make_unique<RemoveLayerCommand>(1));
+    CHECK(doc.layer_count() == 1);
+    hist.undo(doc);
+    CHECK(doc.layer_count() == 4);
+    hist.run(doc, std::make_unique<UngroupCommand>(1));
+    CHECK(doc.layer_count() == 3 && doc.layer(1).depth == 0 && doc.layer(2).depth == 0 && doc.layer(1).is_raster());
+    hist.undo(doc);
+    CHECK(doc.layer_count() == 4 && doc.layer(1).type == LayerType::Group);
+    // Geometry keeps masks: crop to the right half keeps the shown pixel.
+    hist.run(doc, std::make_unique<CropCommand>(raster::Rect{1, 0, 2, 1}));
+    CHECK(doc.width() == 1 && doc.layer(1).mask.at(0, 0) == 255 && doc.composite().get(0, 0).r == 0);
+    hist.undo(doc);
+    // Pixel commands ignore groups.
+    hist.run(doc, std::make_unique<InvertCommand>(1));
+    CHECK(doc.layer(1).pixels.empty());
+}
+
 int main() {
+    test_groups_and_masks();
     test_more_shapes();
     test_effects_round2();
     test_adjust_round2();

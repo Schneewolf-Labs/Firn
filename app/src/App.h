@@ -220,6 +220,7 @@ struct App {
     void undo();
     void redo();
     int active_layer() const;
+    bool active_is_raster() const;      // false for groups and when nothing is active
     Tool& tool() { return *tools[tool_index]; }
     void select_tool(int index);
     void zoom_about(ImVec2 screen, float factor);
@@ -248,6 +249,11 @@ struct App {
     void layer_arrange(int delta);  // +1 up (towards top), -1 down; large values go to top/bottom
     void layer_merge(int kind);     // 0 down, 1 visible, 2 all
     void layer_promote_background();
+    void layer_new_group();
+    void layer_ungroup();
+    void layer_set_mask(const char* name, firn::Mask m, bool enabled = true);
+    void layer_mask_from_selection();
+    void layer_mask_from_image();
     void layer_set_props(const firn::LayerProps& before, const firn::LayerProps& after);
     void open_layer_properties();
 

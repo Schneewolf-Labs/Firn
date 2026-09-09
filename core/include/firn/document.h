@@ -9,15 +9,29 @@
 
 namespace firn {
 
+enum class LayerType : uint8_t { Raster, Group };
+
 struct Layer {
     std::string name;
+    LayerType type = LayerType::Raster;
+    // Groups: a group layer sits below its members in the stack; its members
+    // are the run of layers immediately above it with a greater depth. A
+    // group composites its members together, then blends that result with
+    // its own opacity, blend mode and mask.
+    int depth = 0;
+    bool expanded = true;   // palette state only
     bool visible = true;
     // A Background layer has no transparency: the eraser paints the
     // background colour on it instead of clearing alpha.
     bool background = false;
     float opacity = 1.0f;  // 0..1
     BlendMode blend = BlendMode::Normal;
-    Image pixels;
+    // Optional document-sized mask (0 hides, 255 shows); empty = none.
+    Mask mask;
+    bool mask_enabled = true;
+    Image pixels;           // empty for groups
+    bool is_raster() const { return type == LayerType::Raster; }
+    bool has_mask() const { return !mask.empty(); }
 };
 
 // The undoable subset of Layer, for LayerPropertiesCommand.
@@ -47,6 +61,10 @@ public:
 
     // Layer ordering: index 0 is the bottom of the stack.
     Layer& add_layer(std::string name, int at = -1);
+    // Group helpers: one past the last member (descendants included), and
+    // the index of the group a layer belongs to (-1 at top level).
+    size_t group_end(size_t group_index) const;
+    int parent_group(size_t index) const;
     std::unique_ptr<Layer> remove_layer(size_t i);
     void insert_layer(std::unique_ptr<Layer> layer, size_t at);
     void move_layer(size_t from, size_t to);
@@ -68,7 +86,9 @@ public:
 
     // Flatten visible layers with their blend modes into one image.
     Image composite() const;
-    // Flatten layers [from, to] (inclusive, bottom to top) honouring visibility.
+    // Flatten layers [from, to] (inclusive, bottom to top) honouring
+    // visibility, groups and masks. Members of a group must be included
+    // with their group for the group's opacity and mask to apply.
     Image composite_range(size_t from, size_t to) const;
 
     LayerProps props(size_t i) const;

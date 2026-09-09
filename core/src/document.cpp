@@ -93,25 +93,68 @@ void Document::set_props(size_t i, const LayerProps& p) {
     touch();
 }
 
+size_t Document::group_end(size_t g) const {
+    if (g >= layers_.size()) return layers_.size();
+    const int d = layers_[g]->depth;
+    size_t i = g + 1;
+    while (i < layers_.size() && layers_[i]->depth > d) ++i;
+    return i;
+}
+
+int Document::parent_group(size_t index) const {
+    if (index >= layers_.size()) return -1;
+    const int d = layers_[index]->depth;
+    if (d == 0) return -1;
+    for (size_t i = index; i-- > 0;)
+        if (layers_[i]->type == LayerType::Group && layers_[i]->depth == d - 1) return static_cast<int>(i);
+    return -1;
+}
+
 Image Document::composite() const {
     return layers_.empty() ? Image(width_, height_) : composite_range(0, layers_.size() - 1);
 }
 
-Image Document::composite_range(size_t from, size_t to) const {
-    Image out(width_, height_, {0, 0, 0, 0});
-    uint8_t* dst = out.data();
-    for (size_t li = from; li <= to && li < layers_.size(); ++li) {
-        const Layer& L = *layers_[li];
-        if (!L.visible || L.opacity <= 0.0f) continue;
-        const uint8_t* src = L.pixels.data();
-        const float lo = std::clamp(L.opacity, 0.0f, 1.0f);
-        for (int y = 0; y < height_; ++y) {
-            for (int x = 0; x < width_; ++x) {
-                const size_t i = (static_cast<size_t>(y) * width_ + x) * 4;
-                blend::pixel(dst + i, src + i, lo, L.blend,
-                             L.blend == BlendMode::Dissolve ? blend::position_hash(x, y) : 0u);
+namespace {
+
+// Blends `src` (document-sized, straight alpha) onto `dst` with a layer's
+// opacity, blend mode and optional mask.
+void blend_layer(Image& dst, const Image& src, const Layer& L, int w, int h) {
+    const float lo = std::clamp(L.opacity, 0.0f, 1.0f);
+    const bool masked = L.has_mask() && L.mask_enabled;
+    uint8_t* d = dst.data();
+    const uint8_t* s = src.data();
+    for (int y = 0; y < h; ++y)
+        for (int x = 0; x < w; ++x) {
+            const size_t i = (static_cast<size_t>(y) * w + x) * 4;
+            if (masked) {
+                const uint8_t m = L.mask.at(x, y);
+                if (m == 0) continue;
+                uint8_t px[4] = {s[i], s[i + 1], s[i + 2], static_cast<uint8_t>(s[i + 3] * m / 255)};
+                blend::pixel(d + i, px, lo, L.blend, L.blend == BlendMode::Dissolve ? blend::position_hash(x, y) : 0u);
+            } else {
+                blend::pixel(d + i, s + i, lo, L.blend, L.blend == BlendMode::Dissolve ? blend::position_hash(x, y) : 0u);
             }
         }
+}
+
+}  // namespace
+
+Image Document::composite_range(size_t from, size_t to) const {
+    Image out(width_, height_, {0, 0, 0, 0});
+    size_t li = from;
+    while (li <= to && li < layers_.size()) {
+        const Layer& L = *layers_[li];
+        if (L.type == LayerType::Group) {
+            const size_t end = group_end(li);
+            if (L.visible && L.opacity > 0.0f && end > li + 1) {
+                const Image inner = composite_range(li + 1, std::min(end - 1, to));
+                blend_layer(out, inner, L, width_, height_);
+            }
+            li = end;
+            continue;
+        }
+        if (L.visible && L.opacity > 0.0f && !L.pixels.empty()) blend_layer(out, L.pixels, L, width_, height_);
+        ++li;
     }
     return out;
 }

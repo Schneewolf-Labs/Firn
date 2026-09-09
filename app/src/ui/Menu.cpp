@@ -18,7 +18,9 @@ bool blend_combo(const char* label, BlendMode& mode);  // Palettes.cpp
 void App::draw_menu() {
     const bool has_doc = doc != nullptr;
     const int layer = active_layer();
-    const bool has_layer = has_doc && layer >= 0;
+    const bool has_any_layer = has_doc && layer >= 0;
+    const bool has_layer = has_any_layer && doc->layer(layer).is_raster();  // pixel operations need a raster layer
+    const bool is_group = has_any_layer && doc->layer(layer).type == LayerType::Group;
 
     if (!ImGui::BeginMainMenuBar()) return;
 
@@ -198,25 +200,43 @@ void App::draw_menu() {
         const int n = has_doc ? static_cast<int>(doc->layer_count()) : 0;
         const bool is_bg = has_layer && doc->layer(layer).background;
         if (ImGui::MenuItem("New Raster Layer", nullptr, false, has_doc)) layer_new();
-        if (ImGui::MenuItem("Duplicate", nullptr, false, has_layer)) layer_duplicate();
-        if (ImGui::MenuItem("Delete", nullptr, false, has_layer && n > 1)) layer_delete();
-        if (ImGui::MenuItem("Properties...", nullptr, false, has_layer)) open_layer_properties();
-        ImGui::Separator();
-        if (ImGui::BeginMenu("Arrange", has_layer)) {
-            if (ImGui::MenuItem("Bring to Top", nullptr, false, layer < n - 1)) layer_arrange(n);
-            if (ImGui::MenuItem("Move Up", nullptr, false, layer < n - 1)) layer_arrange(+1);
-            if (ImGui::MenuItem("Move Down", nullptr, false, layer > 0)) layer_arrange(-1);
-            if (ImGui::MenuItem("Send to Bottom", nullptr, false, layer > 0)) layer_arrange(-n);
+        if (ImGui::MenuItem("New Layer Group", nullptr, false, has_any_layer)) layer_new_group();
+        if (ImGui::BeginMenu("New Mask Layer", has_any_layer)) {
+            if (ImGui::MenuItem("Show All")) layer_set_mask("New Mask Layer", Mask(doc->width(), doc->height(), 255));
+            if (ImGui::MenuItem("Hide All")) layer_set_mask("New Mask Layer", Mask(doc->width(), doc->height(), 0));
+            if (ImGui::MenuItem("From Selection", nullptr, false, doc->has_selection())) layer_mask_from_selection();
+            if (ImGui::MenuItem("From Image")) layer_mask_from_image();
             ImGui::EndMenu();
         }
-        if (ImGui::BeginMenu("Merge", has_layer)) {
-            if (ImGui::MenuItem("Merge Down", nullptr, false, layer > 0)) layer_merge(0);
+        if (ImGui::MenuItem("Duplicate", nullptr, false, has_any_layer)) layer_duplicate();
+        if (ImGui::MenuItem("Delete", nullptr, false, has_any_layer && n > 1)) layer_delete();
+        if (ImGui::MenuItem("Ungroup Layers", nullptr, false, is_group)) layer_ungroup();
+        if (ImGui::MenuItem("Properties...", nullptr, false, has_any_layer)) open_layer_properties();
+        ImGui::Separator();
+        if (ImGui::BeginMenu("Mask", has_any_layer && doc->layer(layer).has_mask())) {
+            bool on = doc->layer(layer).mask_enabled;
+            if (ImGui::MenuItem("Enable Mask", nullptr, &on)) layer_set_mask(on ? "Enable Mask" : "Disable Mask", doc->layer(layer).mask, on);
+            if (ImGui::MenuItem("Invert Mask")) { Mask m = doc->layer(layer).mask; mask::invert(m); layer_set_mask("Invert Mask", std::move(m), doc->layer(layer).mask_enabled); }
+            if (ImGui::MenuItem("Delete Mask")) layer_set_mask("Delete Mask", Mask());
+            if (ImGui::MenuItem("Load Selection From Mask")) set_selection("Load Selection From Mask", doc->layer(layer).mask);
+            ImGui::EndMenu();
+        }
+        if (ImGui::BeginMenu("Arrange", has_any_layer)) {
+            if (ImGui::MenuItem("Bring to Top")) layer_arrange(n);
+            if (ImGui::MenuItem("Move Up")) layer_arrange(+1);
+            if (ImGui::MenuItem("Move Down")) layer_arrange(-1);
+            if (ImGui::MenuItem("Send to Bottom")) layer_arrange(-n);
+            ImGui::EndMenu();
+        }
+        if (ImGui::BeginMenu("Merge", has_any_layer)) {
+            if (ImGui::MenuItem("Merge Down", nullptr, false, has_layer && layer > 0 && doc->layer(layer - 1).is_raster() && doc->layer(layer - 1).depth == doc->layer(layer).depth)) layer_merge(0);
             if (ImGui::MenuItem("Merge Visible", nullptr, false, n > 1)) layer_merge(1);
             if (ImGui::MenuItem("Merge All (Flatten)", nullptr, false, n > 1)) layer_merge(2);
             ImGui::EndMenu();
         }
         ImGui::Separator();
         if (ImGui::MenuItem("Promote Background Layer", nullptr, false, is_bg)) layer_promote_background();
+        (void)is_group;
         ImGui::EndMenu();
     }
     if (ImGui::BeginMenu("Window")) {

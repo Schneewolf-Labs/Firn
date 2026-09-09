@@ -84,6 +84,12 @@ docs/    notes on the original: command inventory, module mapping, FORMAT.md
 - `docs/ROADMAP.md` is the value-ranked work list. Tick items off as they
   land and take the top unchecked item next.
 - Index 0 is the bottom of the layer stack. Palettes list top first.
+- **Groups** are `LayerType::Group` layers with `depth`; their members are the
+  run of layers immediately above them with a greater depth
+  (`Document::group_end`). Commands that restructure layers snapshot the
+  whole stack (`Document::State`). A layer's optional `mask` multiplies its
+  alpha (or the group's composite) during compositing. Tools and pixel
+  commands must check `Layer::is_raster()` / `App::active_is_raster()`.
 - New tools go in `app/src/tools/Tools.cpp` and register in
   `make_default_tools()`; give them a single-letter `shortcut()` matching the
   original where one exists (A pan, Z zoom, S selection, E dropper, B brush,
@@ -131,6 +137,8 @@ python3 scripts/drive.py $WID ctrl:o type:grad.png key:Return   # dialogs too
 ```
 
 Needs `python3-xlib`, `xwininfo`, and ImageMagick `import`. Coordinates are
-window-relative. Stop the app with `pkill -x firn` (not `pkill -f`, which
-matches your own shell). Do not launch the app maximized; the user's screen is
-3440 px wide.
+window-relative. **Always run `python3 scripts/drive.py --kill` before
+launching and again when done** (it is `pkill -x firn`; never `pkill -f`,
+which matches your own shell). An instance left on the unsaved-changes prompt
+stays open on the user's desktop otherwise. Do not launch the app maximized;
+the user's screen is 3440 px wide.

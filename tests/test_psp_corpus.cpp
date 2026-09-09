@@ -72,7 +72,9 @@ int main(int argc, char** argv) {
             const firn::Layer& a = doc->layer(i);
             const firn::Layer& b = again->layer(i);
             same = a.name == b.name && a.visible == b.visible && a.blend == b.blend && a.background == b.background &&
+                   a.type == b.type && a.depth == b.depth && a.has_mask() == b.has_mask() && a.mask_enabled == b.mask_enabled &&
                    std::abs(a.opacity - b.opacity) < 0.005f && a.pixels.size_bytes() == b.pixels.size_bytes();
+            if (same && a.has_mask()) same = std::equal(a.mask.data(), a.mask.data() + a.mask.size(), b.mask.data());
             if (!same) break;
             // Opaque layers are written without alpha; compare colour where alpha matches.
             const uint8_t* pa = a.pixels.data();

@@ -60,7 +60,9 @@ Layer types: 1 raster, 2 floating selection, 3 vector, 4 adjustment,
 channels directly after the info chunk; the others are followed by their
 extension sub-block first.
 
-- **Group (5)**: group extension block (id 25) `{chunk_len, child_count u32}`.
+- **Group (5)**: group extension block (id 25) `{chunk_len, child_count u32, u8}`
+  followed by an *empty* bitmap chunk `{8, 0, 0}`. The original refuses to
+  finish reading a file whose group blocks lack that chunk.
   The children are the next `child_count` layer blocks in the bank (nested
   groups count as one child each and bring their own children). A hidden
   group hides its children; the reader folds group opacity into each child
@@ -70,9 +72,11 @@ extension sub-block first.
   (user mask), covering the *saved mask rect* relative to the *mask rect*
   from the layer info (0 = hidden, 255 = shown). The `outside` value (255 in
   every sample) is taken as the mask value beyond the saved rect; this is
-  inferred, not documented. A visible, enabled mask applies to the layers
-  below it in its group (or to every layer below it at top level); the reader
-  bakes it into those layers' alpha and reports it.
+  inferred, not documented. A mask inside a group becomes the group's mask;
+  a top-level mask becomes the mask of the layer directly beneath it. The
+  original represents "a layer with a mask" as a group holding that layer
+  and its mask; the reader collapses such two-member groups back to a masked
+  raster layer, and the writer expands them again.
 
 Blend modes 0–16 match `firn::BlendMode` in order (Normal, Darken, Lighten,
 Hue, Saturation, Color, Luminance, Multiply, Screen, Dissolve, Overlay,
@@ -128,7 +132,10 @@ creator block (dates, application id 1, version 8.0.0.1), a composite bank
 with a JPEG thumbnail and a full-size zlib composite, then the layer bank.
 Every non-Background layer gets a transparency channel even when opaque,
 because the original does the same and the reader uses "no transparency
-channel" to recognise the Background. Layer info chunks end with the 43-byte
+channel" to recognise the Background. Groups are written as group blocks
+(child count in the extension) followed by their members; a group's mask is
+a mask layer block after the members; a masked raster layer is wrapped in a
+group with its mask, as the original does. Layer info chunks end with the 43-byte
 tail found in every sample. The original (under Wine) opens the result with
 all layers intact; `scripts/original-open.sh` automates that check.
 

@@ -119,7 +119,7 @@ public:
     }
 
     void on_press(App& app, const ToolInput& in, ImGuiMouseButton b) override {
-        if (!app.doc || app.active_layer() < 0) return;
+        if (!app.active_is_raster()) { if (app.doc && app.active_layer() >= 0) app.status = "Select a raster layer to paint on."; return; }
         // Clone: right-click sets the source point.
         if (kind_ == Kind::Clone && b == ImGuiMouseButton_Right) {
             src_x_ = in.img_x; src_y_ = in.img_y; has_src_ = true; first_stroke_ = true;
@@ -347,7 +347,7 @@ public:
     const char* name() const override { return "Smudge"; }
     const char* shortcut() const override { return "U"; }
     void on_press(App& app, const ToolInput& in, ImGuiMouseButton b) override {
-        if (!app.doc || app.active_layer() < 0) return;
+        if (!app.active_is_raster()) return;
         layer_ = app.active_layer();
         before_ = app.doc->layer(layer_).pixels;
         push_ = b == ImGuiMouseButton_Right;
@@ -452,6 +452,7 @@ public:
     const char* shortcut() const override { return "M"; }
     void on_press(App& app, const ToolInput& in, ImGuiMouseButton b) override {
         if (!app.doc || app.active_layer() < 0) return;
+        if (b == ImGuiMouseButton_Left && !app.active_is_raster()) return;
         button_ = b;
         x0_ = in.img_x; y0_ = in.img_y;
         layer_ = app.active_layer();
@@ -526,7 +527,7 @@ public:
     const char* name() const override { return "Flood Fill"; }
     const char* shortcut() const override { return "F"; }
     void on_press(App& app, const ToolInput& in, ImGuiMouseButton b) override {
-        if (!in.inside || !app.doc || app.active_layer() < 0) return;
+        if (!in.inside || !app.active_is_raster()) return;
         const size_t layer = app.active_layer();
         Layer& L = app.doc->layer(layer);
         Image before = L.pixels;
@@ -795,7 +796,7 @@ public:
     const char* category() const override { return "Text and Shapes"; }
     bool wants_snap() const override { return true; }
     void on_press(App& app, const ToolInput& in, ImGuiMouseButton) override {
-        if (!app.doc || app.active_layer() < 0) return;
+        if (!app.active_is_raster()) return;
         layer_ = app.active_layer();
         before_ = app.doc->layer(layer_).pixels;
         x0_ = x1_ = in.img_x; y0_ = y1_ = in.img_y;

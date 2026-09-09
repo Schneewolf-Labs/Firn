@@ -1,6 +1,7 @@
 #include <cstdio>
 #include <cstring>
 #include <memory>
+#include <vector>
 
 #include "App.h"
 #include "imgui.h"
@@ -109,10 +110,17 @@ static void draw_layers(App& app) {
     }
     ImGui::Separator();
 
-    // Top of stack first, like every layer palette ever.
+    // Top of stack first, like every layer palette ever. Members of a
+    // collapsed group are skipped (they sit above their group header).
+    std::vector<bool> hidden(doc.layer_count(), false);
+    for (size_t g = 0; g < doc.layer_count(); ++g)
+        if (doc.layer(g).type == LayerType::Group && !doc.layer(g).expanded)
+            for (size_t j = g + 1; j < doc.group_end(g); ++j) hidden[j] = true;
     for (int i = static_cast<int>(doc.layer_count()) - 1; i >= 0; --i) {
         Layer& L = doc.layer(i);
+        if (hidden[i]) continue;
         ImGui::PushID(i);
+        ImGui::Indent(L.depth * 14.0f);
         bool vis = L.visible;
         if (ImGui::Checkbox("##vis", &vis)) {
             LayerProps before = doc.props(i), after = before;
@@ -121,15 +129,26 @@ static void draw_layers(App& app) {
             app.layer_set_props(before, after);
         }
         ImGui::SameLine();
-        char label[160];
-        if (L.blend != BlendMode::Normal) std::snprintf(label, sizeof(label), "%s  [%s]", L.name.c_str(), blend_mode_name(L.blend));
-        else std::snprintf(label, sizeof(label), "%s", L.name.c_str());
+        if (L.type == LayerType::Group) {
+            if (ImGui::ArrowButton("##exp", L.expanded ? ImGuiDir_Up : ImGuiDir_Right)) L.expanded = !L.expanded;
+            ImGui::SameLine();
+        }
+        char label[192];
+        std::snprintf(label, sizeof(label), "%s%s%s%s", L.type == LayerType::Group ? "[Group] " : "", L.name.c_str(),
+                      L.blend != BlendMode::Normal ? "  [" : "", L.blend != BlendMode::Normal ? blend_mode_name(L.blend) : "");
+        if (L.blend != BlendMode::Normal) std::strncat(label, "]", sizeof(label) - std::strlen(label) - 1);
         if (ImGui::Selectable(label, active == i, ImGuiSelectableFlags_AllowDoubleClick)) {
             doc.set_active_layer(i);
             if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) app.open_layer_properties();
         }
+        if (L.has_mask()) {
+            ImGui::SameLine();
+            bool on = L.mask_enabled;
+            if (ImGui::Checkbox("Mask", &on)) { doc.set_active_layer(i); app.layer_set_mask(on ? "Enable Mask" : "Disable Mask", L.mask, on); }
+        }
         if (L.background) { ImGui::SameLine(); ImGui::TextDisabled("(background)"); }
         else if (L.opacity < 1.0f) { ImGui::SameLine(); ImGui::TextDisabled("%.0f%%", L.opacity * 100.0f); }
+        ImGui::Unindent(L.depth * 14.0f);
         ImGui::PopID();
     }
     ImGui::End();

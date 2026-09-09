@@ -192,6 +192,8 @@ public:
     void undo(Document& doc) override { execute(doc); }
 };
 
+// Adds an empty raster layer directly above the active layer (inside its
+// group), or on top of the stack when nothing is active.
 class AddLayerCommand : public Command {
 public:
     explicit AddLayerCommand(std::string name) : name_(std::move(name)) {}
@@ -201,6 +203,46 @@ public:
 private:
     std::string name_;
     size_t index_ = 0;
+    int prev_active_ = -1;
+};
+
+// Wraps the active layer (or a group block) in a new group.
+class NewLayerGroupCommand : public Command {
+public:
+    explicit NewLayerGroupCommand(size_t index) : index_(index) {}
+    std::string name() const override { return "New Layer Group"; }
+    void execute(Document& doc) override;
+    void undo(Document& doc) override { doc.restore(before_); }
+private:
+    size_t index_;
+    Document::State before_;
+};
+
+// Removes a group layer, promoting its members one level.
+class UngroupCommand : public Command {
+public:
+    explicit UngroupCommand(size_t index) : index_(index) {}
+    std::string name() const override { return "Ungroup Layers"; }
+    void execute(Document& doc) override;
+    void undo(Document& doc) override { doc.restore(before_); }
+private:
+    size_t index_;
+    Document::State before_;
+};
+
+// Sets (or clears, with an empty mask) a layer's mask.
+class SetMaskCommand : public Command {
+public:
+    SetMaskCommand(size_t index, std::string name, Mask mask, bool enabled = true)
+        : index_(index), name_(std::move(name)), after_(std::move(mask)), enabled_(enabled) {}
+    std::string name() const override { return name_; }
+    void execute(Document& doc) override;
+    void undo(Document& doc) override;
+private:
+    size_t index_;
+    std::string name_;
+    Mask before_, after_;
+    bool before_enabled_ = true, enabled_;
 };
 
 class LayerPropertiesCommand : public Command {
@@ -216,24 +258,30 @@ private:
     LayerProps before_, after_;
 };
 
+// Duplicates a layer or a whole group block directly above the original.
 class DuplicateLayerCommand : public Command {
 public:
     explicit DuplicateLayerCommand(size_t index) : index_(index) {}
     std::string name() const override { return "Duplicate Layer"; }
     void execute(Document& doc) override;
-    void undo(Document& doc) override;
+    void undo(Document& doc) override { doc.restore(before_); }
 private:
     size_t index_;
+    Document::State before_;
 };
 
+// Moves a layer (or group block) past its neighbouring sibling: +1 up
+// towards the top, -1 down; large steps go to the end of the siblings.
 class ArrangeLayerCommand : public Command {
 public:
-    ArrangeLayerCommand(size_t from, size_t to) : from_(from), to_(to) {}
+    ArrangeLayerCommand(size_t index, int steps) : index_(index), steps_(steps) {}
     std::string name() const override { return "Arrange Layer"; }
-    void execute(Document& doc) override { doc.move_layer(from_, to_); }
-    void undo(Document& doc) override { doc.move_layer(to_, from_); }
+    void execute(Document& doc) override;
+    void undo(Document& doc) override { doc.restore(before_); }
 private:
-    size_t from_, to_;
+    size_t index_;
+    int steps_;
+    Document::State before_;
 };
 
 class PromoteBackgroundCommand : public Command {
@@ -321,15 +369,16 @@ protected:
     Color fill_;
 };
 
+// Removes a layer, or a group with all its members.
 class RemoveLayerCommand : public Command {
 public:
     explicit RemoveLayerCommand(size_t index) : index_(index) {}
     std::string name() const override { return "Remove Layer"; }
     void execute(Document& doc) override;
-    void undo(Document& doc) override;
+    void undo(Document& doc) override { doc.restore(before_); }
 private:
     size_t index_;
-    std::unique_ptr<Layer> removed_;
+    Document::State before_;
 };
 
 }  // namespace firn

@@ -253,6 +253,8 @@ void App::redo() {
 
 int App::active_layer() const { return doc ? doc->active_layer() : -1; }
 
+bool App::active_is_raster() const { return doc && active_layer() >= 0 && doc->layer(active_layer()).is_raster(); }
+
 // --- Selections ----------------------------------------------------------
 
 void App::set_selection(const char* name, Mask m) {
@@ -358,11 +360,8 @@ void App::layer_delete() {
 }
 
 void App::layer_arrange(int delta) {
-    if (!doc || active_layer() < 0) return;
-    const int n = static_cast<int>(doc->layer_count());
-    const int from = active_layer();
-    const int to = std::clamp(from + delta, 0, n - 1);
-    if (to != from) run(std::make_unique<ArrangeLayerCommand>(from, to));
+    if (!doc || active_layer() < 0 || delta == 0) return;
+    run(std::make_unique<ArrangeLayerCommand>(active_layer(), delta));
 }
 
 void App::layer_merge(int kind) {
@@ -375,6 +374,37 @@ void App::layer_merge(int kind) {
     } else {
         run(std::make_unique<MergeLayersCommand>(K::All));
     }
+}
+
+void App::layer_new_group() {
+    if (doc && active_layer() >= 0) run(std::make_unique<NewLayerGroupCommand>(active_layer()));
+}
+
+void App::layer_ungroup() {
+    if (doc && active_layer() >= 0 && doc->layer(active_layer()).type == LayerType::Group)
+        run(std::make_unique<UngroupCommand>(active_layer()));
+}
+
+void App::layer_set_mask(const char* name, Mask m, bool enabled) {
+    if (doc && active_layer() >= 0) run(std::make_unique<SetMaskCommand>(active_layer(), name, std::move(m), enabled));
+}
+
+void App::layer_mask_from_selection() {
+    if (!doc || active_layer() < 0) return;
+    Mask m = doc->has_selection() ? doc->selection() : Mask(doc->width(), doc->height(), 255);
+    layer_set_mask("New Mask Layer", std::move(m));
+}
+
+void App::layer_mask_from_image() {
+    if (!doc || active_layer() < 0) return;
+    const Image flat = doc->composite();
+    Mask m(doc->width(), doc->height());
+    for (int y = 0; y < m.height(); ++y)
+        for (int x = 0; x < m.width(); ++x) {
+            const Color c = flat.get(x, y);
+            m.at(x, y) = static_cast<uint8_t>((c.r * 299 + c.g * 587 + c.b * 114 + 500) / 1000 * c.a / 255);
+        }
+    layer_set_mask("New Mask Layer", std::move(m));
 }
 
 void App::layer_promote_background() {
