@@ -314,6 +314,95 @@ void twirl(Image& img, float degrees) {
     });
 }
 
+void ripple(Image& img, float amplitude, float wavelength) {
+    if (wavelength <= 0.0f || amplitude == 0.0f) return;
+    const float cx = img.width() * 0.5f, cy = img.height() * 0.5f;
+    const float k = 6.2831853f / wavelength;
+    remap(img, [&](float x, float y, float& sx, float& sy) {
+        const float dx = x - cx, dy = y - cy;
+        const float d = std::hypot(dx, dy);
+        if (d == 0.0f) { sx = x; sy = y; return; }
+        const float off = amplitude * std::sin(d * k);
+        sx = x + dx / d * off;
+        sy = y + dy / d * off;
+    });
+}
+
+void spherize(Image& img, int strength) {
+    const float s = std::clamp(strength, -100, 100) / 100.0f;
+    if (s == 0.0f) return;
+    const float cx = img.width() * 0.5f, cy = img.height() * 0.5f;
+    const float radius = std::min(cx, cy);
+    remap(img, [&](float x, float y, float& sx, float& sy) {
+        const float dx = x - cx, dy = y - cy;
+        const float d = std::hypot(dx, dy);
+        if (d >= radius || d == 0.0f) { sx = x; sy = y; return; }
+        const float t = d / radius;
+        // Bulge: sample nearer the centre (asin curve); dish: further out.
+        const float f = s > 0 ? std::asin(t) * 2.0f / 3.14159265f : std::sin(t * 3.14159265f * 0.5f);
+        const float tt = t + (f - t) * std::abs(s);
+        sx = cx + dx * tt / t;
+        sy = cy + dy * tt / t;
+    });
+}
+
+void lens_distortion(Image& img, int strength) {
+    const float s = std::clamp(strength, -100, 100) / 100.0f;
+    if (s == 0.0f) return;
+    const float cx = img.width() * 0.5f, cy = img.height() * 0.5f;
+    const float radius = std::hypot(cx, cy);
+    remap(img, [&](float x, float y, float& sx, float& sy) {
+        const float dx = (x - cx) / radius, dy = (y - cy) / radius;
+        const float r2 = dx * dx + dy * dy;
+        const float k = 1.0f + s * 0.5f * r2;  // barrel samples further out, pincushion nearer
+        sx = cx + dx * k * radius;
+        sy = cy + dy * k * radius;
+    });
+}
+
+void halftone(Image& img, int cell, float angle_degrees, Color ink, Color paper) {
+    cell = std::max(2, cell);
+    const int w = img.width(), h = img.height();
+    const Image src = img;
+    const float rad = angle_degrees * 3.14159265f / 180.0f;
+    const float cs = std::cos(rad), sn = std::sin(rad);
+    uint8_t* d = img.data();
+    for (int y = 0; y < h; ++y)
+        for (int x = 0; x < w; ++x) {
+            // Rotate into the screen grid, find the cell centre, rotate back.
+            const float rx = x * cs + y * sn, ry = -x * sn + y * cs;
+            const float gx = (std::floor(rx / cell) + 0.5f) * cell, gy = (std::floor(ry / cell) + 0.5f) * cell;
+            const float ox = gx * cs - gy * sn, oy = gx * sn + gy * cs;
+            const int sx = std::clamp(static_cast<int>(ox), 0, w - 1), sy = std::clamp(static_cast<int>(oy), 0, h - 1);
+            const uint8_t* s = src.data() + (static_cast<size_t>(sy) * w + sx) * 4;
+            const float lum = (s[0] * 299 + s[1] * 587 + s[2] * 114) / 255000.0f;
+            const float dark = 1.0f - lum;
+            // Dot area follows darkness; solid black reaches the cell corners.
+            const float dot_r = dark > 0.0f ? std::sqrt(dark) * cell * 0.7071f + 0.5f : -1.0f;
+            const float dist = std::hypot(rx - gx, ry - gy);
+            const float cov = std::clamp(dot_r + 0.5f - dist, 0.0f, 1.0f);
+            uint8_t* p = d + (static_cast<size_t>(y) * w + x) * 4;
+            for (int c = 0; c < 3; ++c) {
+                const uint8_t pc = c == 0 ? paper.r : c == 1 ? paper.g : paper.b;
+                const uint8_t ic = c == 0 ? ink.r : c == 1 ? ink.g : ink.b;
+                p[c] = clamp8(pc + (ic - pc) * cov);
+            }
+        }
+}
+
+void chrome(Image& img, int bands, float brightness) {
+    bands = std::clamp(bands, 1, 20);
+    uint8_t* p = img.data();
+    for (size_t i = 0; i < img.size_bytes(); i += 4) {
+        const float lum = (p[i] * 299 + p[i + 1] * 587 + p[i + 2] * 114) / 255000.0f;
+        // Triangle wave over the luminance range: repeated highlights.
+        float t = std::fmod(lum * bands, 1.0f);
+        t = t < 0.5f ? t * 2.0f : 2.0f - t * 2.0f;
+        const uint8_t v = clamp8(t * 255.0f * brightness);
+        p[i] = p[i + 1] = p[i + 2] = v;
+    }
+}
+
 // --- 3D ----------------------------------------------------------------
 
 void buttonize(Image& img, int width, float opacity, Color color, bool transparent_edge) {
@@ -343,16 +432,19 @@ void buttonize(Image& img, int width, float opacity, Color color, bool transpare
 
 namespace {
 
-// Chamfer (3-4) distance to the nearest unset pixel, in pixel units.
-std::vector<float> distance_inside(const uint8_t* region, const Image& img, int w, int h) {
+// Chamfer (3-4) distance to the nearest unset pixel, in pixel units. With
+// `border_is_edge` the image border also counts as an edge.
+std::vector<float> distance_inside(const uint8_t* region, const Image& img, int w, int h, bool border_is_edge = true) {
     std::vector<float> d(static_cast<size_t>(w) * h, 1e9f);
     auto inside = [&](int x, int y) {
         const uint8_t v = region ? region[static_cast<size_t>(y) * w + x] : img.data()[(static_cast<size_t>(y) * w + x) * 4 + 3];
         return v >= 128;
     };
     for (int y = 0; y < h; ++y)
-        for (int x = 0; x < w; ++x)
-            if (!inside(x, y) || x == 0 || y == 0 || x == w - 1 || y == h - 1) d[static_cast<size_t>(y) * w + x] = inside(x, y) ? 1.0f : 0.0f;
+        for (int x = 0; x < w; ++x) {
+            const bool border = border_is_edge && (x == 0 || y == 0 || x == w - 1 || y == h - 1);
+            if (!inside(x, y) || border) d[static_cast<size_t>(y) * w + x] = inside(x, y) ? 1.0f : 0.0f;
+        }
     auto at = [&](int x, int y) -> float& { return d[static_cast<size_t>(y) * w + x]; };
     for (int y = 1; y < h; ++y)
         for (int x = 0; x < w; ++x) {
@@ -399,6 +491,36 @@ void inner_bevel(Image& img, const uint8_t* region, int width, float angle_degre
             const float k = ambient + shade;
             uint8_t* px = p + i * 4;
             for (int c = 0; c < 3; ++c) px[c] = clamp8(px[c] * k);
+        }
+}
+
+void outer_bevel(Image& img, const uint8_t* region, int width, float angle_degrees, float depth, Color color) {
+    const int w = img.width(), h = img.height();
+    width = std::max(1, width);
+    // Distance from the region outward: invert the region and reuse the inside transform.
+    std::vector<uint8_t> inverted(static_cast<size_t>(w) * h);
+    for (int y = 0; y < h; ++y)
+        for (int x = 0; x < w; ++x) {
+            const uint8_t v = region ? region[static_cast<size_t>(y) * w + x] : img.data()[(static_cast<size_t>(y) * w + x) * 4 + 3];
+            inverted[static_cast<size_t>(y) * w + x] = v >= 128 ? 0 : 255;
+        }
+    const std::vector<float> dist = distance_inside(inverted.data(), img, w, h, /*border_is_edge=*/false);
+    std::vector<float> height(dist.size());
+    for (size_t i = 0; i < dist.size(); ++i) {
+        const float t = std::clamp(dist[i] / width, 0.0f, 1.0f);
+        height[i] = 1.0f - t * t * (3 - 2 * t);  // 1 at the region edge, 0 at `width` outwards
+    }
+    const float rad = angle_degrees * 3.14159265f / 180.0f;
+    const float lx = std::cos(rad), ly = -std::sin(rad);
+    for (int y = 0; y < h; ++y)
+        for (int x = 0; x < w; ++x) {
+            const size_t i = static_cast<size_t>(y) * w + x;
+            if (inverted[i] == 0 || dist[i] <= 0.0f || dist[i] > width) continue;
+            const float gx = height[static_cast<size_t>(y) * w + std::min(x + 1, w - 1)] - height[static_cast<size_t>(y) * w + std::max(x - 1, 0)];
+            const float gy = height[static_cast<size_t>(std::min(y + 1, h - 1)) * w + x] - height[static_cast<size_t>(std::max(y - 1, 0)) * w + x];
+            const float k = 1.0f - (gx * lx + gy * ly) * depth * 4.0f;
+            const Color c{clamp8(color.r * k), clamp8(color.g * k), clamp8(color.b * k), 255};
+            raster::blend_over(img, x, y, c, 1.0f);
         }
 }
 

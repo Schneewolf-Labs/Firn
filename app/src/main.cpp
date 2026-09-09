@@ -146,6 +146,7 @@ int main(int argc, char** argv) {
     app.config.grid_spacing = app.grid_spacing;
     app.config.save();
     if (app.canvas_tex) glDeleteTextures(1, &app.canvas_tex);
+    if (app.overlay_tex) glDeleteTextures(1, &app.overlay_tex);
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplSDL2_Shutdown();
     ImGui::DestroyContext();

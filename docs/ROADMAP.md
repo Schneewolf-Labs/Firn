@@ -44,7 +44,8 @@ what to work on next.
 - [x] Find Edges, Enhance Edges, Emboss, Erode / Dilate
 - [x] Drop Shadow, Mosaic (pixelate)
 - [x] Inner Bevel, Cutout, Buttonize, Sepia, Wave, Pinch/Punch, Twirl
-- [ ] Outer Bevel, Chrome, Halftone, Page Curl, Ripple, Spherize, Lens Distortion
+- [x] Outer Bevel, Chrome, Halftone, Ripple, Spherize, Lens Distortion
+- [ ] Page Curl, Kaleidoscope, Pattern, Sunburst, Lights, Fur, Weave
 
 ## 5. Retouch and paint tools
 
@@ -76,4 +77,4 @@ what to work on next.
 - [x] Selections: load from / save to disk (.PspSelection or any image)
 - [ ] Alpha channels in files
 - [x] Painting directly on masks (Edit button / Layers > Mask > Edit Mask)
-- [ ] Mask overlay view (red tint over hidden areas)
+- [x] Mask overlay view (red tint over hidden areas while editing)

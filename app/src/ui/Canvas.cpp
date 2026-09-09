@@ -169,6 +169,9 @@ void App::draw_canvas() {
     }
 
     dl->AddImage((ImTextureID)(intptr_t)canvas_tex, p0, p1);
+    sync_overlay_texture();
+    if (mask_edit && show_mask_overlay && overlay_tex && overlay_tex_revision == doc->revision())
+        dl->AddImage((ImTextureID)(intptr_t)overlay_tex, p0, p1);
     dl->AddRect(ImVec2(p0.x - 1, p0.y - 1), ImVec2(p1.x + 1, p1.y + 1), IM_COL32(0, 0, 0, 255));
 
     // Grid: image-space lines every grid_spacing pixels, once they are far enough apart.

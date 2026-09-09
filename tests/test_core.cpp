@@ -1027,7 +1027,45 @@ static void test_square_brush() {
     CHECK(ro.get(6, 6).r == 0);  // round brush misses the corner
 }
 
+static void test_effects_round3() {
+    Image g(21, 21);
+    for (int y = 0; y < 21; ++y) for (int x = 0; x < 21; ++x) g.set(x, y, {static_cast<uint8_t>(x * 12), static_cast<uint8_t>(y * 12), 0, 255});
+    Image r = g; effects::ripple(r, 0, 10);
+    Image s0 = g; effects::spherize(s0, 0);
+    Image l0 = g; effects::lens_distortion(l0, 0);
+    CHECK(r.get(5, 5).r == g.get(5, 5).r && s0.get(5, 5).r == g.get(5, 5).r && l0.get(5, 5).r == g.get(5, 5).r);
+    Image rp = g; effects::ripple(rp, 3, 6);
+    bool moved = false;
+    for (int x = 0; x < 21; ++x) moved |= rp.get(x, 10).r != g.get(x, 10).r;
+    CHECK(moved);
+    Image sp = g; effects::spherize(sp, 100);
+    CHECK(sp.get(10, 10).r == g.get(10, 10).r && sp.get(14, 10).r < g.get(14, 10).r);  // bulge magnifies the centre
+    Image le = g; effects::lens_distortion(le, 100);
+    CHECK(le.get(10, 10).r == g.get(10, 10).r && le.get(18, 10).r >= g.get(18, 10).r);   // barrel pulls the edge inward
+    // Halftone: white stays paper, black becomes solid ink.
+    Image ht(16, 16, {255, 255, 255, 255});
+    effects::halftone(ht, 4, 0, {0, 0, 0, 255}, {255, 255, 255, 255});
+    CHECK(ht.get(8, 8).r == 255);
+    Image hb(16, 16, {0, 0, 0, 255});
+    effects::halftone(hb, 4, 0, {0, 0, 0, 255}, {255, 255, 255, 255});
+    CHECK(hb.get(8, 8).r == 0);
+    // Chrome is grey and periodic.
+    Image ch(4, 1);
+    for (int x = 0; x < 4; ++x) ch.set(x, 0, {static_cast<uint8_t>(x * 85), static_cast<uint8_t>(x * 85), static_cast<uint8_t>(x * 85), 255});
+    effects::chrome(ch, 2, 1.0f);
+    CHECK(ch.get(0, 0).r == ch.get(0, 0).g && ch.get(0, 0).r == 0);
+    CHECK(ch.get(1, 0).r > 100);
+    // Outer bevel adds opaque rim pixels around an opaque square.
+    Image ob(30, 30, {0, 0, 0, 0});
+    for (int y = 10; y < 20; ++y) for (int x = 10; x < 20; ++x) ob.set(x, y, {128, 128, 128, 255});
+    effects::outer_bevel(ob, nullptr, 4, 135.0f, 1.0f, {200, 200, 200, 255});
+    CHECK(ob.get(8, 15).a == 255 && ob.get(21, 15).a == 255 && ob.get(3, 15).a == 0);
+    CHECK(ob.get(8, 15).r > ob.get(21, 15).r);  // lit from the top-left
+    CHECK(ob.get(15, 15).r == 128);
+}
+
 int main() {
+    test_effects_round3();
     test_square_brush();
     test_groups_and_masks();
     test_more_shapes();

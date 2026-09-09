@@ -113,7 +113,8 @@ struct App {
     // Adjustment / effect dialogs with live preview (ui/Adjust.cpp)
     enum class Adj { None, BrightnessContrast, Curves, Gamma, Levels, Threshold, ChannelMixer, Colorize, HSL,
                      Average, Gaussian, Posterize, Solarize, UnsharpMask, Median, MotionBlur, Mosaic, AddNoise, DropShadow,
-                     ColorBalance, Sepia, HueMap, Wave, Pinch, Twirl, Buttonize, InnerBevel, Cutout };
+                     ColorBalance, Sepia, HueMap, Wave, Pinch, Twirl, Buttonize, InnerBevel, Cutout,
+                     Ripple, Spherize, Lens, Halftone, Chrome, OuterBevel };
     Adj open_adjust = Adj::None;
     struct Preview {
         bool active = false;
@@ -154,6 +155,16 @@ struct App {
     int button_width = 10; float button_opacity = 0.75f; float button_color[3] = {0.5f, 0.5f, 0.5f}; bool button_transparent = false;
     int bevel_width = 10; float bevel_angle = 315, bevel_depth = 1.0f, bevel_ambient = 1.0f;
     int cutout_x = 5, cutout_y = 5; float cutout_opacity = 0.6f, cutout_blur = 5; float cutout_color[3] = {0, 0, 0};
+    float ripple_amp = 5, ripple_wave = 30;
+    int spherize_strength = 50, lens_strength = 30;
+    int halftone_cell = 6; float halftone_angle = 45; float halftone_ink[3] = {0, 0, 0}, halftone_paper[3] = {1, 1, 1};
+    int chrome_bands = 4; float chrome_brightness = 1.0f;
+    int obevel_width = 8; float obevel_angle = 315, obevel_depth = 1.0f; float obevel_color[3] = {0.7f, 0.7f, 0.7f};
+    // Mask overlay while editing: red tint over hidden areas
+    bool show_mask_overlay = true;
+    GLuint overlay_tex = 0;
+    uint64_t overlay_tex_revision = ~0ull;
+    void sync_overlay_texture();
     int show_sel_dialog = 0;            // 1 expand, 2 contract, 3 feather
     bool show_layer_props_dialog = false;
     bool show_resize_dialog = false;

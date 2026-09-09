@@ -43,6 +43,18 @@ void pinch(Image& img, int strength);
 // Twirl about the centre by `degrees` at the middle, falling off to the edge.
 void twirl(Image& img, float degrees);
 
+// Ripple: concentric waves from the centre. Spherize: bulge (positive) or
+// dish (negative) inside the largest inscribed circle. Lens: barrel
+// (positive) or pincushion (negative) distortion, -100..100.
+void ripple(Image& img, float amplitude, float wavelength);
+void spherize(Image& img, int strength);
+void lens_distortion(Image& img, int strength);
+
+// Halftone: dots on a grid of `cell` px sized by luminance, ink over paper.
+void halftone(Image& img, int cell, float angle_degrees, Color ink, Color paper);
+// Chrome: greyscale run through a repeated brightness ramp (`bands`).
+void chrome(Image& img, int bands, float brightness);
+
 // --- 3D ---------------------------------------------------------------
 // Buttonize: bevelled border of `width` px in `color` at `opacity`;
 // `transparent_edge` lightens/darkens the image instead of painting colour.
@@ -51,6 +63,9 @@ void buttonize(Image& img, int width, float opacity, Color color, bool transpare
 // or the alpha channel when null) is set: shades by a height ramp of
 // `width` px lit from `angle` degrees.
 void inner_bevel(Image& img, const uint8_t* region, int width, float angle_degrees, float depth, float ambient);
+// Outer Bevel: raises a rim of `width` px around the region (alpha when
+// `region` is null) in `color`, lit from `angle`; adds pixels outside.
+void outer_bevel(Image& img, const uint8_t* region, int width, float angle_degrees, float depth, Color color);
 // Cutout: a shadow cast into the region by its edge (the inverse of Drop Shadow).
 void cutout(Image& img, const uint8_t* region, int offset_x, int offset_y, float opacity, float blur, Color color);
 

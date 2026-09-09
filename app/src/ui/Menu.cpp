@@ -61,6 +61,7 @@ void App::draw_menu() {
         ImGui::MenuItem("Rulers", nullptr, &show_rulers);
         ImGui::MenuItem("Grid", nullptr, &show_grid);
         ImGui::MenuItem("Guides", nullptr, &show_guides);
+        ImGui::MenuItem("Mask Overlay", nullptr, &show_mask_overlay);
         ImGui::MenuItem("Snap to Guides", nullptr, &snap_to_guides);
         ImGui::MenuItem("Snap to Grid", nullptr, &snap_to_grid);
         if (ImGui::MenuItem("Clear Guides", nullptr, false, !guides_h.empty() || !guides_v.empty())) { guides_h.clear(); guides_v.clear(); }
@@ -150,15 +151,21 @@ void App::draw_menu() {
             if (ImGui::MenuItem("Cutout...")) open_adjust = Adj::Cutout;
             if (ImGui::MenuItem("Drop Shadow...")) open_adjust = Adj::DropShadow;
             if (ImGui::MenuItem("Inner Bevel...")) open_adjust = Adj::InnerBevel;
+            if (ImGui::MenuItem("Outer Bevel...")) open_adjust = Adj::OuterBevel;
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("Distortion Effects", has_layer)) {
+            if (ImGui::MenuItem("Lens Distortion...")) open_adjust = Adj::Lens;
             if (ImGui::MenuItem("Pinch / Punch...")) open_adjust = Adj::Pinch;
+            if (ImGui::MenuItem("Ripple...")) open_adjust = Adj::Ripple;
+            if (ImGui::MenuItem("Spherize...")) open_adjust = Adj::Spherize;
             if (ImGui::MenuItem("Twirl...")) open_adjust = Adj::Twirl;
             if (ImGui::MenuItem("Wave...")) open_adjust = Adj::Wave;
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("Artistic Effects", has_layer)) {
+            if (ImGui::MenuItem("Chrome...")) open_adjust = Adj::Chrome;
+            if (ImGui::MenuItem("Halftone...")) open_adjust = Adj::Halftone;
             if (ImGui::MenuItem("Posterize...")) open_adjust = Adj::Posterize;
             if (ImGui::MenuItem("Sepia Toning...")) open_adjust = Adj::Sepia;
             if (ImGui::MenuItem("Solarize...")) open_adjust = Adj::Solarize;

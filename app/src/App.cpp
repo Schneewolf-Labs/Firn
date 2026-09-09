@@ -625,6 +625,32 @@ void App::sync_canvas_texture() {
     canvas_tex_revision = doc->revision();
 }
 
+// Red tint where the edited mask hides pixels, as a second texture.
+void App::sync_overlay_texture() {
+    const bool want = mask_edit && show_mask_overlay && doc && mask_proxy_layer < doc->layer_count() && doc->layer(mask_proxy_layer).has_mask();
+    if (!want) { overlay_tex_revision = ~0ull; return; }
+    if (overlay_tex && overlay_tex_revision == doc->revision()) return;
+    const Mask& m = doc->layer(mask_proxy_layer).mask;
+    std::vector<uint8_t> px(m.size() * 4);
+    for (size_t i = 0; i < m.size(); ++i) {
+        px[i * 4 + 0] = 255; px[i * 4 + 1] = 0; px[i * 4 + 2] = 0;
+        px[i * 4 + 3] = static_cast<uint8_t>((255 - m.data()[i]) * 0.5f);
+    }
+    if (!overlay_tex) {
+        glGenTextures(1, &overlay_tex);
+        glBindTexture(GL_TEXTURE_2D, overlay_tex);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    } else {
+        glBindTexture(GL_TEXTURE_2D, overlay_tex);
+    }
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, m.width(), m.height(), 0, GL_RGBA, GL_UNSIGNED_BYTE, px.data());
+    overlay_tex_revision = doc->revision();
+}
+
 void App::handle_shortcuts() {
     ImGuiIO& io = ImGui::GetIO();
     if (io.WantTextInput) return;

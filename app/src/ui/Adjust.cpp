@@ -159,7 +159,8 @@ void App::draw_adjust_dialogs() {
                                     "Channel Mixer", "Colorize", "Hue/Saturation/Lightness", "Average", "Gaussian Blur",
                                     "Posterize", "Solarize", "Unsharp Mask", "Median", "Motion Blur", "Mosaic",
                                     "Add Noise", "Drop Shadow", "Color Balance", "Sepia Toning", "Hue Map", "Wave",
-                                    "Pinch", "Twirl", "Buttonize", "Inner Bevel", "Cutout"};
+                                    "Pinch", "Twirl", "Buttonize", "Inner Bevel", "Cutout", "Ripple", "Spherize",
+                                    "Lens Distortion", "Halftone", "Chrome", "Outer Bevel"};
     if (open_adjust != Adj::None) {
         if (doc && active_layer() >= 0) ImGui::OpenPopup(kTitles[static_cast<int>(open_adjust)]);
         open_adjust = Adj::None;
@@ -405,5 +406,59 @@ void App::draw_adjust_dialogs() {
             auto c8 = [](float f) { return static_cast<uint8_t>(f * 255.0f + 0.5f); };
             effects::cutout(img, doc && doc->has_selection() ? doc->selection().data() : nullptr, cutout_x, cutout_y, cutout_opacity, cutout_blur,
                             {c8(cutout_color[0]), c8(cutout_color[1]), c8(cutout_color[2]), 255});
+        });
+
+    adjust_modal(*this, "Ripple",
+        [&] {
+            bool c = ImGui::SliderFloat("Amplitude", &ripple_amp, 0.0f, 100.0f, "%.0f");
+            c |= ImGui::SliderFloat("Wavelength", &ripple_wave, 2.0f, 300.0f, "%.0f");
+            return c;
+        },
+        [&](Image& img) { effects::ripple(img, ripple_amp, ripple_wave); });
+
+    adjust_modal(*this, "Spherize",
+        [&] { return ImGui::SliderInt("Strength (negative = dish)", &spherize_strength, -100, 100); },
+        [&](Image& img) { effects::spherize(img, spherize_strength); });
+
+    adjust_modal(*this, "Lens Distortion",
+        [&] { return ImGui::SliderInt("Strength (negative = pincushion)", &lens_strength, -100, 100); },
+        [&](Image& img) { effects::lens_distortion(img, lens_strength); });
+
+    adjust_modal(*this, "Halftone",
+        [&] {
+            bool c = ImGui::SliderInt("Cell size", &halftone_cell, 2, 50);
+            c |= ImGui::SliderFloat("Angle", &halftone_angle, 0.0f, 90.0f, "%.0f");
+            c |= ImGui::ColorEdit3("Ink", halftone_ink, ImGuiColorEditFlags_NoInputs);
+            ImGui::SameLine();
+            c |= ImGui::ColorEdit3("Paper", halftone_paper, ImGuiColorEditFlags_NoInputs);
+            return c;
+        },
+        [&](Image& img) {
+            auto c8 = [](float f) { return static_cast<uint8_t>(f * 255.0f + 0.5f); };
+            effects::halftone(img, halftone_cell, halftone_angle, {c8(halftone_ink[0]), c8(halftone_ink[1]), c8(halftone_ink[2]), 255},
+                              {c8(halftone_paper[0]), c8(halftone_paper[1]), c8(halftone_paper[2]), 255});
+        });
+
+    adjust_modal(*this, "Chrome",
+        [&] {
+            bool c = ImGui::SliderInt("Flaws (bands)", &chrome_bands, 1, 20);
+            c |= ImGui::SliderFloat("Brightness", &chrome_brightness, 0.2f, 2.0f, "%.2f");
+            return c;
+        },
+        [&](Image& img) { effects::chrome(img, chrome_bands, chrome_brightness); });
+
+    adjust_modal(*this, "Outer Bevel",
+        [&] {
+            bool c = ImGui::SliderInt("Width", &obevel_width, 1, 100);
+            c |= ImGui::SliderFloat("Light angle", &obevel_angle, 0.0f, 359.0f, "%.0f");
+            c |= ImGui::SliderFloat("Depth", &obevel_depth, 0.1f, 3.0f, "%.1f");
+            c |= ImGui::ColorEdit3("Color", obevel_color, ImGuiColorEditFlags_NoInputs);
+            ImGui::TextDisabled(doc && doc->has_selection() ? "Raised around the selection." : "Raised around the layer's opaque area.");
+            return c;
+        },
+        [&](Image& img) {
+            auto c8 = [](float f) { return static_cast<uint8_t>(f * 255.0f + 0.5f); };
+            effects::outer_bevel(img, doc && doc->has_selection() ? doc->selection().data() : nullptr, obevel_width, obevel_angle, obevel_depth,
+                                 {c8(obevel_color[0]), c8(obevel_color[1]), c8(obevel_color[2]), 255});
         });
 }
