@@ -31,6 +31,7 @@ struct DocState {
     float zoom = 1.0f, pan_x = 0.0f, pan_y = 0.0f;
     bool fit_requested = true;
     firn::raster::Rect crop_rect;
+    std::vector<float> guides_h, guides_v;  // image-space y / x positions
 };
 
 struct App {
@@ -58,8 +59,13 @@ struct App {
     bool document_modified(int index) const;
 
     Config config;
-    bool show_rulers = true, show_grid = false;
+    bool show_rulers = true, show_grid = false, show_guides = true;
+    bool snap_to_guides = true, snap_to_grid = false;
     int grid_spacing = 10;
+    std::vector<float> guides_h, guides_v;  // current document's guides (image coords)
+    // Guide being dragged: kind 0 none, 1 horizontal, 2 vertical; index -1 = new
+    int guide_drag_kind = 0, guide_drag_index = -1;
+    void snap_point(float& x, float& y) const;
 
     // Canvas view
     GLuint canvas_tex = 0;
@@ -101,7 +107,7 @@ struct App {
 
     // Dialog state
     FileDialog file_dialog;
-    enum class PendingFileOp { None, Open, SaveAs };
+    enum class PendingFileOp { None, Open, SaveAs, LoadSelection, SaveSelection };
     PendingFileOp file_op = PendingFileOp::None;
     bool show_new_dialog = false;
     // Adjustment / effect dialogs with live preview (ui/Adjust.cpp)
@@ -223,6 +229,10 @@ struct App {
     void clear_selection();
     void paste_as_new_layer();
     void paste_as_new_image();
+    void request_load_selection();
+    void request_save_selection();
+    void load_selection(const std::string& path);   // any image: luminance x alpha becomes the mask
+    void save_selection(const std::string& path);   // .PspSelection (or any writable format)
     void sync_ants();
 
     // Layers

@@ -64,6 +64,7 @@ void App::draw_canvas() {
     }
 
     // Input: the whole view is one invisible button so we get hover/drag state.
+    ImGui::SetCursorScreenPos(view_pos);
     ImGui::InvisibleButton("canvas", view_size,
                            ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonMiddle |
                                ImGuiButtonFlags_MouseButtonRight);
@@ -96,8 +97,41 @@ void App::draw_canvas() {
     in.inside = in.img_x >= 0 && in.img_y >= 0 && in.img_x < img_w && in.img_y < img_h;
     in.dl = dl;
 
-    const bool tool_takes_left = !tool().pans_with_left_drag() && !space;
-    if (active_button < 0 && hovered) {
+    if (tool().wants_snap() && (snap_to_guides || snap_to_grid)) snap_point(in.img_x, in.img_y);
+
+    // Guides: drag out of a ruler to create, drag an existing one to move,
+    // drop it back on a ruler to remove.
+    if (show_guides && doc) {
+        const bool over_top_ruler = ruler > 0 && io.MousePos.y >= ruler_origin.y && io.MousePos.y < view_pos.y && io.MousePos.x >= view_pos.x && io.MousePos.x < view_pos.x + view_size.x;
+        const bool over_left_ruler = ruler > 0 && io.MousePos.x >= ruler_origin.x && io.MousePos.x < view_pos.x && io.MousePos.y >= view_pos.y && io.MousePos.y < view_pos.y + view_size.y;
+        const bool window_hovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows);
+        if (guide_drag_kind == 0 && active_button < 0 && window_hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+            const float tol = 5.0f;
+            if (over_top_ruler) { guide_drag_kind = 1; guide_drag_index = -1; }
+            else if (over_left_ruler) { guide_drag_kind = 2; guide_drag_index = -1; }
+            else if (hovered) {
+                for (size_t i = 0; i < guides_h.size(); ++i) if (std::abs(p0.y + guides_h[i] * zoom - io.MousePos.y) <= tol) { guide_drag_kind = 1; guide_drag_index = static_cast<int>(i); }
+                for (size_t i = 0; i < guides_v.size(); ++i) if (std::abs(p0.x + guides_v[i] * zoom - io.MousePos.x) <= tol) { guide_drag_kind = 2; guide_drag_index = static_cast<int>(i); }
+            }
+            if (guide_drag_kind == 1 && guide_drag_index < 0) { guides_h.push_back(in.img_y); guide_drag_index = static_cast<int>(guides_h.size()) - 1; }
+            if (guide_drag_kind == 2 && guide_drag_index < 0) { guides_v.push_back(in.img_x); guide_drag_index = static_cast<int>(guides_v.size()) - 1; }
+        }
+        if (guide_drag_kind != 0) {
+            std::vector<float>& gv = guide_drag_kind == 1 ? guides_h : guides_v;
+            if (guide_drag_index >= 0 && guide_drag_index < static_cast<int>(gv.size())) {
+                gv[guide_drag_index] = std::round(guide_drag_kind == 1 ? (io.MousePos.y - p0.y) / zoom : (io.MousePos.x - p0.x) / zoom);
+                if (!ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
+                    const bool on_ruler = guide_drag_kind == 1 ? io.MousePos.y < view_pos.y : io.MousePos.x < view_pos.x;
+                    if (on_ruler) gv.erase(gv.begin() + guide_drag_index);
+                    guide_drag_kind = 0; guide_drag_index = -1;
+                }
+            } else { guide_drag_kind = 0; guide_drag_index = -1; }
+        }
+    }
+    const bool guide_busy = guide_drag_kind != 0;
+
+    const bool tool_takes_left = !tool().pans_with_left_drag() && !space && !guide_busy;
+    if (active_button < 0 && hovered && !guide_busy) {
         if (tool_takes_left && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) active_button = ImGuiMouseButton_Left;
         else if (ImGui::IsMouseClicked(ImGuiMouseButton_Right)) active_button = ImGuiMouseButton_Right;
         if (active_button >= 0) tool().on_press(*this, in, static_cast<ImGuiMouseButton>(active_button));
@@ -149,7 +183,14 @@ void App::draw_canvas() {
             if (sy >= view_pos.y && sy <= view_pos.y + view_size.y) dl->AddLine(ImVec2(std::max(p0.x, view_pos.x), sy), ImVec2(std::min(p1.x, view_pos.x + view_size.x), sy), gc);
         }
     }
-    if (hovered || active_button >= 0) tool().draw_overlay(*this, in);
+    if ((hovered || active_button >= 0) && !guide_busy) tool().draw_overlay(*this, in);
+
+    // Guides.
+    if (show_guides) {
+        const ImU32 gc = IM_COL32(0, 160, 255, 200);
+        for (float g : guides_h) { const float sy = p0.y + g * zoom; if (sy >= view_pos.y && sy <= view_pos.y + view_size.y) dl->AddLine(ImVec2(view_pos.x, sy), ImVec2(view_pos.x + view_size.x, sy), gc); }
+        for (float g : guides_v) { const float sx = p0.x + g * zoom; if (sx >= view_pos.x && sx <= view_pos.x + view_size.x) dl->AddLine(ImVec2(sx, view_pos.y), ImVec2(sx, view_pos.y + view_size.y), gc); }
+    }
 
     // Marching ants along the selection boundary. Each unit edge is one
     // segment; colour alternates along the outline and cycles with time.

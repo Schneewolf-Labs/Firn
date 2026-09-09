@@ -25,6 +25,7 @@ Color to_color(const float* f) {
 
 class PanTool : public Tool {
 public:
+    const char* category() const override { return "View"; }
     const char* name() const override { return "Pan"; }
     const char* shortcut() const override { return "A"; }
     bool pans_with_left_drag() const override { return true; }
@@ -35,6 +36,7 @@ public:
 
 class ZoomTool : public Tool {
 public:
+    const char* category() const override { return "View"; }
     const char* name() const override { return "Zoom"; }
     const char* shortcut() const override { return "Z"; }
     void on_press(App& app, const ToolInput& in, ImGuiMouseButton b) override {
@@ -53,6 +55,7 @@ public:
 
 class DropperTool : public Tool {
 public:
+    const char* category() const override { return "Colour"; }
     const char* name() const override { return "Dropper"; }
     const char* shortcut() const override { return "E"; }
     void on_press(App& app, const ToolInput& in, ImGuiMouseButton b) override { pick(app, in, b); }
@@ -78,6 +81,14 @@ private:
 class BrushTool : public Tool {
 public:
     enum class Kind { Paint, Eraser, Airbrush, Clone, LightenDarken, DodgeBurn, Saturation, Hue, ColorReplacer, Soften, Sharpen };
+    const char* category() const override {
+        switch (kind_) {
+            case Kind::Paint: case Kind::Airbrush: return "Paint";
+            case Kind::Eraser: return "Erase";
+            case Kind::Clone: case Kind::ColorReplacer: return "Clone and Replace";
+            default: return "Retouch";
+        }
+    }
     explicit BrushTool(Kind k) : kind_(k) {}
 
     const char* name() const override {
@@ -332,6 +343,7 @@ private:
 
 class SmudgeTool : public Tool {
 public:
+    const char* category() const override { return "Retouch"; }
     const char* name() const override { return "Smudge"; }
     const char* shortcut() const override { return "U"; }
     void on_press(App& app, const ToolInput& in, ImGuiMouseButton b) override {
@@ -434,6 +446,8 @@ private:
 
 class MoveTool : public Tool {
 public:
+    const char* category() const override { return "Edit"; }
+    bool wants_snap() const override { return true; }
     const char* name() const override { return "Move"; }
     const char* shortcut() const override { return "M"; }
     void on_press(App& app, const ToolInput& in, ImGuiMouseButton b) override {
@@ -508,6 +522,7 @@ private:
 
 class FloodFillTool : public Tool {
 public:
+    const char* category() const override { return "Fill"; }
     const char* name() const override { return "Flood Fill"; }
     const char* shortcut() const override { return "F"; }
     void on_press(App& app, const ToolInput& in, ImGuiMouseButton b) override {
@@ -556,6 +571,8 @@ int gesture_mode(const App& app) {
 
 class SelectionTool : public Tool {
 public:
+    const char* category() const override { return "Selection"; }
+    bool wants_snap() const override { return true; }
     const char* name() const override { return "Selection"; }
     const char* shortcut() const override { return "S"; }
     void on_press(App& app, const ToolInput& in, ImGuiMouseButton) override {
@@ -617,6 +634,7 @@ private:
 
 class FreehandTool : public Tool {
 public:
+    const char* category() const override { return "Selection"; }
     const char* name() const override { return "Freehand Selection"; }
     const char* shortcut() const override { return "L"; }
     void on_press(App& app, const ToolInput& in, ImGuiMouseButton) override {
@@ -659,6 +677,7 @@ private:
 
 class MagicWandTool : public Tool {
 public:
+    const char* category() const override { return "Selection"; }
     const char* name() const override { return "Magic Wand"; }
     const char* shortcut() const override { return "W"; }
     void on_press(App& app, const ToolInput& in, ImGuiMouseButton) override {
@@ -688,6 +707,8 @@ public:
 
 class CropTool : public Tool {
 public:
+    const char* category() const override { return "Edit"; }
+    bool wants_snap() const override { return true; }
     const char* name() const override { return "Crop"; }
     const char* shortcut() const override { return "R"; }
     void on_press(App& app, const ToolInput& in, ImGuiMouseButton) override {
@@ -748,6 +769,8 @@ private:
 
 class TextTool : public Tool {
 public:
+    const char* category() const override { return "Text and Shapes"; }
+    bool wants_snap() const override { return true; }
     const char* name() const override { return "Text"; }
     const char* shortcut() const override { return "T"; }
     void on_press(App& app, const ToolInput& in, ImGuiMouseButton b) override {
@@ -769,6 +792,8 @@ public:
 
 class ShapeToolBase : public Tool {
 public:
+    const char* category() const override { return "Text and Shapes"; }
+    bool wants_snap() const override { return true; }
     void on_press(App& app, const ToolInput& in, ImGuiMouseButton) override {
         if (!app.doc || app.active_layer() < 0) return;
         layer_ = app.active_layer();
@@ -871,16 +896,14 @@ std::vector<std::unique_ptr<Tool>> make_default_tools() {
     std::vector<std::unique_ptr<Tool>> t;
     t.push_back(std::make_unique<PanTool>());
     t.push_back(std::make_unique<ZoomTool>());
+    t.push_back(std::make_unique<MoveTool>());
+    t.push_back(std::make_unique<CropTool>());
     t.push_back(std::make_unique<SelectionTool>());
     t.push_back(std::make_unique<FreehandTool>());
     t.push_back(std::make_unique<MagicWandTool>());
     t.push_back(std::make_unique<DropperTool>());
-    t.push_back(std::make_unique<MoveTool>());
-    t.push_back(std::make_unique<CropTool>());
     t.push_back(std::make_unique<BrushTool>(BrushTool::Kind::Paint));
     t.push_back(std::make_unique<BrushTool>(BrushTool::Kind::Airbrush));
-    t.push_back(std::make_unique<BrushTool>(BrushTool::Kind::Eraser));
-    t.push_back(std::make_unique<BrushTool>(BrushTool::Kind::Clone));
     t.push_back(std::make_unique<BrushTool>(BrushTool::Kind::LightenDarken));
     t.push_back(std::make_unique<BrushTool>(BrushTool::Kind::DodgeBurn));
     t.push_back(std::make_unique<SmudgeTool>());
@@ -888,7 +911,9 @@ std::vector<std::unique_ptr<Tool>> make_default_tools() {
     t.push_back(std::make_unique<BrushTool>(BrushTool::Kind::Sharpen));
     t.push_back(std::make_unique<BrushTool>(BrushTool::Kind::Saturation));
     t.push_back(std::make_unique<BrushTool>(BrushTool::Kind::Hue));
+    t.push_back(std::make_unique<BrushTool>(BrushTool::Kind::Clone));
     t.push_back(std::make_unique<BrushTool>(BrushTool::Kind::ColorReplacer));
+    t.push_back(std::make_unique<BrushTool>(BrushTool::Kind::Eraser));
     t.push_back(std::make_unique<FloodFillTool>());
     t.push_back(std::make_unique<TextTool>());
     t.push_back(std::make_unique<LineTool>());

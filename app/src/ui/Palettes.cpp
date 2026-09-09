@@ -11,8 +11,13 @@ using namespace firn;
 // Tools palette is a vertical strip like the original's Tools toolbar.
 static void draw_tools(App& app) {
     ImGui::Begin("Tools");
+    const char* last_cat = nullptr;
     for (size_t i = 0; i < app.tools.size(); ++i) {
         const Tool& t = *app.tools[i];
+        if (!last_cat || std::strcmp(last_cat, t.category()) != 0) {
+            last_cat = t.category();
+            ImGui::SeparatorText(last_cat);
+        }
         char label[64];
         if (t.shortcut()) std::snprintf(label, sizeof(label), "%s (%s)", t.name(), t.shortcut());
         else std::snprintf(label, sizeof(label), "%s", t.name());

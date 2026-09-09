@@ -1,6 +1,7 @@
 #include "App.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 
@@ -32,7 +33,21 @@ void App::stash_current() {
     s.zoom = zoom; s.pan_x = pan_x; s.pan_y = pan_y;
     s.fit_requested = fit_requested;
     s.crop_rect = crop_rect;
+    s.guides_h = guides_h; s.guides_v = guides_v;
     history = CommandStack();
+}
+
+// Snaps to the nearest guide within 8 screen pixels, then to the grid.
+void App::snap_point(float& x, float& y) const {
+    const float tol = 8.0f / std::max(zoom, 0.01f);
+    if (snap_to_guides && show_guides) {
+        for (float g : guides_v) if (std::abs(g - x) <= tol) { x = g; break; }
+        for (float g : guides_h) if (std::abs(g - y) <= tol) { y = g; break; }
+    }
+    if (snap_to_grid && grid_spacing > 0) {
+        x = std::round(x / grid_spacing) * grid_spacing;
+        y = std::round(y / grid_spacing) * grid_spacing;
+    }
 }
 
 void App::activate_document(int index) {
@@ -49,6 +64,7 @@ void App::activate_document(int index) {
     zoom = s.zoom; pan_x = s.pan_x; pan_y = s.pan_y;
     fit_requested = s.fit_requested;
     crop_rect = s.crop_rect;
+    guides_h = s.guides_h; guides_v = s.guides_v;
     current_doc = index;
     canvas_tex_revision = ~0ull;  // force re-upload
     select_tab_request = index;
@@ -69,6 +85,7 @@ void App::add_document(std::unique_ptr<Document> d, const std::string& path) {
     zoom = 1.0f; pan_x = pan_y = 0.0f;
     fit_requested = true;
     crop_rect = {};
+    guides_h.clear(); guides_v.clear();
     canvas_tex_revision = ~0ull;
     select_tab_request = current_doc;
 }
@@ -101,6 +118,7 @@ void App::close_document(int index, bool force) {
             DocState& s = docs[next];
             doc = std::move(s.doc); history = std::move(s.history); doc_path = s.doc_path; doc_title = s.title;
             saved_cursor = s.saved_cursor; zoom = s.zoom; pan_x = s.pan_x; pan_y = s.pan_y; fit_requested = s.fit_requested; crop_rect = s.crop_rect;
+            guides_h = s.guides_h; guides_v = s.guides_v;
             current_doc = next;
             select_tab_request = next;
         }
@@ -416,6 +434,48 @@ void App::open_canvas_dialog() {
     canvas_w = doc->width();
     canvas_h = doc->height();
     show_canvas_dialog = true;
+}
+
+void App::request_load_selection() {
+    if (!doc) return;
+    file_op = PendingFileOp::LoadSelection;
+    file_dialog.open(FileDialog::Mode::Open, "Load Selection From Disk", {"pspselection", "pspimage", "png", "bmp", "jpg", "jpeg", "tga"}, "");
+}
+
+void App::request_save_selection() {
+    if (!doc || !doc->has_selection()) return;
+    file_op = PendingFileOp::SaveSelection;
+    file_dialog.open(FileDialog::Mode::Save, "Save Selection To Disk", {"pspselection", "png"}, "selection.pspselection");
+}
+
+void App::load_selection(const std::string& path) {
+    if (!doc) return;
+    std::string err;
+    auto src = io::load_document(path, &err, nullptr);
+    if (!src) { status = "Load selection failed: " + err; return; }
+    const Image flat = src->composite();
+    Mask m(doc->width(), doc->height());
+    // Selection files are white where selected; any image works via luminance x alpha.
+    for (int y = 0; y < m.height() && y < flat.height(); ++y)
+        for (int x = 0; x < m.width() && x < flat.width(); ++x) {
+            const Color c = flat.get(x, y);
+            const int luma = (c.r * 299 + c.g * 587 + c.b * 114 + 500) / 1000;
+            m.at(x, y) = static_cast<uint8_t>(luma * c.a / 255);
+        }
+    set_selection("Load Selection", std::move(m));
+    status = "Loaded selection from " + path;
+}
+
+void App::save_selection(const std::string& path) {
+    if (!doc || !doc->has_selection()) return;
+    const Mask& sel = doc->selection();
+    Document out(doc->width(), doc->height());
+    Layer& L = out.add_layer("Selection");
+    for (int y = 0; y < sel.height(); ++y)
+        for (int x = 0; x < sel.width(); ++x) L.pixels.set(x, y, {255, 255, 255, sel.at(x, y)});
+    std::string err;
+    if (!io::save_document(out, path, &err)) { status = "Save selection failed: " + err; return; }
+    status = "Saved selection to " + path;
 }
 
 // Rebuild the marching-ants edge list when the selection changes. An edge is

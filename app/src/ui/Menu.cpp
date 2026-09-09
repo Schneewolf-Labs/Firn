@@ -58,6 +58,10 @@ void App::draw_menu() {
         ImGui::Separator();
         ImGui::MenuItem("Rulers", nullptr, &show_rulers);
         ImGui::MenuItem("Grid", nullptr, &show_grid);
+        ImGui::MenuItem("Guides", nullptr, &show_guides);
+        ImGui::MenuItem("Snap to Guides", nullptr, &snap_to_guides);
+        ImGui::MenuItem("Snap to Grid", nullptr, &snap_to_grid);
+        if (ImGui::MenuItem("Clear Guides", nullptr, false, !guides_h.empty() || !guides_v.empty())) { guides_h.clear(); guides_v.clear(); }
         ImGui::SetNextItemWidth(100);
         ImGui::InputInt("Grid spacing", &grid_spacing);
         grid_spacing = std::clamp(grid_spacing, 1, 1000);
@@ -177,6 +181,11 @@ void App::draw_menu() {
         if (ImGui::MenuItem("Select None", "Ctrl+D", false, has_sel)) select_none();
         if (ImGui::MenuItem("Invert", "Ctrl+Shift+I", false, has_doc)) select_invert();
         ImGui::Separator();
+        if (ImGui::BeginMenu("Load/Save Selection", has_doc)) {
+            if (ImGui::MenuItem("Load Selection From Disk...")) request_load_selection();
+            if (ImGui::MenuItem("Save Selection To Disk...", nullptr, false, has_doc && doc->has_selection())) request_save_selection();
+            ImGui::EndMenu();
+        }
         if (ImGui::BeginMenu("Modify", has_sel)) {
             if (ImGui::MenuItem("Expand...")) show_sel_dialog = 1;
             if (ImGui::MenuItem("Contract...")) show_sel_dialog = 2;
@@ -228,6 +237,8 @@ void App::draw_dialogs() {
     if (file_dialog.draw()) {
         if (file_op == PendingFileOp::Open) open_document(file_dialog.path());
         else if (file_op == PendingFileOp::SaveAs) save_document(file_dialog.path());
+        else if (file_op == PendingFileOp::LoadSelection) load_selection(file_dialog.path());
+        else if (file_op == PendingFileOp::SaveSelection) save_selection(file_dialog.path());
         file_op = PendingFileOp::None;
     }
 

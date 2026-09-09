@@ -25,6 +25,10 @@ public:
     virtual ~Tool() = default;
     virtual const char* name() const = 0;
     virtual const char* shortcut() const { return nullptr; }
+    // Palette grouping, following the original's toolbar order.
+    virtual const char* category() const { return "Other"; }
+    // Snap the input point to guides/grid before this tool sees it.
+    virtual bool wants_snap() const { return false; }
 
     virtual void on_press(App&, const ToolInput&, ImGuiMouseButton) {}
     virtual void on_drag(App&, const ToolInput&, ImGuiMouseButton) {}

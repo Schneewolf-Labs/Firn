@@ -63,12 +63,14 @@ what to work on next.
 
 - [x] Multiple open documents (tabs), recent files, remember window and dialog state
 - [x] Rulers, grid
-- [ ] Guides (drag from rulers), snap to grid
+- [x] Guides (drag from rulers), snap to guides and grid
+- [x] Tools palette grouped by the original's categories
 - [x] Windows build verified by CI (GitHub Actions, MSVC + vcpkg SDL2)
 
 ## 8. Format completeness
 
 - [x] Masks attached to groups and layers (baked into alpha on load)
 - [x] Group visibility and opacity on load
-- [ ] Selections and alpha channels in files
+- [x] Selections: load from / save to disk (.PspSelection or any image)
+- [ ] Alpha channels in files
 - [ ] Layer groups in the model and palette, editable masks
