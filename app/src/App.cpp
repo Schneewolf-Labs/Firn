@@ -562,19 +562,31 @@ void App::ensure_textures() {
             std::string ext = de.path().extension().string();
             for (char& c : ext) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
             if (ext != ".bmp" && ext != ".png" && ext != ".jpg" && ext != ".jpeg") continue;
-            textures.push_back({de.path().string(), de.path().stem().string(), nullptr});
+            textures.push_back({de.path().string(), de.path().stem().string(), nullptr, nullptr});
         }
     }
     std::sort(textures.begin(), textures.end(), [](const TextureEntry& a, const TextureEntry& b) { return a.name < b.name; });
+}
+
+std::shared_ptr<const Image> App::texture_image(int index) {
+    ensure_textures();
+    if (index < 0 || index >= static_cast<int>(textures.size())) return nullptr;
+    TextureEntry& e = textures[index];
+    if (!e.image) {
+        std::string err;
+        auto img = io::load(e.path, &err);
+        if (!img) { status = "Texture failed: " + err; return nullptr; }
+        e.image = std::make_shared<const Image>(std::move(*img));
+    }
+    return e.image;
 }
 
 void App::select_texture(int index) {
     if (index < 0 || index >= static_cast<int>(textures.size())) { texture_index = -1; brush.texture.reset(); return; }
     TextureEntry& e = textures[index];
     if (!e.texture) {
-        std::string err;
-        auto img = io::load(e.path, &err);
-        if (!img) { status = "Texture failed: " + err; return; }
+        auto img = texture_image(index);
+        if (!img) return;
         e.texture = raster::BrushTip::texture_from_image(*img);
     }
     texture_index = index;

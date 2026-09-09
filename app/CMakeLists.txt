@@ -36,6 +36,7 @@ add_executable(firn
   src/ui/ImageMenu.cpp
   src/ui/Toolbar.cpp
   src/ui/Icons.cpp
+  src/ui/MaterialDialog.cpp
   src/tools/Tools.cpp
   src/tools/VectorTools.cpp
   src/tools/DeformTools.cpp

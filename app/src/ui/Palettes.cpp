@@ -5,6 +5,7 @@
 
 #include "App.h"
 #include "Icons.h"
+#include "MaterialDialog.h"
 #include "firn/vector.h"
 #include "imgui.h"
 
@@ -47,22 +48,27 @@ static void draw_tool_options(App& app) {
     ImGui::End();
 }
 
-void draw_material_editor(App& app, bool foreground);  // VectorDialog.cpp
 
 static void draw_materials(App& app) {
     ImGui::Begin("Materials");
-    draw_material_editor(app, true);
-    ImGui::Separator();
-    draw_material_editor(app, false);
-    if (ImGui::Button("Swap")) {
-        for (int i = 0; i < 4; ++i) std::swap(app.fg_color[i], app.bg_color[i]);
-        std::swap(app.fg_material, app.bg_material);
+    draw_materials_header(app);
+    if (app.material_view != 2) {
+        if (!app.recent_colors.empty()) {
+            ImGui::SeparatorText("Recent");
+            const float sz = 16.0f;
+            for (size_t i = 0; i < app.recent_colors.size(); ++i) {
+                ImGui::PushID(static_cast<int>(i));
+                const Color& c = app.recent_colors[i];
+                const ImVec4 col(c.r / 255.0f, c.g / 255.0f, c.b / 255.0f, 1.0f);
+                if (ImGui::ColorButton("##rc", col, ImGuiColorEditFlags_NoTooltip | ImGuiColorEditFlags_NoAlpha, ImVec2(sz, sz))) { app.fg_color[0] = col.x; app.fg_color[1] = col.y; app.fg_color[2] = col.z; app.fg_material.kind = 0; }
+                if (ImGui::IsItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Right)) { app.bg_color[0] = col.x; app.bg_color[1] = col.y; app.bg_color[2] = col.z; app.bg_material.kind = 0; }
+                ImGui::PopID();
+                if (i + 1 < app.recent_colors.size() && (i + 1) % 8 != 0) ImGui::SameLine(0, 2);
+            }
+        }
+        ImGui::End();
+        return;
     }
-    ImGui::SameLine();
-    if (ImGui::Button("Black/White")) { app.fg_color[0] = app.fg_color[1] = app.fg_color[2] = 0; app.bg_color[0] = app.bg_color[1] = app.bg_color[2] = 1; app.fg_material.kind = app.bg_material.kind = 0; }
-    ImGui::SameLine();
-    ImGui::Checkbox("All tools", &app.materials_all_tools);
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Kept for the original's layout; every tool shares these materials here.");
     // Swatches: left click sets the foreground, right click the background;
     // + adds the foreground, right click on a swatch with Ctrl removes it.
     app.ensure_swatches();

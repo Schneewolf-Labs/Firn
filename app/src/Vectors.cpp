@@ -96,8 +96,15 @@ void translate_unit(std::vector<vec::Object>& objs, const Unit& u, float dx, flo
 vec::PaintStyle App::material_style(bool foreground) const {
     const Material& m = foreground ? fg_material : bg_material;
     vec::PaintStyle st;
+    if (m.transparent) return st;
     st.color = float_color(foreground ? fg_color : bg_color);
     st.kind = vec::PaintStyle::Kind::Solid;
+    if (m.texture_on && m.texture && !m.texture->empty()) {
+        st.texture = m.texture;
+        st.texture_scale = m.texture_scale;
+        st.texture_angle = m.texture_angle;
+        st.texture_strength = m.texture_strength;
+    }
     if (m.kind == 1) {
         st.kind = vec::PaintStyle::Kind::Gradient;
         st.gradient = m.gradient;

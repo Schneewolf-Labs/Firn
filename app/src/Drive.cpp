@@ -319,7 +319,14 @@ void Driver::before_frame(App& app, SDL_Window* window) {
                 // Tool options that scripts set directly instead of hunting for the widget.
                 const std::string& n = s.text;
                 const float v = s.x;
-                if (n == "image_windows") { app.image_windows = v != 0; if (app.image_windows) app.arrange_request = App::Arrange::Cascade; }
+                if (n == "material_dialog") app.open_material_dialog(v < 2);   // 1 foreground, 2 background
+                else if (n == "material_kind") { app.fg_material.kind = static_cast<int>(v); if (v == 1) { app.fg_material.gradient_index = -1; } }
+                else if (n == "material_gradient") { app.ensure_gradients(); const int i = static_cast<int>(v); if (i >= 0 && i < static_cast<int>(app.gradient_library.size())) { app.fg_material.kind = 1; app.fg_material.gradient_index = i; app.fg_material.gradient = app.gradient_library[i]; } }
+                else if (n == "material_texture") { const int i = static_cast<int>(v); app.fg_material.texture = app.texture_image(i); app.fg_material.texture_index = i; app.fg_material.texture_on = app.fg_material.texture != nullptr; }
+                else if (n == "material_transparent") app.fg_material.transparent = v != 0;
+                else if (n == "bg_transparent") app.bg_material.transparent = v != 0;
+                else if (n == "material_view") app.material_view = static_cast<int>(v);
+                else if (n == "image_windows") { app.image_windows = v != 0; if (app.image_windows) app.arrange_request = App::Arrange::Cascade; }
                 else if (n == "arrange") app.arrange_request = static_cast<App::Arrange>(static_cast<int>(v));  // 1 cascade, 2 tile horizontally, 3 tile vertically
                 else if (n == "create_as_vector") app.create_as_vector = v != 0;
                 else if (n == "shape_fill") app.shape_fill = v != 0;

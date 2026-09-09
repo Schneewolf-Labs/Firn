@@ -172,8 +172,10 @@ docs/    notes on the original: command inventory, module mapping, FORMAT.md
   for the canvas texture; `io::read_icc` / `io::embed_icc` handle PNG and
   JPEG.
 - **Materials**: `App::material_style(fg)` turns the color plus
-  `App::Material` (gradient/pattern) into a `vec::PaintStyle`; the flood
-  fill, shape, line and text tools all paint through it.
+  `App::Material` (gradient/pattern, optional texture, transparent switch)
+  into a `vec::PaintStyle`; the flood fill, shape, line and text tools all
+  paint through it. The Material Properties dialog and the palette's
+  material boxes and pickers live in `app/src/ui/MaterialDialog.cpp`.
 - **Saved selections** live in `Document::alpha_channels()` and round-trip
   through the native format; the current selection itself is not stored.
 - The toolbar and status bar (`app/src/ui/Toolbar.cpp`) sit outside the

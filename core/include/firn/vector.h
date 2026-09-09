@@ -53,6 +53,12 @@ struct PaintStyle {
     std::shared_ptr<const Image> pattern;  // tiled
     float pattern_scale = 1.0f;
     float pattern_angle = 0.0f;
+    // Texture: a tiled image whose lightness scales the coverage (white lets
+    // all the paint through, black none), like the original's material texture.
+    std::shared_ptr<const Image> texture;
+    float texture_scale = 1.0f;
+    float texture_angle = 0.0f;
+    float texture_strength = 1.0f;  // 0 = ignore the texture, 1 = full effect
     bool enabled() const { return kind != Kind::None; }
 };
 
@@ -128,6 +134,8 @@ void rasterize(const std::vector<Object>& objects, Image& dst);
 // Renders a paint style through a coverage mask over the object's bounds.
 void paint(Image& dst, const std::vector<uint8_t>& coverage, int w, int h, const PaintStyle& style,
            float bx0, float by0, float bx1, float by1);
+// Coverage multiplier of a style's texture at a pixel (1 when the style has none).
+float texture_factor(const PaintStyle& style, float x, float y, float ox, float oy);
 
 // Builders for the tools.
 Object make_rectangle(float x0, float y0, float x1, float y1);

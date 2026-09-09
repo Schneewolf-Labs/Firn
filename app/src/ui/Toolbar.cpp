@@ -3,6 +3,7 @@
 #include <cstdio>
 
 #include "App.h"
+#include "MaterialDialog.h"
 #include "imgui.h"
 
 void App::draw_toolbar() {
@@ -35,11 +36,10 @@ void App::draw_toolbar() {
     if (button("1:1", has_doc, "Actual size (Ctrl+Alt+0)")) { zoom = 1.0f; pan_x = pan_y = 0.0f; }
     if (has_doc) { ImGui::Text("%d%%", static_cast<int>(zoom * 100 + 0.5f)); ImGui::SameLine(); }
     ImGui::TextDisabled("|"); ImGui::SameLine();
-    ImGui::ColorEdit4("##fg", fg_color, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Foreground material");
+    const float mb = ImGui::GetFrameHeight();
+    material_box(*this, true, ImVec2(mb, mb));
     ImGui::SameLine();
-    ImGui::ColorEdit4("##bg", bg_color, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Background material");
+    material_box(*this, false, ImVec2(mb, mb));
     ImGui::End();
     ImGui::PopStyleVar(3);
 }

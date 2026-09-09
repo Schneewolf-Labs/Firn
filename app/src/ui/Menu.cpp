@@ -509,6 +509,7 @@ void App::draw_dialogs() {
     draw_vector_dialogs();
     draw_adjustment_layer_dialog();
     draw_image_dialogs();
+    draw_material_dialog();
 
     if (file_dialog.draw()) {
         if (file_op == PendingFileOp::Open) open_document(file_dialog.path());

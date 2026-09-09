@@ -3,6 +3,7 @@
 #include "firn/raster16.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cctype>
 #include <cstring>
 #include <ctime>
@@ -864,6 +865,39 @@ std::vector<vec::Gradient> load_gradients(const std::string& path, std::string* 
         out.push_back(std::move(g));
     }
     return out;
+}
+
+bool save_gradients(const std::vector<vec::Gradient>& gradients, const std::string& path, std::string* err) {
+    std::vector<uint8_t> d;
+    auto be16 = [&](unsigned v) { d.push_back(static_cast<uint8_t>(v >> 8)); d.push_back(static_cast<uint8_t>(v)); };
+    auto be32 = [&](uint32_t v) { for (int k = 3; k >= 0; --k) d.push_back(static_cast<uint8_t>(v >> (8 * k))); };
+    d.insert(d.end(), {'8', 'B', 'G', 'R'});
+    be16(3);
+    be16(static_cast<unsigned>(gradients.size()));
+    for (const vec::Gradient& g : gradients) {
+        const std::string name = g.name.substr(0, 255);
+        d.push_back(static_cast<uint8_t>(name.size()));
+        d.insert(d.end(), name.begin(), name.end());
+        if ((1 + name.size()) % 2) d.push_back(0);  // Pascal string padded to an even length
+        be16(static_cast<unsigned>(g.colors.size()));
+        for (const vec::GradientStop& st : g.colors) {
+            be32(static_cast<uint32_t>(std::lround(std::clamp(st.pos, 0.0f, 100.0f) / 100.0f * 4096.0f)));
+            be32(static_cast<uint32_t>(std::lround(std::clamp(st.mid, 1.0f, 99.0f))));
+            be16(0);  // RGB
+            be16(st.color.r << 8); be16(st.color.g << 8); be16(st.color.b << 8); be16(0);
+            be16(0);  // user stop
+        }
+        be16(static_cast<unsigned>(g.opacities.size()));
+        for (const vec::OpacityStop& st : g.opacities) {
+            be32(static_cast<uint32_t>(std::lround(std::clamp(st.pos, 0.0f, 100.0f) / 100.0f * 4096.0f)));
+            be32(static_cast<uint32_t>(std::lround(std::clamp(st.mid, 1.0f, 99.0f))));
+            be16(static_cast<unsigned>(std::lround(std::clamp(st.opacity, 0.0f, 100.0f) / 100.0f * 255.0f)));
+        }
+    }
+    std::ofstream f(path, std::ios::binary);
+    if (!f) { if (err) *err = "cannot write " + path; return false; }
+    f.write(reinterpret_cast<const char*>(d.data()), static_cast<std::streamsize>(d.size()));
+    return static_cast<bool>(f);
 }
 
 // Styled line file (docs/FORMAT.md): optional magic 01 51 45 57, then

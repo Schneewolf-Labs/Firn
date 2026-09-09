@@ -88,7 +88,11 @@ def recv_line(s):
     return buf.decode("utf-8", "replace").rstrip("\n")
 
 def to_command(step):
+    if step.startswith("do "):
+        return step  # JSON parameters keep their colons
     op, *args = step.split(":")
+    if op in ("save", "open", "drop"):
+        return op + " " + ":".join(args)
     if op in ("key",):
         return " ".join([op] + args)
     if op == "ctrl":

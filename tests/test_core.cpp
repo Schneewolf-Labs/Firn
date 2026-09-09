@@ -1305,6 +1305,36 @@ static void test_vector_core() {
     CHECK(doc.layer(1).is_vector() && doc.layer(1).objects.size() == 1);
 }
 
+static void test_material_texture_and_gradient_file() {
+    // A checker texture halves the paint where it is black.
+    auto tex = std::make_shared<Image>(2, 1, Color{255, 255, 255, 255});
+    tex->set(1, 0, {0, 0, 0, 255});
+    vec::PaintStyle st;
+    st.kind = vec::PaintStyle::Kind::Solid;
+    st.color = {200, 0, 0, 255};
+    st.texture = tex;
+    CHECK(vec::texture_factor(st, 0.5f, 0.5f, 0, 0) == 1.0f && vec::texture_factor(st, 1.5f, 0.5f, 0, 0) == 0.0f);
+    st.texture_strength = 0.5f;
+    CHECK(std::abs(vec::texture_factor(st, 1.5f, 0.5f, 0, 0) - 0.5f) < 1e-5f);
+    Image out(2, 1, Color{0, 0, 0, 0});
+    std::vector<uint8_t> cov(2, 255);
+    vec::paint(out, cov, 2, 1, st, 0, 0, 2, 1);
+    CHECK(out.get(0, 0).a == 255 && out.get(1, 0).a == 128);
+
+    // Gradient files round-trip through the writer.
+    vec::Gradient g;
+    g.name = "Firn test";
+    g.colors = {{{10, 20, 30, 255}, 0, 50}, {{255, 128, 0, 255}, 40, 25}, {{0, 0, 255, 255}, 100, 50}};
+    g.opacities = {{100, 0, 50}, {30, 100, 50}};
+    const std::string path = "/tmp/firn_test.PspGradient";
+    CHECK(io::save_gradients({g}, path));
+    auto back = io::load_gradients(path);
+    std::remove(path.c_str());
+    CHECK(back.size() == 1 && back[0].name == "Firn test" && back[0].colors.size() == 3 && back[0].opacities.size() == 2);
+    CHECK(back[0].colors[1].color.r == 255 && back[0].colors[1].color.g == 128 && std::abs(back[0].colors[1].pos - 40.0f) < 0.1f && std::abs(back[0].colors[1].mid - 25.0f) < 0.5f);
+    CHECK(std::abs(back[0].opacities[1].opacity - 30.0f) < 0.5f);
+}
+
 static void test_vector_roundtrip() {
     Document d(40, 30);
     d.add_layer("bg").background = true;
@@ -1912,6 +1942,7 @@ int main() {
     test_vector_default_bytes();
     test_vector_queries();
     test_vector_roundtrip();
+    test_material_texture_and_gradient_file();
     test_vector_core();
     test_history_limit();
     test_brush_texture();

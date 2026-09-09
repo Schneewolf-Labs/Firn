@@ -33,6 +33,8 @@ std::vector<vec::Object> load_preset_shapes(const std::string& path, std::string
 
 // Gradient files (.PspGradient) are Photoshop .grd (version 3) files.
 std::vector<vec::Gradient> load_gradients(const std::string& path, std::string* err = nullptr);
+// Writes gradients in the same file format (one file may hold several).
+bool save_gradients(const std::vector<vec::Gradient>& gradients, const std::string& path, std::string* err = nullptr);
 
 // Styled line files (.PspStyledLine): caps and dash segments.
 std::optional<vec::LineStyle> load_styled_line(const std::string& path, std::string* err = nullptr);

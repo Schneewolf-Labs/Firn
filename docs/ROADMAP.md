@@ -143,7 +143,7 @@ for. Ranked by value per effort; work top to bottom, tick as they land.
 - [x] Windowed view of all open images with independent zoom (Window >
       Tabbed Documents off; Cascade, Tile Horizontally, Tile Vertically)
 - [x] Tool icons in the Tools palette
-- [ ] The full Material Properties dialog (color, gradient, pattern, texture,
+- [x] The full Material Properties dialog (color, gradient, pattern, texture,
       swatches, foreground/background, lock)
 - [ ] Thumbnails in the file dialog
 

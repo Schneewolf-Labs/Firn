@@ -357,9 +357,30 @@ struct App {
         int pattern_index = -1;
         std::shared_ptr<const firn::Image> pattern;
         float pattern_scale = 1.0f, pattern_angle = 0.0f;
+        // Texture over any of the three, and the transparency switch that
+        // turns the material off (no fill / no stroke).
+        bool texture_on = false;
+        int texture_index = -1;
+        std::shared_ptr<const firn::Image> texture;
+        float texture_scale = 1.0f, texture_angle = 0.0f, texture_strength = 1.0f;
+        bool transparent = false;
     };
     Material fg_material, bg_material;
     firn::vec::PaintStyle material_style(bool foreground) const;   // as a paint style
+    // Material Properties dialog (app/src/ui/MaterialDialog.cpp).
+    bool show_material_dialog = false;
+    bool material_dialog_fg = true;
+    Material material_backup;
+    float color_backup[4] = {0, 0, 0, 1};
+    int material_tab = 0;               // 0 color, 1 gradient, 2 pattern
+    int material_tab_request = -1;      // tab to select on the next frame
+    int material_view = 0;              // Materials palette: 0 frame, 1 rainbow, 2 swatches
+    float frame_hue = 0.0f;             // hue chosen on the frame picker's ring
+    int gradient_sel_color = -1, gradient_sel_opacity = -1;   // selected stops in the gradient editor
+    char gradient_save_name[64] = {};
+    void open_material_dialog(bool foreground);
+    void draw_material_dialog();
+    std::shared_ptr<const firn::Image> texture_image(int index);   // loads and caches a paper texture as an image
     // Libraries scanned from ~/.config/firn/*, FIRN_*_DIRS, Preferences, and the backup.
     struct ShapeEntry { std::string path, name; std::vector<firn::vec::Object> objects; int width = 0, height = 0; };
     std::vector<ShapeEntry> shape_library;
@@ -432,7 +453,7 @@ struct App {
     void select_brush_tip(int index);
     void brush_tip_from_selection();
     // Paper textures
-    struct TextureEntry { std::string path, name; std::shared_ptr<const firn::raster::BrushTip> texture; };
+    struct TextureEntry { std::string path, name; std::shared_ptr<const firn::raster::BrushTip> texture; std::shared_ptr<const firn::Image> image; };
     std::vector<TextureEntry> textures;
     bool textures_loaded = false;
     int texture_index = -1;

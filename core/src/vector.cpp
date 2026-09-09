@@ -132,8 +132,27 @@ static float gradient_t(const Gradient& g, float px, float py, float bx0, float 
     return t;
 }
 
+// Tiled sample of `tile` at (x, y) relative to (ox, oy), scaled and rotated.
+static Color tile_sample(const Image& tile, float x, float y, float ox, float oy, float scale, float angle_deg) {
+    const float s = std::max(scale, 0.01f);
+    const float rad = angle_deg * 3.14159265f / 180.0f;
+    const float rx = (x - ox) * std::cos(rad) + (y - oy) * std::sin(rad), ry = -(x - ox) * std::sin(rad) + (y - oy) * std::cos(rad);
+    const int pw = tile.width(), ph = tile.height();
+    const int px = ((static_cast<int>(std::floor(rx / s)) % pw) + pw) % pw, py = ((static_cast<int>(std::floor(ry / s)) % ph) + ph) % ph;
+    return tile.get(px, py);
+}
+
+// Coverage factor of a style's texture at (x, y): lightness weighted by alpha.
+float texture_factor(const PaintStyle& style, float x, float y, float ox, float oy) {
+    if (!style.texture || style.texture->empty() || style.texture_strength <= 0.0f) return 1.0f;
+    const Color t = tile_sample(*style.texture, x, y, ox, oy, style.texture_scale, style.texture_angle);
+    const float lum = (0.299f * t.r + 0.587f * t.g + 0.114f * t.b) / 255.0f * (t.a / 255.0f);
+    return 1.0f - std::clamp(style.texture_strength, 0.0f, 1.0f) * (1.0f - lum);
+}
+
 void paint(Image& dst, const std::vector<uint8_t>& cov, int w, int h, const PaintStyle& style, float bx0, float by0, float bx1, float by1) {
     if (!style.enabled()) return;
+    const bool textured = style.texture && !style.texture->empty() && style.texture_strength > 0.0f;
     for (int y = 0; y < h; ++y)
         for (int x = 0; x < w; ++x) {
             const uint8_t c = cov[static_cast<size_t>(y) * w + x];
@@ -149,7 +168,9 @@ void paint(Image& dst, const std::vector<uint8_t>& cov, int w, int h, const Pain
                 const int px = ((static_cast<int>(std::floor(rx / s)) % pw) + pw) % pw, py = ((static_cast<int>(std::floor(ry / s)) % ph) + ph) % ph;
                 col = style.pattern->get(px, py);
             }
-            raster::blend_over(dst, x, y, col, c / 255.0f);
+            float a = c / 255.0f;
+            if (textured) a *= texture_factor(style, static_cast<float>(x), static_cast<float>(y), bx0, by0);
+            if (a > 0.0f) raster::blend_over(dst, x, y, col, a);
         }
 }
 
