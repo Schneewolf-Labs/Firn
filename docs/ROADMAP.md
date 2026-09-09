@@ -93,3 +93,13 @@ what to work on next.
 - [x] Alpha channels (saved selections) read, written, loaded and saved from the Selections menu
 - [x] Painting directly on masks (Edit button / Layers > Mask > Edit Mask)
 - [x] Mask overlay view (red tint over hidden areas while editing)
+
+## 11. Further out
+
+- [ ] Vector layers and objects (editable text and shapes, the Pen tool)
+- [ ] Scripting (the original's Python command API; docs/COMMANDS.md is the inventory)
+- [ ] Printing and print layout
+- [ ] 16-bit channels, color management
+- [ ] Plugin filters (Adobe-style .8bf)
+- [ ] Deform, Perspective and Straighten tools; Warp and Mesh Warp
+- [ ] Browser palette for image folders
