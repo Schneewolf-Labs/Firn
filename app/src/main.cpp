@@ -27,7 +27,7 @@ static void build_default_layout(ImGuiID dockspace_id) {
     ImGui::DockBuilderSetNodeSize(dockspace_id, vp->WorkSize);
 
     ImGuiID centre = dockspace_id;
-    ImGuiID left = ImGui::DockBuilderSplitNode(centre, ImGuiDir_Left, 0.08f, nullptr, &centre);
+    ImGuiID left = ImGui::DockBuilderSplitNode(centre, ImGuiDir_Left, 0.12f, nullptr, &centre);
     ImGuiID right = ImGui::DockBuilderSplitNode(centre, ImGuiDir_Right, 0.22f, nullptr, &centre);
     ImGuiID top = ImGui::DockBuilderSplitNode(centre, ImGuiDir_Up, 0.10f, nullptr, &centre);
     ImGuiID right_bottom = 0;

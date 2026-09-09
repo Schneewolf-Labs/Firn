@@ -12,6 +12,7 @@
 #include "firn/io_psp.h"
 #include "firn/mask.h"
 #include "firn/raster.h"
+#include "firn/text.h"
 
 #define CHECK(cond)                                                              \
     do {                                                                         \
@@ -792,7 +793,41 @@ static void test_stroke_modes() {
     CHECK(moved.get(2, 0).r == 9 && moved.get(0, 0).a == 0);
 }
 
+static void test_text_and_polyline() {
+    Mask line = mask::polyline(20, 10, {{2, 5.5f}, {17, 5.5f}}, 4.0f, true);
+    CHECK(line.at(10, 5) == 255 && line.at(10, 4) == 255 && line.at(10, 6) == 255);
+    CHECK(line.at(10, 2) == 0 && line.at(0, 5) == 255 && line.at(19, 5) == 0);  // round cap reaches x=0
+    CHECK(line.at(10, 3) > 0 && line.at(10, 3) < 255);  // antialiased edge
+
+    const char* candidates[] = {"/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", "/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf"};
+    std::shared_ptr<text::Font> font;
+    for (const char* c : candidates) if ((font = text::Font::load(c))) break;
+    if (!font) { std::puts("text: no system font found, skipping"); return; }
+    CHECK(!font->info().family.empty());
+    text::Font::Layout lay;
+    Image img = font->render("Hi\nthere", 32.0f, {255, 0, 0, 255}, true, text::Font::Align::Left, 1.0f, 0.0f, &lay);
+    CHECK(img.width() > 20 && img.height() > 50 && lay.baseline > 0 && lay.baseline < img.height());
+    int opaque = 0, partial = 0;
+    for (int y = 0; y < img.height(); ++y) for (int x = 0; x < img.width(); ++x) {
+        const Color c = img.get(x, y);
+        CHECK(c.r == 255 && c.g == 0);
+        opaque += c.a == 255;
+        partial += c.a > 0 && c.a < 255;
+    }
+    CHECK(opaque > 50 && partial > 20);
+    Image hard = font->render("Hi", 32.0f, {0, 0, 0, 255}, false, text::Font::Align::Left);
+    for (int y = 0; y < hard.height(); ++y) for (int x = 0; x < hard.width(); ++x) CHECK(hard.get(x, y).a == 0 || hard.get(x, y).a == 255);
+    // Centre alignment shifts the short line right.
+    Image left = font->render("I\nMMMM", 24.0f, {0, 0, 0, 255}, true, text::Font::Align::Left);
+    Image centre = font->render("I\nMMMM", 24.0f, {0, 0, 0, 255}, true, text::Font::Align::Centre);
+    auto first_ink_x = [](const Image& im, int row) { for (int x = 0; x < im.width(); ++x) if (im.get(x, row).a > 128) return x; return -1; };
+    const int row = 12;
+    CHECK(first_ink_x(centre, row) > first_ink_x(left, row));
+    CHECK(text::Font::load("/nonexistent.ttf") == nullptr);
+}
+
 int main() {
+    test_text_and_polyline();
     test_stroke_modes();
     test_effects();
     test_adjust_module();

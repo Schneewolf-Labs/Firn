@@ -114,6 +114,34 @@ Mask polygon(int w, int h, const std::vector<std::pair<float, float>>& pts, bool
     return m;
 }
 
+Mask polyline(int w, int h, const std::vector<std::pair<float, float>>& pts, float width, bool antialias) {
+    Mask m(w, h);
+    if (pts.empty()) return m;
+    const float r = std::max(width * 0.5f, 0.5f);
+    // Coverage from distance to the nearest segment; 1px antialiasing band.
+    float minx = pts[0].first, maxx = minx, miny = pts[0].second, maxy = miny;
+    for (const auto& p : pts) { minx = std::min(minx, p.first); maxx = std::max(maxx, p.first); miny = std::min(miny, p.second); maxy = std::max(maxy, p.second); }
+    const int x0 = std::max(0, static_cast<int>(std::floor(minx - r - 1))), x1 = std::min(w, static_cast<int>(std::ceil(maxx + r + 1)) + 1);
+    const int y0 = std::max(0, static_cast<int>(std::floor(miny - r - 1))), y1 = std::min(h, static_cast<int>(std::ceil(maxy + r + 1)) + 1);
+    for (int y = y0; y < y1; ++y)
+        for (int x = x0; x < x1; ++x) {
+            const float px = x + 0.5f, py = y + 0.5f;
+            float best = 1e9f;
+            for (size_t i = 0; i < pts.size(); ++i) {
+                const auto& a = pts[i];
+                const auto& b = pts[std::min(i + 1, pts.size() - 1)];
+                const float dx = b.first - a.first, dy = b.second - a.second;
+                const float len2 = dx * dx + dy * dy;
+                const float t = len2 > 0 ? std::clamp(((px - a.first) * dx + (py - a.second) * dy) / len2, 0.0f, 1.0f) : 0.0f;
+                const float cx = a.first + dx * t, cy = a.second + dy * t;
+                best = std::min(best, std::hypot(px - cx, py - cy));
+            }
+            const float cov = antialias ? std::clamp(r + 0.5f - best, 0.0f, 1.0f) : (best <= r ? 1.0f : 0.0f);
+            if (cov > 0.0f) m.at(x, y) = to_u8(cov);
+        }
+    return m;
+}
+
 Mask magic_wand(const Image& img, int x, int y, int tolerance, bool contiguous) {
     const int w = img.width(), h = img.height();
     Mask m(w, h);

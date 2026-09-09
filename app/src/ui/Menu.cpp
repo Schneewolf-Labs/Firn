@@ -187,6 +187,7 @@ void App::draw_menu() {
 
 void App::draw_dialogs() {
     draw_adjust_dialogs();
+    draw_text_dialog();
 
     if (file_dialog.draw()) {
         if (file_op == PendingFileOp::Open) open_document(file_dialog.path());

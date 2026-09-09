@@ -7,10 +7,11 @@ add_library(firncore STATIC
   src/blend.cpp
   src/adjust.cpp
   src/effects.cpp
+  src/text.cpp
   src/io.cpp
   src/io_psp.cpp
 )
 target_include_directories(firncore PUBLIC include)
 target_link_libraries(firncore PRIVATE stb)
 # Vendored stb headers are not ours to fix.
-set_source_files_properties(src/io.cpp src/io_psp.cpp PROPERTIES COMPILE_OPTIONS "-Wno-missing-field-initializers")
+set_source_files_properties(src/io.cpp src/io_psp.cpp src/text.cpp PROPERTIES COMPILE_OPTIONS "-Wno-missing-field-initializers;-Wno-unused-function")

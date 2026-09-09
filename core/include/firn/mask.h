@@ -43,6 +43,8 @@ enum class Combine { Replace, Add, Subtract, Intersect };
 Mask rectangle(int w, int h, float x0, float y0, float x1, float y1, bool antialias);
 Mask ellipse(int w, int h, float cx, float cy, float rx, float ry, bool antialias);
 Mask polygon(int w, int h, const std::vector<std::pair<float, float>>& pts, bool antialias);
+// A polyline stroked with the given width (round joins and caps).
+Mask polyline(int w, int h, const std::vector<std::pair<float, float>>& pts, float width, bool antialias);
 
 // Pixels reachable from (x,y) whose max channel difference to the seed is
 // <= tolerance (contiguous), or every such pixel in the image (!contiguous).

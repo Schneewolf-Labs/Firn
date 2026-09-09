@@ -181,6 +181,17 @@ Rect flood_fill(Image& img, int x, int y, Color color, int tolerance, float opac
     return bounds;
 }
 
+void paint_mask(Image& dst, const Mask& shape, Color color, const Mask* clip) {
+    if (clip && clip->empty()) clip = nullptr;
+    const raster::Rect b = shape.bounds();
+    for (int y = b.y0; y < b.y1; ++y)
+        for (int x = b.x0; x < b.x1; ++x) {
+            float cov = shape.at(x, y) / 255.0f;
+            if (clip) cov *= clip->at(x, y) / 255.0f;
+            if (cov > 0.0f) blend_over(dst, x, y, color, cov);
+        }
+}
+
 void apply_through_mask(Image& dst, const Image& before, const Mask& mask) {
     if (mask.empty()) return;
     const size_t n = static_cast<size_t>(dst.width()) * dst.height();

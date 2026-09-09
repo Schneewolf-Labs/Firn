@@ -12,6 +12,7 @@
 #include "firn/commands.h"
 #include "firn/document.h"
 #include "firn/raster.h"
+#include "firn/text.h"
 #include "tools/Tool.h"
 #include "ui/FileDialog.h"
 
@@ -121,6 +122,25 @@ struct App {
     int rotate_cw = 1;
     // Crop tool rect (image coords), empty when none
     firn::raster::Rect crop_rect;
+    // Line / shape tools
+    float line_width = 3.0f;
+    bool shape_antialias = true, shape_fill = true, shape_stroke = true;
+    int shape_kind = 0;                 // 0 rectangle, 1 ellipse
+    // Text tool
+    std::vector<firn::text::FontInfo> fonts;
+    bool fonts_loaded = false;
+    int font_index = 0;
+    std::shared_ptr<firn::text::Font> text_font;
+    char text_buf[2048] = "Text";
+    float text_size = 48.0f;
+    bool text_antialias = true;
+    int text_align = 0;
+    int text_x = 0, text_y = 0;
+    bool show_text_dialog = false;
+    int text_temp_layer = -1;           // preview layer while the dialog is open
+    int text_prev_active = -1;
+    void ensure_fonts();
+    void draw_text_dialog();
     firn::LayerProps layer_props_edit;  // dialog working copy
     firn::LayerProps layer_props_before; // props at the start of a live slider drag
     bool show_imgui_demo = false;

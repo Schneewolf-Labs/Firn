@@ -102,6 +102,10 @@ docs/    notes on the original: command inventory, module mapping, FORMAT.md
 - File open/save go through `FileDialog` (`app/src/ui/FileDialog.*`), an
   ImGui modal, via `App::request_open` / `request_save_as`. No native dialogs
   or extra dependencies. `io::save` picks the format from the extension.
+- Text uses `core/src/text.cpp` (stb_truetype, vendored in `third_party/stb`).
+  Fonts are discovered by scanning the usual directories plus
+  `FIRN_FONT_DIRS`; the Text dialog previews on a temporary layer that is
+  never recorded, then commits through `PasteLayerCommand`.
 - Add a test in `tests/test_core.cpp` for every new raster op or command.
 
 ## Checking UI changes

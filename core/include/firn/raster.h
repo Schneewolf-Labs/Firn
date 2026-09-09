@@ -87,6 +87,9 @@ Rect flood_fill(Image& img, int x, int y, Color color, int tolerance, float opac
 // to confine whole-layer commands to the selection.
 void apply_through_mask(Image& dst, const Image& before, const Mask& mask);
 
+// Composites `color` over `dst` with coverage from `shape` (and `clip`, if any).
+void paint_mask(Image& dst, const Mask& shape, Color color, const Mask* clip = nullptr);
+
 // Composite `c` over the pixel at (x,y) with extra coverage in 0..1.
 void blend_over(Image& img, int x, int y, Color c, float coverage);
 

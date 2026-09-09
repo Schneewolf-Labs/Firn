@@ -601,6 +601,127 @@ private:
     float x0_ = 0, y0_ = 0;
 };
 
+// --- Text --------------------------------------------------------------
+
+class TextTool : public Tool {
+public:
+    const char* name() const override { return "Text"; }
+    const char* shortcut() const override { return "T"; }
+    void on_press(App& app, const ToolInput& in, ImGuiMouseButton b) override {
+        if (!app.doc || b != ImGuiMouseButton_Left) return;
+        app.text_x = static_cast<int>(std::floor(in.img_x));
+        app.text_y = static_cast<int>(std::floor(in.img_y));
+        app.show_text_dialog = true;
+    }
+    void draw_overlay(App&, const ToolInput& in) override {
+        in.dl->AddLine(ImVec2(in.screen.x, in.screen.y - 8), ImVec2(in.screen.x, in.screen.y + 8), IM_COL32(255, 255, 255, 220));
+        in.dl->AddLine(ImVec2(in.screen.x - 8, in.screen.y), ImVec2(in.screen.x + 8, in.screen.y), IM_COL32(255, 255, 255, 220));
+    }
+    void draw_options(App&) override { ImGui::TextUnformatted("Click where the text's top-left corner should go."); }
+};
+
+// --- Line and Preset Shapes --------------------------------------------
+// Both preview on a snapshot of the layer while dragging and commit one
+// history entry. Stroke uses the foreground material, fill the background.
+
+class ShapeToolBase : public Tool {
+public:
+    void on_press(App& app, const ToolInput& in, ImGuiMouseButton) override {
+        if (!app.doc || app.active_layer() < 0) return;
+        layer_ = app.active_layer();
+        before_ = app.doc->layer(layer_).pixels;
+        x0_ = x1_ = in.img_x; y0_ = y1_ = in.img_y;
+        active_ = true;
+    }
+    void on_drag(App& app, const ToolInput& in, ImGuiMouseButton) override {
+        if (!active_) return;
+        x1_ = in.img_x; y1_ = in.img_y;
+        Image work = before_;
+        draw(app, work);
+        app.doc->layer(layer_).pixels = std::move(work);
+        app.doc->touch();
+    }
+    void on_release(App& app, const ToolInput& in, ImGuiMouseButton) override {
+        if (!active_) return;
+        on_drag(app, in, ImGuiMouseButton_Left);
+        active_ = false;
+        app.commit(std::make_unique<LayerSnapshotCommand>(layer_, name(), before_, app.doc->layer(layer_).pixels));
+    }
+    void cancel(App& app) override {
+        if (active_ && app.doc && layer_ < app.doc->layer_count()) { app.doc->layer(layer_).pixels = before_; app.doc->touch(); }
+        active_ = false;
+    }
+
+protected:
+    virtual void draw(App& app, Image& img) = 0;
+    bool active_ = false;
+    size_t layer_ = 0;
+    Image before_;
+    float x0_ = 0, y0_ = 0, x1_ = 0, y1_ = 0;
+};
+
+class LineTool : public ShapeToolBase {
+public:
+    const char* name() const override { return "Line"; }
+    const char* shortcut() const override { return "V"; }
+    void draw_options(App& app) override {
+        ImGui::SetNextItemWidth(120);
+        ImGui::SliderFloat("Width", &app.line_width, 1.0f, 100.0f, "%.0f");
+        ImGui::SameLine();
+        ImGui::Checkbox("Anti-alias", &app.shape_antialias);
+        ImGui::SameLine();
+        ImGui::TextDisabled("Left draws with the foreground, right with the background.");
+    }
+    void on_press(App& app, const ToolInput& in, ImGuiMouseButton b) override { button_ = b; ShapeToolBase::on_press(app, in, b); }
+
+protected:
+    void draw(App& app, Image& img) override {
+        const Mask m = mask::polyline(img.width(), img.height(), {{x0_, y0_}, {x1_, y1_}}, app.line_width, app.shape_antialias);
+        raster::paint_mask(img, m, to_color(button_ == ImGuiMouseButton_Left ? app.fg_color : app.bg_color), &app.doc->selection());
+    }
+    ImGuiMouseButton button_ = ImGuiMouseButton_Left;
+};
+
+class PresetShapeTool : public ShapeToolBase {
+public:
+    const char* name() const override { return "Preset Shape"; }
+    const char* shortcut() const override { return "I"; }
+    void draw_options(App& app) override {
+        ImGui::SetNextItemWidth(110);
+        ImGui::Combo("Shape", &app.shape_kind, "Rectangle\0Ellipse\0");
+        ImGui::SameLine();
+        ImGui::Checkbox("Stroke", &app.shape_stroke);
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(100);
+        ImGui::SliderFloat("Width", &app.line_width, 1.0f, 100.0f, "%.0f");
+        ImGui::SameLine();
+        ImGui::Checkbox("Fill", &app.shape_fill);
+        ImGui::SameLine();
+        ImGui::Checkbox("Anti-alias", &app.shape_antialias);
+        ImGui::SameLine();
+        ImGui::TextDisabled("Stroke: foreground. Fill: background.");
+    }
+
+protected:
+    void draw(App& app, Image& img) override {
+        const int w = img.width(), h = img.height();
+        const float lx = std::min(x0_, x1_), rx = std::max(x0_, x1_), ty = std::min(y0_, y1_), by = std::max(y0_, y1_);
+        const float sw = app.shape_stroke ? app.line_width : 0.0f;
+        auto shape = [&](float inset) {
+            return app.shape_kind == 0
+                ? mask::rectangle(w, h, lx + inset, ty + inset, rx - inset, by - inset, app.shape_antialias)
+                : mask::ellipse(w, h, (lx + rx) * 0.5f, (ty + by) * 0.5f, (rx - lx) * 0.5f - inset, (by - ty) * 0.5f - inset, app.shape_antialias);
+        };
+        const Mask* clip = &app.doc->selection();
+        if (app.shape_fill) raster::paint_mask(img, shape(sw), to_color(app.bg_color), clip);
+        if (app.shape_stroke && sw > 0.0f) {
+            Mask ring = shape(0.0f);
+            mask::combine(ring, shape(sw), mask::Combine::Subtract);
+            raster::paint_mask(img, ring, to_color(app.fg_color), clip);
+        }
+    }
+};
+
 }  // namespace
 
 std::vector<std::unique_ptr<Tool>> make_default_tools() {
@@ -622,5 +743,8 @@ std::vector<std::unique_ptr<Tool>> make_default_tools() {
     t.push_back(std::make_unique<BrushTool>(BrushTool::Kind::Hue));
     t.push_back(std::make_unique<BrushTool>(BrushTool::Kind::ColorReplacer));
     t.push_back(std::make_unique<FloodFillTool>());
+    t.push_back(std::make_unique<TextTool>());
+    t.push_back(std::make_unique<LineTool>());
+    t.push_back(std::make_unique<PresetShapeTool>());
     return t;
 }
