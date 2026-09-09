@@ -117,6 +117,9 @@ struct Header {
     int active_layer = 0;
 };
 
+// 16-bit sample to its 8-bit mirror, rounded like `to_image8`.
+inline uint8_t sample8(int v) { return static_cast<uint8_t>((v + 128) / 257); }
+
 // Reads the channel sub-blocks of one raster bitmap into an RGBA image of
 // (w x h). Missing color channels stay 0; missing alpha stays opaque.
 // 16-bit samples are kept when `deep` is given (48-bit files).
@@ -138,22 +141,27 @@ bool read_channels(const Reader& r, const std::vector<Block>& subs, uint16_t com
         if (!r.ok(data_at, clen) || data_at + clen > b.end) { err = "channel data out of range"; return false; }
         if (!is_image_dib(bitmap_type) && !is_trans_dib(bitmap_type)) continue;
 
-        const int bps = is_image_dib(bitmap_type) ? bytes_per_sample : 1;
+        // In 48-bit files the transparency mask is 16-bit too (that is how
+        // GIMP's reader, written against real files, treats it); an 8-bit
+        // mask is accepted when the data is only large enough for one.
+        int bps = bytes_per_sample;
         std::vector<uint8_t> data;
-        if (!decompress(comp, r.p + data_at, clen, npx * bps, data, err)) return false;
+        if (is_trans_dib(bitmap_type) && bps == 2 && !decompress(comp, r.p + data_at, clen, npx * 2, data, err)) bps = 1;
+        if (bps == 1 || !is_trans_dib(bitmap_type))
+            if (!decompress(comp, r.p + data_at, clen, npx * bps, data, err)) return false;
 
         uint8_t* px = out.data();
         if (is_trans_dib(bitmap_type)) {
-            for (size_t i = 0; i < npx; ++i) px[i * 4 + 3] = data[i];
-            if (deep) for (size_t i = 0; i < npx; ++i) deep->data()[i * 4 + 3] = static_cast<uint16_t>(data[i] * 257);
+            for (size_t i = 0; i < npx; ++i) px[i * 4 + 3] = bps == 2 ? sample8(data[i * 2] | (data[i * 2 + 1] << 8)) : data[i];
+            if (deep) for (size_t i = 0; i < npx; ++i) deep->data()[i * 4 + 3] = bps == 2 ? static_cast<uint16_t>(data[i * 2] | (data[i * 2 + 1] << 8)) : static_cast<uint16_t>(data[i] * 257);
         } else if (channel_type >= 1 && channel_type <= 3) {
             const int c = channel_type - 1;
-            for (size_t i = 0; i < npx; ++i) px[i * 4 + c] = bps == 2 ? data[i * 2 + 1] : data[i];
+            for (size_t i = 0; i < npx; ++i) px[i * 4 + c] = bps == 2 ? sample8(data[i * 2] | (data[i * 2 + 1] << 8)) : data[i];
             if (deep && bps == 2) for (size_t i = 0; i < npx; ++i) deep->data()[i * 4 + c] = static_cast<uint16_t>(data[i * 2] | (data[i * 2 + 1] << 8));
         } else {
             // Composite channel: palette index or gray level.
             for (size_t i = 0; i < npx; ++i) {
-                const uint8_t v = bps == 2 ? data[i * 2 + 1] : data[i];
+                const uint8_t v = bps == 2 ? sample8(data[i * 2] | (data[i * 2 + 1] << 8)) : data[i];
                 Color c{v, v, v, 255};
                 if (pal && !gray && v < pal->entries.size()) c = pal->entries[v];
                 else if (pal && v < pal->entries.size()) c = pal->entries[v];
@@ -1053,23 +1061,23 @@ std::vector<uint8_t> bitmap_and_channels(const Image& tile, bool with_alpha, uin
     return w.out;
 }
 
-// 48-bit variant: 16-bit samples little-endian, alpha stays 8-bit.
+// 48-bit variant: every channel, the transparency mask included, holds
+// little-endian 16-bit samples (the layout GIMP's reader expects; the
+// original itself predates 48-bit files, see docs/FORMAT.md).
 std::vector<uint8_t> bitmap_and_channels16(const Image16& tile, bool with_alpha, uint16_t dib_image, uint16_t dib_trans) {
     const size_t npx = static_cast<size_t>(tile.width()) * tile.height();
-    std::vector<uint8_t> planes[3], alpha(npx);
+    std::vector<uint8_t> planes[4];
     for (auto& p : planes) p.resize(npx * 2);
     const uint16_t* s = tile.data();
-    for (size_t i = 0; i < npx; ++i) {
-        for (int c = 0; c < 3; ++c) { planes[c][i * 2] = static_cast<uint8_t>(s[i * 4 + c] & 255); planes[c][i * 2 + 1] = static_cast<uint8_t>(s[i * 4 + c] >> 8); }
-        alpha[i] = static_cast<uint8_t>((s[i * 4 + 3] + 128) / 257);
-    }
+    for (size_t i = 0; i < npx; ++i)
+        for (int c = 0; c < 4; ++c) { planes[c][i * 2] = static_cast<uint8_t>(s[i * 4 + c] & 255); planes[c][i * 2 + 1] = static_cast<uint8_t>(s[i * 4 + c] >> 8); }
     Writer w;
     w.u32(8);
     w.u16(with_alpha ? 2 : 1);
     w.u16(with_alpha ? 4 : 3);
     const size_t padded = (static_cast<size_t>(tile.width()) * 2 + 3) / 4 * 4 * tile.height();
     for (int c = 0; c < 3; ++c) w.bytes(channel_block(dib_image, static_cast<uint16_t>(c + 1), planes[c], padded * 3));
-    if (with_alpha) w.bytes(channel_block(dib_trans, 0, alpha, (static_cast<size_t>(tile.width()) + 3) / 4 * 4 * tile.height()));
+    if (with_alpha) w.bytes(channel_block(dib_trans, 0, planes[3], padded));
     return w.out;
 }
 
@@ -1440,7 +1448,10 @@ std::vector<uint8_t> save_psp_to_memory(const Document& doc) {
     Writer w;
     w.bytes(reinterpret_cast<const uint8_t*>(kSignature), sizeof(kSignature) - 1);
     while (w.out.size() < 32) w.u8(0);
-    w.u16(6); w.u16(0);
+    // Version 6.0 (the original's own format) for 24-bit documents; 48-bit
+    // documents are a version 8 feature and are labeled as such.
+    const bool deep_file = doc.bit_depth() == 16;
+    w.u16(deep_file ? 8 : 6); w.u16(0);
 
     const Image flat = doc.composite();
     const bool single_opaque = doc.layer_count() == 1 && doc.layer(0).background;
@@ -1451,7 +1462,6 @@ std::vector<uint8_t> save_psp_to_memory(const Document& doc) {
     // Layer bank first: the header needs the number of layer blocks written,
     // which exceeds the document's layer count when groups and masks are
     // expanded into their own blocks.
-    const bool deep_file = doc.bit_depth() == 16;
     Writer bank;
     uint32_t block_count = 0;
     bool has_groups = false, has_masks = false, has_vectors = false, has_adjustments = false;
@@ -1525,7 +1535,7 @@ std::vector<uint8_t> save_psp_to_memory(const Document& doc) {
     Writer img;
     img.u32(46); img.i32(doc.width()); img.i32(doc.height()); img.f64(72.0); img.u8(1);
     img.u16(kCompLz77); img.u16(deep_file ? 48 : 24); img.u16(1); img.u32(16777216); img.u8(0);
-    img.u32(static_cast<uint32_t>(doc.width()) * doc.height() * 3);
+    img.u32(static_cast<uint32_t>(doc.width()) * doc.height() * (deep_file ? 6 : 3));  // sum of the layer bitmaps
     img.i32(std::max(0, doc.active_layer())); img.u16(static_cast<int>(block_count)); img.u32(contents);
     w.block(kImageBlock, img.out);
 

@@ -10,7 +10,7 @@ bottom` as int32, half-open.
 | Offset | Size | Field |
 |---|---|---|
 | 0 | 32 | Signature `"Paint Shop Pro Image File\n\x1a"` zero-padded |
-| 32 | 2 | Major version (4 = PSP 6, 5 = PSP 7, 6 = PSP 8/9, 7 = PSP X) |
+| 32 | 2 | Major version (4 = PSP 6, 5 = PSP 7, 6 = PSP 8, 7 = PSP 9, 8 = PSP X; the sample images are 6, the preset shapes shipped with the original are 7) |
 | 34 | 2 | Minor version |
 | 36 | … | Blocks until end of file |
 
@@ -109,7 +109,10 @@ channel type 0 = palette index or gray level for 8-bit. DIB type 1
 (transparency mask), channel 0 = alpha. A layer with no transparency mask is
 opaque; if it also fills the canvas and is the bottom layer it is the
 Background. Thumbnails use DIB types 5/6 and composites 8/9 with the same
-meaning. 48-bit samples are u16; the high byte is kept.
+meaning. In 48-bit files every channel, the transparency mask included,
+holds little-endian u16 samples (GIMP's reader, written against real
+files, treats the mask that way too); an 8-bit mask is accepted when the
+data is only big enough for one.
 
 RLE: read a count byte `n`; if `n > 128` repeat the next byte `n - 128`
 times, else copy `n` literal bytes.
@@ -239,7 +242,9 @@ with Overlay layers comes out at about 0.3.
 
 ## What the writer emits
 
-`io::save_psp` writes version 6.0: image attributes (LZ77, 24-bit), a
+`io::save_psp` writes version 6.0 (8.0 for 48-bit documents, see below):
+image attributes (LZ77, 24-bit or 48-bit, total image size = the sum of
+the layer bitmaps), a
 creator block (dates, application id 1, version 8.0.0.1), a composite bank
 with a JPEG thumbnail and a full-size zlib composite, then the layer bank.
 Every non-Background layer gets a transparency channel even when opaque,
@@ -254,9 +259,25 @@ all layers intact; `scripts/original-open.sh` automates that check.
 ## Not read
 
 The current selection block (id 6), vector text shapes (no sample carries
-one), and color profiles. 48-bit files are read into 16-bit layer data
-(little-endian samples per channel block; transparency stays 8-bit) and
-written back the same way when a document is 16 bits per channel.
+one), and color profiles.
+
+## 48-bit files
+
+A document at 16 bits per channel is written as a 48-bit file: the header
+says depth 48 and version 8.0, each layer channel (transparency included)
+holds little-endian u16 samples, and the composite bank stays 24-bit
+(a JPEG thumbnail plus a full-size 24-bit composite, which have their own
+depth field). Reading follows the same layout.
+
+The original cannot open such files, whatever their layout: its Increase
+Color Depth menu ends at 16 million colors (its `ColorInc16` command is
+"16 Colors (4 bit)"), it converts a 16-bit PNG to 24-bit on load, and any
+file whose header says depth 48 parks it on "Reading ..." forever, even a
+317-byte one with no channel data and no composite. 16 bits per channel
+arrived with the next version's format (spec version 8), which is why the
+writer labels these files 8.0. The layout above matches that spec and
+GIMP's loader; no 48-bit sample from the original product line was
+available to compare against.
 
 ## References
 

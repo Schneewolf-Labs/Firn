@@ -1829,13 +1829,25 @@ static void test_16bit() {
     Layer& L = d16.add_layer("Background");
     L.background = true;
     L.set_deep(fine);
+    // A second layer with a 16-bit transparency mask that no 8-bit value hits.
+    Image16 soft = fine;
+    for (size_t i = 3; i < soft.size(); i += 4) soft.data()[i] = static_cast<uint16_t>(1000 + i);
+    d16.add_layer("Soft").set_deep(soft);
     const std::string tmp = "/tmp/firn_test_16.pspimage";
     CHECK(io::save_psp(d16, tmp, nullptr));
     std::string err; std::vector<std::string> warnings;
     auto rt = io::load_psp(tmp, &err, &warnings);
+    {
+        std::ifstream f(tmp, std::ios::binary);
+        std::vector<uint8_t> head(36);
+        f.read(reinterpret_cast<char*>(head.data()), 36);
+        CHECK(head[32] == 8 && head[33] == 0);  // 48-bit files carry the version 8 label
+    }
     std::remove(tmp.c_str());
-    CHECK(rt && rt->bit_depth() == 16 && rt->layer(0).is_deep());
+    CHECK(rt && rt->bit_depth() == 16 && rt->layer(0).is_deep() && rt->layer_count() == 2);
     CHECK(rt->layer(0).deep->data()[1] == 12345 && rt->layer(0).deep->data()[2] == 60000 && rt->layer(0).deep->data()[4 * 7] == fine.data()[4 * 7]);
+    CHECK(rt->layer(1).is_deep() && rt->layer(1).deep->data()[3] == 1003 && rt->layer(1).deep->data()[4 * 7 + 3] == soft.data()[4 * 7 + 3]);
+    CHECK(rt->layer(1).pixels.get(0, 0).a == (1003 + 128) / 257);
     const std::string png = "/tmp/firn_test_16.png";
     CHECK(io::save_png16(fine, png));
     auto p16 = io::load16(png);
