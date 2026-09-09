@@ -465,6 +465,13 @@ private:
         if (!edit_active_) return;
         edit_active_ = false;
         if (!app.doc || layer_ >= static_cast<int>(app.doc->layer_count())) return;
+        // A click that did not move anything is a selection, not an edit.
+        const auto& objs = app.doc->layer(layer_).objects;
+        if (edit_object_ >= 0 && edit_object_ < static_cast<int>(objs.size()) && edit_object_ < static_cast<int>(before_.size())) {
+            const vec::Node& a = objs[edit_object_].paths[edit_path_].nodes[edit_node_];
+            const vec::Node& b = before_[edit_object_].paths[edit_path_].nodes[edit_node_];
+            if (a.x == b.x && a.y == b.y && a.in_x == b.in_x && a.in_y == b.in_y && a.out_x == b.out_x && a.out_y == b.out_y) return;
+        }
         app.objects_changed(edit_part_ == 0 ? "Move Node" : "Adjust Curve", before_);
     }
     void set_node_type(App& app, int type) {

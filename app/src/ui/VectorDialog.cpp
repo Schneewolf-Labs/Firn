@@ -53,7 +53,6 @@ bool gradient_library_combo(App& app, const char* label, int& index, vec::Gradie
     bool changed = false;
     const char* current = index >= 0 && index < static_cast<int>(app.gradient_library.size()) ? app.gradient_library[index].name.c_str()
                           : fallback ? fallback->name.c_str() : g.name.empty() ? "(object's gradient)" : g.name.c_str();
-    ImGui::SetNextItemWidth(200);
     if (ImGui::BeginCombo(label, current)) {
         if (fallback && ImGui::Selectable(fallback->name.c_str(), index < 0)) { index = -1; g = *fallback; changed = true; }
         for (size_t i = 0; i < app.gradient_library.size(); ++i) {
@@ -76,7 +75,6 @@ bool pattern_library_combo(App& app, const char* label, int& index, std::shared_
     app.ensure_patterns();
     bool changed = false;
     const char* current = index >= 0 && index < static_cast<int>(app.pattern_library.size()) ? app.pattern_library[index].name.c_str() : "(none)";
-    ImGui::SetNextItemWidth(200);
     if (ImGui::BeginCombo(label, current)) {
         for (size_t i = 0; i < app.pattern_library.size(); ++i) {
             ImGui::PushID(static_cast<int>(i));
@@ -110,6 +108,7 @@ bool paint_style_editor(App& app, const char* id, vec::PaintStyle& st, int& grad
         }
     } else if (st.kind == vec::PaintStyle::Kind::Gradient) {
         ImGui::SameLine();
+        ImGui::SetNextItemWidth(200);
         changed |= gradient_library_combo(app, "##grad", gradient_index, st.gradient, nullptr);
         ImGui::Indent();
         gradient_strip(st.gradient, 200, 14);
@@ -132,6 +131,7 @@ bool paint_style_editor(App& app, const char* id, vec::PaintStyle& st, int& grad
         ImGui::Unindent();
     } else if (st.kind == vec::PaintStyle::Kind::Pattern) {
         ImGui::SameLine();
+        ImGui::SetNextItemWidth(200);
         changed |= pattern_library_combo(app, "##pat", pattern_index, st.pattern);
         ImGui::Indent();
         ImGui::SetNextItemWidth(100);
@@ -152,37 +152,38 @@ bool paint_style_editor(App& app, const char* id, vec::PaintStyle& st, int& grad
 void draw_material_editor(App& app, bool foreground) {
     App::Material& m = foreground ? app.fg_material : app.bg_material;
     ImGui::PushID(foreground ? "fg" : "bg");
+    ImGui::TextDisabled(foreground ? "Foreground" : "Background");
+    ImGui::SameLine();
     ImGui::SetNextItemWidth(90);
     ImGui::Combo("##kind", &m.kind, "Color\0Gradient\0Pattern\0");
     ImGui::SameLine();
-    if (m.kind == 0) {
-        ImGui::ColorEdit4(foreground ? "Foreground" : "Background", foreground ? app.fg_color : app.bg_color, ImGuiColorEditFlags_NoInputs);
-    } else if (m.kind == 1) {
+    ImGui::ColorEdit4("##color", foreground ? app.fg_color : app.bg_color, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s color (the two-color default gradient runs between the two)", foreground ? "Foreground" : "Background");
+    const float w = std::max(120.0f, ImGui::GetContentRegionAvail().x - 8.0f);
+    if (m.kind == 1) {
         const vec::PaintStyle fallback_style = app.material_style(foreground);
         vec::Gradient def = fallback_style.gradient;
         def.name = "Foreground-Background";
+        ImGui::SetNextItemWidth(w);
         gradient_library_combo(app, "##grad", m.gradient_index, m.gradient, &def);
-        ImGui::Indent();
-        gradient_strip(app.material_style(foreground).gradient, 200, 12);
-        ImGui::SetNextItemWidth(100);
-        ImGui::Combo("Style", &m.gradient_style, "Linear\0Rectangular\0Sunburst\0Radial\0");
+        gradient_strip(app.material_style(foreground).gradient, w, 12);
+        ImGui::SetNextItemWidth(w * 0.45f);
+        ImGui::Combo("##style", &m.gradient_style, "Linear\0Rectangular\0Sunburst\0Radial\0");
         ImGui::SameLine();
-        ImGui::SetNextItemWidth(90);
-        ImGui::SliderFloat("Angle", &m.gradient_angle, 0.0f, 360.0f, "%.0f");
-        ImGui::SetNextItemWidth(90);
-        ImGui::SliderInt("Repeats", &m.gradient_repeats, 0, 20);
+        ImGui::SetNextItemWidth(w * 0.5f);
+        ImGui::SliderFloat("##angle", &m.gradient_angle, 0.0f, 360.0f, "Angle %.0f");
+        ImGui::SetNextItemWidth(w * 0.45f);
+        ImGui::SliderInt("##repeats", &m.gradient_repeats, 0, 20, "Repeats %d");
         ImGui::SameLine();
         ImGui::Checkbox("Invert", &m.gradient_invert);
-        ImGui::Unindent();
-    } else {
+    } else if (m.kind == 2) {
+        ImGui::SetNextItemWidth(w);
         pattern_library_combo(app, "##pat", m.pattern_index, m.pattern);
-        ImGui::Indent();
-        ImGui::SetNextItemWidth(90);
-        ImGui::SliderFloat("Scale", &m.pattern_scale, 0.1f, 4.0f, "%.2f");
+        ImGui::SetNextItemWidth(w * 0.45f);
+        ImGui::SliderFloat("##scale", &m.pattern_scale, 0.1f, 4.0f, "Scale %.2f");
         ImGui::SameLine();
-        ImGui::SetNextItemWidth(90);
-        ImGui::SliderFloat("Angle", &m.pattern_angle, 0.0f, 360.0f, "%.0f");
-        ImGui::Unindent();
+        ImGui::SetNextItemWidth(w * 0.5f);
+        ImGui::SliderFloat("##pangle", &m.pattern_angle, 0.0f, 360.0f, "Angle %.0f");
     }
     ImGui::PopID();
 }

@@ -42,9 +42,8 @@ void draw_material_editor(App& app, bool foreground);  // VectorDialog.cpp
 
 static void draw_materials(App& app) {
     ImGui::Begin("Materials");
-    ImGui::TextDisabled("Foreground"); ImGui::SameLine();
     draw_material_editor(app, true);
-    ImGui::TextDisabled("Background"); ImGui::SameLine();
+    ImGui::Separator();
     draw_material_editor(app, false);
     if (ImGui::Button("Swap")) {
         for (int i = 0; i < 4; ++i) std::swap(app.fg_color[i], app.bg_color[i]);
