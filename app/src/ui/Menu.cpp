@@ -221,6 +221,28 @@ void App::draw_menu() {
             if (ImGui::MenuItem("Spherize...")) open_adjust = Adj::Spherize;
             if (ImGui::MenuItem("Twirl...")) open_adjust = Adj::Twirl;
             if (ImGui::MenuItem("Wave...")) open_adjust = Adj::Wave;
+            ImGui::Separator();
+            if (ImGui::MenuItem("Curlicues...")) open_adjust = Adj::Curlicues;
+            if (ImGui::MenuItem("Displacement Map...")) open_adjust = Adj::DisplacementMap;
+            if (ImGui::MenuItem("Polar Coordinates...")) open_adjust = Adj::PolarCoordinates;
+            if (ImGui::MenuItem("Spiky Halo...")) open_adjust = Adj::SpikyHalo;
+            if (ImGui::MenuItem("Warp...")) open_adjust = Adj::Warp;
+            if (ImGui::MenuItem("Wind...")) open_adjust = Adj::Wind;
+            ImGui::EndMenu();
+        }
+        if (ImGui::BeginMenu("Geometric Effects", has_layer)) {
+            if (ImGui::MenuItem("Circle...")) open_adjust = Adj::Circle;
+            if (ImGui::MenuItem("Cylinder...")) open_adjust = Adj::Cylinder;
+            if (ImGui::MenuItem("Pentagon...")) open_adjust = Adj::Pentagon;
+            if (ImGui::MenuItem("Perspective...")) open_adjust = Adj::Perspective;
+            if (ImGui::MenuItem("Skew...")) open_adjust = Adj::Skew;
+            if (ImGui::MenuItem("Spherize...")) open_adjust = Adj::Spherize;
+            ImGui::EndMenu();
+        }
+        if (ImGui::BeginMenu("Image Effects", has_layer)) {
+            if (ImGui::MenuItem("Offset...")) open_adjust = Adj::Offset;
+            if (ImGui::MenuItem("Page Curl...")) open_adjust = Adj::PageCurl;
+            if (ImGui::MenuItem("Seamless Tiling...")) open_adjust = Adj::SeamlessTiling;
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("Artistic Effects", has_layer)) {
@@ -242,7 +264,10 @@ void App::draw_menu() {
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("Reflection Effects", has_layer)) {
+            if (ImGui::MenuItem("Feedback...")) open_adjust = Adj::Feedback;
             if (ImGui::MenuItem("Kaleidoscope...")) open_adjust = Adj::Kaleidoscope;
+            if (ImGui::MenuItem("Pattern...")) open_adjust = Adj::Pattern;
+            if (ImGui::MenuItem("Rotating Mirror...")) open_adjust = Adj::RotatingMirror;
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("Texture Effects", has_layer)) {

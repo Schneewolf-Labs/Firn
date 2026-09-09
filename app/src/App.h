@@ -119,7 +119,9 @@ struct App {
                      ColorBalance, Sepia, HueMap, Wave, Pinch, Twirl, Buttonize, InnerBevel, Cutout,
                      Ripple, Spherize, Lens, Halftone, Chrome, OuterBevel, FadeCorrection, Kaleidoscope, Sunburst,
                      AutoColor, AutoContrast, AutoSaturation, Clarify, BlackWhitePoints, HistogramAdjust, SaltPepper,
-                     JpegArtifacts, FillFlash, Backlighting, ChromaticAberration, NoiseRemoval };
+                     JpegArtifacts, FillFlash, Backlighting, ChromaticAberration, NoiseRemoval,
+                     Curlicues, DisplacementMap, PolarCoordinates, SpikyHalo, Warp, Wind, Circle, Cylinder, Pentagon,
+                     Perspective, Skew, Feedback, Pattern, RotatingMirror, Offset, SeamlessTiling, PageCurl };
     Adj open_adjust = Adj::None;
     struct Preview {
         bool active = false;
@@ -137,6 +139,7 @@ struct App {
     void preview_commit();
     void preview_cancel();
     void draw_adjust_dialogs();
+    bool open_adjust_by_title(const char* title);   // opens an adjust/effect dialog by its title (scripting, driver)
     // Parameters, remembered between uses like the original's dialogs.
     int colorize_hue = 0, colorize_sat = 128;
     int hsl_h = 0, hsl_s = 0, hsl_l = 0;
@@ -156,6 +159,23 @@ struct App {
     int flash_strength = 40, backlight_strength = 40;
     float ca_red = 0.0f, ca_blue = 0.0f;
     int nr_strength = 50, nr_blend = 70, nr_sharpen = 0;
+    // Geometric / distortion / reflection / image effects
+    int edge_mode = 1; float edge_color[3] = {0, 0, 0};
+    int curl_cols = 4, curl_rows = 4, curl_radius = 60, curl_strength = 50;
+    int dmap_source = -1; float dmap_intensity = 10.0f, dmap_blur = 0.0f; bool dmap_2d = false;
+    bool polar_rect = true;
+    float halo_radius = 60.0f, halo_offset = 20.0f; int halo_spikes = 12, halo_bend = 0;
+    float warp_cx = 50.0f, warp_cy = 50.0f, warp_size = 50.0f; int warp_strength_fx = 50;
+    bool wind_left = true; int wind_strength = 30;
+    bool cyl_vertical = false; int cyl_strength = 50;
+    bool persp_vertical = false; int persp_distortion = 40;
+    bool skew_vertical = false; int skew_angle = 20;
+    int fb_opacity = 60, fb_intensity = 5; float fb_cx = 50.0f, fb_cy = 50.0f; bool fb_elliptical = false;
+    float pat_angle = 0.0f, pat_cx = 50.0f, pat_cy = 50.0f, pat_scale = 25.0f; int pat_rotation = 0;
+    float mirror_angle = 0.0f, mirror_cx = 50.0f, mirror_cy = 50.0f;
+    int offset_x = 0, offset_y = 0;
+    int tile_method = 0, tile_direction = 0, tile_transition = 50;
+    int curl_corner = 3; float curl_w = 40.0f, curl_h = 40.0f; int curl_r = 30; float curl_back[3] = {0.9f, 0.9f, 0.9f}, curl_fill[3] = {1, 1, 1}; bool curl_transparent = false;
     float redeye_strength = 1.0f;
     int kal_petals = 6; float kal_angle = 0, kal_radius = 50;
     float sun_x = 0.5f, sun_y = 0.5f, sun_brightness = 0.8f, sun_ray_brightness = 0.6f; int sun_rays = 12; float sun_color[3] = {1, 1, 0.9f};

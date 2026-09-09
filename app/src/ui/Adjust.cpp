@@ -195,8 +195,7 @@ namespace {
 
 }  // namespace
 
-void App::draw_adjust_dialogs() {
-    static const char* kTitles[] = {nullptr, "Brightness/Contrast", "Curves", "Gamma Correction", "Levels", "Threshold",
+static const char* kTitles[] = {nullptr, "Brightness/Contrast", "Curves", "Gamma Correction", "Levels", "Threshold",
                                     "Channel Mixer", "Colorize", "Hue/Saturation/Lightness", "Average", "Gaussian Blur",
                                     "Posterize", "Solarize", "Unsharp Mask", "Median", "Motion Blur", "Mosaic",
                                     "Add Noise", "Drop Shadow", "Color Balance", "Sepia Toning", "Hue Map", "Wave",
@@ -206,7 +205,19 @@ void App::draw_adjust_dialogs() {
                                     "Automatic Color Balance", "Automatic Contrast Enhancement", "Automatic Saturation Enhancement",
                                     "Clarify", "Black and White Points", "Histogram Adjustment", "Salt and Pepper Filter",
                                     "JPEG Artifact Removal", "Fill Flash", "Backlighting", "Chromatic Aberration Removal",
-                                    "Digital Camera Noise Removal"};
+                                    "Digital Camera Noise Removal",
+                                    "Curlicues", "Displacement Map", "Polar Coordinates", "Spiky Halo", "Warp", "Wind",
+                                    "Circle", "Cylinder", "Pentagon", "Perspective", "Skew", "Feedback", "Pattern",
+                                    "Rotating Mirror", "Offset", "Seamless Tiling", "Page Curl"};
+
+bool App::open_adjust_by_title(const char* title) {
+    for (size_t i = 1; i < sizeof(kTitles) / sizeof(kTitles[0]); ++i)
+        if (std::strcmp(kTitles[i], title) == 0) { open_adjust = static_cast<Adj>(i); return true; }
+    return false;
+}
+
+void App::draw_adjust_dialogs() {
+
     if (open_adjust != Adj::None) {
         if (doc && active_layer() >= 0) ImGui::OpenPopup(kTitles[static_cast<int>(open_adjust)]);
         open_adjust = Adj::None;
@@ -575,6 +586,92 @@ void App::draw_adjust_dialogs() {
     adjust_modal(*this, "Digital Camera Noise Removal",
         [&] { bool c = ImGui::SliderInt("Strength", &nr_strength, 0, 100); c |= ImGui::SliderInt("Correction blend %", &nr_blend, 0, 100); c |= ImGui::SliderInt("Sharpening %", &nr_sharpen, 0, 100); return c; },
         [&](Image& img) { photo::noise_removal(img, nr_strength, nr_blend, nr_sharpen); });
+
+    auto edge_options = [&] {
+        bool c = ImGui::Combo("Edge mode", &edge_mode, "Wrap\0Repeat\0Color\0Transparent\0");
+        if (edge_mode == 2) { ImGui::SameLine(); c |= ImGui::ColorEdit3("##edgecol", edge_color, ImGuiColorEditFlags_NoInputs); }
+        return c;
+    };
+    auto edge = [&] { return effects::Edge{edge_mode, Color{static_cast<uint8_t>(edge_color[0] * 255 + 0.5f), static_cast<uint8_t>(edge_color[1] * 255 + 0.5f), static_cast<uint8_t>(edge_color[2] * 255 + 0.5f), 255}}; };
+    adjust_modal(*this, "Curlicues",
+        [&] { bool c = ImGui::SliderInt("Columns", &curl_cols, 1, 20); c |= ImGui::SliderInt("Rows", &curl_rows, 1, 20); c |= ImGui::SliderInt("Radius", &curl_radius, 1, 100); c |= ImGui::SliderInt("Strength", &curl_strength, -100, 100); return c; },
+        [&](Image& img) { effects::curlicues(img, curl_cols, curl_rows, curl_radius, curl_strength); });
+    adjust_modal(*this, "Displacement Map",
+        [&] {
+            bool c = false;
+            const std::string cur = dmap_source >= 0 && dmap_source < static_cast<int>(docs.size()) ? document_title(dmap_source) : "This image";
+            ImGui::SetNextItemWidth(220);
+            if (ImGui::BeginCombo("Displacement map", cur.c_str())) {
+                if (ImGui::Selectable("This image", dmap_source < 0)) { dmap_source = -1; c = true; }
+                for (int i = 0; i < static_cast<int>(docs.size()); ++i) { ImGui::PushID(i); if (ImGui::Selectable(document_title(i).c_str(), i == dmap_source)) { dmap_source = i; c = true; } ImGui::PopID(); }
+                ImGui::EndCombo();
+            }
+            c |= ImGui::Checkbox("2D offsets (red = x, green = y)", &dmap_2d);
+            c |= ImGui::SliderFloat("Intensity %", &dmap_intensity, 0.0f, 100.0f, "%.1f");
+            c |= ImGui::SliderFloat("Blur", &dmap_blur, 0.0f, 50.0f, "%.1f");
+            c |= edge_options();
+            return c;
+        },
+        [&](Image& img) {
+            Document* d = dmap_source >= 0 ? document_at(dmap_source) : nullptr;
+            const Image map = d ? d->composite() : preview.before;
+            effects::displacement_map(img, map, dmap_intensity, dmap_2d, dmap_blur, edge());
+        });
+    adjust_modal(*this, "Polar Coordinates",
+        [&] { bool c = ImGui::Checkbox("Rectangular to polar", &polar_rect); c |= edge_options(); return c; },
+        [&](Image& img) { effects::polar_coordinates(img, polar_rect, edge()); });
+    adjust_modal(*this, "Spiky Halo",
+        [&] { bool c = ImGui::SliderFloat("Radius %", &halo_radius, 1.0f, 200.0f, "%.0f"); c |= ImGui::SliderInt("Spikes", &halo_spikes, 1, 100); c |= ImGui::SliderFloat("Radius offset %", &halo_offset, 0.0f, 100.0f, "%.0f"); c |= ImGui::SliderInt("Bend", &halo_bend, -100, 100); return c; },
+        [&](Image& img) { effects::spiky_halo(img, halo_radius, halo_spikes, halo_offset, halo_bend); });
+    adjust_modal(*this, "Warp",
+        [&] { bool c = ImGui::SliderFloat("Center X %", &warp_cx, 0.0f, 100.0f, "%.0f"); c |= ImGui::SliderFloat("Center Y %", &warp_cy, 0.0f, 100.0f, "%.0f"); c |= ImGui::SliderFloat("Size %", &warp_size, 1.0f, 100.0f, "%.0f"); c |= ImGui::SliderInt("Strength", &warp_strength_fx, -100, 100); return c; },
+        [&](Image& img) { effects::warp(img, warp_cx, warp_cy, warp_size, warp_strength_fx); });
+    adjust_modal(*this, "Wind",
+        [&] { bool c = ImGui::Checkbox("From left", &wind_left); c |= ImGui::SliderInt("Strength", &wind_strength, 1, 100); return c; },
+        [&](Image& img) { effects::wind(img, wind_left, wind_strength); });
+    adjust_modal(*this, "Circle",
+        [&] { return edge_options(); },
+        [&](Image& img) { effects::circle(img, edge()); });
+    adjust_modal(*this, "Cylinder",
+        [&] { bool c = ImGui::Checkbox("Vertical", &cyl_vertical); c |= ImGui::SliderInt("Strength", &cyl_strength, 0, 100); return c; },
+        [&](Image& img) { effects::cylinder(img, cyl_vertical, cyl_strength); });
+    adjust_modal(*this, "Pentagon",
+        [&] { return edge_options(); },
+        [&](Image& img) { effects::pentagon(img, edge()); });
+    adjust_modal(*this, "Perspective",
+        [&] { bool c = ImGui::Checkbox("Vertical", &persp_vertical); c |= ImGui::SliderInt("Distortion", &persp_distortion, -100, 100); c |= edge_options(); return c; },
+        [&](Image& img) { effects::perspective(img, persp_vertical, persp_distortion, edge()); });
+    adjust_modal(*this, "Skew",
+        [&] { bool c = ImGui::Checkbox("Vertical", &skew_vertical); c |= ImGui::SliderInt("Angle", &skew_angle, -45, 45); c |= edge_options(); return c; },
+        [&](Image& img) { effects::skew(img, skew_vertical, skew_angle, edge()); });
+    adjust_modal(*this, "Feedback",
+        [&] { bool c = ImGui::SliderInt("Opacity", &fb_opacity, 1, 100); c |= ImGui::SliderInt("Intensity", &fb_intensity, 1, 20); c |= ImGui::SliderFloat("Center X %", &fb_cx, 0.0f, 100.0f, "%.0f"); c |= ImGui::SliderFloat("Center Y %", &fb_cy, 0.0f, 100.0f, "%.0f"); c |= ImGui::Checkbox("Elliptical", &fb_elliptical); return c; },
+        [&](Image& img) { effects::feedback(img, fb_opacity, fb_intensity, fb_cx, fb_cy, fb_elliptical); });
+    adjust_modal(*this, "Pattern",
+        [&] { bool c = ImGui::SliderFloat("Angle", &pat_angle, 0.0f, 360.0f, "%.0f"); c |= ImGui::SliderFloat("Center X %", &pat_cx, 0.0f, 100.0f, "%.0f"); c |= ImGui::SliderFloat("Center Y %", &pat_cy, 0.0f, 100.0f, "%.0f"); c |= ImGui::SliderFloat("Scale %", &pat_scale, 1.0f, 100.0f, "%.0f"); c |= ImGui::SliderInt("Rotation", &pat_rotation, 0, 360); return c; },
+        [&](Image& img) { effects::pattern(img, pat_angle, pat_cx, pat_cy, pat_scale, pat_rotation); });
+    adjust_modal(*this, "Rotating Mirror",
+        [&] { bool c = ImGui::SliderFloat("Angle", &mirror_angle, 0.0f, 360.0f, "%.0f"); c |= ImGui::SliderFloat("Center X %", &mirror_cx, 0.0f, 100.0f, "%.0f"); c |= ImGui::SliderFloat("Center Y %", &mirror_cy, 0.0f, 100.0f, "%.0f"); c |= edge_options(); return c; },
+        [&](Image& img) { effects::rotating_mirror(img, mirror_angle, mirror_cx, mirror_cy, edge()); });
+    adjust_modal(*this, "Offset",
+        [&] { bool c = ImGui::SliderInt("Horizontal", &offset_x, -2000, 2000); c |= ImGui::SliderInt("Vertical", &offset_y, -2000, 2000); c |= edge_options(); return c; },
+        [&](Image& img) { effects::offset(img, offset_x, offset_y, edge()); });
+    adjust_modal(*this, "Seamless Tiling",
+        [&] { bool c = ImGui::Combo("Method", &tile_method, "Edge\0Corner\0Mirror\0"); c |= ImGui::Combo("Direction", &tile_direction, "Bidirectional\0Horizontal\0Vertical\0"); c |= ImGui::SliderInt("Transition", &tile_transition, 0, 100); return c; },
+        [&](Image& img) { effects::seamless_tiling(img, tile_method, tile_direction, tile_transition); });
+    adjust_modal(*this, "Page Curl",
+        [&] {
+            bool c = ImGui::Combo("Corner", &curl_corner, "Top left\0Top right\0Bottom left\0Bottom right\0");
+            c |= ImGui::SliderFloat("Width %", &curl_w, 1.0f, 100.0f, "%.0f"); c |= ImGui::SliderFloat("Height %", &curl_h, 1.0f, 100.0f, "%.0f");
+            c |= ImGui::SliderInt("Radius", &curl_r, 2, 200);
+            c |= ImGui::ColorEdit3("Back of page", curl_back, ImGuiColorEditFlags_NoInputs); ImGui::SameLine(); c |= ImGui::ColorEdit3("Fill", curl_fill, ImGuiColorEditFlags_NoInputs);
+            c |= ImGui::Checkbox("Transparent fill", &curl_transparent);
+            return c;
+        },
+        [&](Image& img) {
+            auto col = [](const float* f) { return Color{static_cast<uint8_t>(f[0] * 255 + 0.5f), static_cast<uint8_t>(f[1] * 255 + 0.5f), static_cast<uint8_t>(f[2] * 255 + 0.5f), 255}; };
+            effects::page_curl(img, curl_corner, curl_w, curl_h, curl_r, col(curl_back), col(curl_fill), curl_transparent);
+        });
 
     adjust_modal(*this, "Kaleidoscope",
         [&] {

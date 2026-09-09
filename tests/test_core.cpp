@@ -1679,7 +1679,42 @@ static void test_mesh_and_displace() {
     CHECK(scratch.get(10, 10).r > 90);
 }
 
+static void test_geo_effects() {
+    Image img(32, 32, {30, 60, 90, 255});
+    for (int y = 0; y < 32; ++y) for (int x = 0; x < 16; ++x) img.set(x, y, {200, 100, 50, 255});
+    // Offset with wrap moves the left half to the right.
+    Image o = img; effects::offset(o, 16, 0, {0, {0, 0, 0, 255}});
+    CHECK(o.get(20, 5).r == 200 && o.get(4, 5).r == 30);
+    Image ot = img; effects::offset(ot, 16, 0, {3, {0, 0, 0, 255}});
+    CHECK(ot.get(4, 5).a == 0 && ot.get(20, 5).r == 200);
+    // Mirror across the vertical center line copies the left half.
+    Image m = img; effects::rotating_mirror(m, 90.0f, 50, 50, {1, {0, 0, 0, 255}});
+    CHECK(m.get(24, 5).r == 200 || m.get(8, 5).r == 30);
+    // Polar to rectangular and back stays plausible (center color survives).
+    Image pc = img; effects::polar_coordinates(pc, true, {1, {0, 0, 0, 255}});
+    CHECK(pc.get(16, 16).a == 255);
+    // Each effect leaves size and alpha intact on an opaque image.
+    auto ok = [](const Image& i) { for (int y = 0; y < i.height(); y += 7) for (int x = 0; x < i.width(); x += 7) if (i.get(x, y).a != 255) return false; return i.width() == 32 && i.height() == 32; };
+    Image e;
+    e = img; effects::curlicues(e, 2, 2, 50, 50); CHECK(ok(e));
+    e = img; effects::displacement_map(e, img, 10, false, 0, {1, {0, 0, 0, 255}}); CHECK(ok(e));
+    e = img; effects::spiky_halo(e, 60, 8, 20, 0); CHECK(ok(e));
+    e = img; effects::warp(e, 50, 50, 50, 60); CHECK(ok(e));
+    e = img; effects::wind(e, true, 40); CHECK(ok(e) && e.get(20, 5).r >= 30);
+    e = img; effects::cylinder(e, false, 60); CHECK(ok(e));
+    e = img; effects::perspective(e, false, 40, {1, {0, 0, 0, 255}}); CHECK(ok(e));
+    e = img; effects::skew(e, false, 20, {1, {0, 0, 0, 255}}); CHECK(ok(e));
+    e = img; effects::feedback(e, 60, 4, 50, 50, false); CHECK(ok(e));
+    e = img; effects::pattern(e, 0, 50, 50, 25, 0); CHECK(ok(e));
+    e = img; effects::seamless_tiling(e, 0, 0, 50); CHECK(ok(e));
+    e = img; effects::circle(e, {3, {0, 0, 0, 255}}); CHECK(e.get(16, 16).a == 255 && e.get(0, 0).a == 0);
+    e = img; effects::pentagon(e, {3, {0, 0, 0, 255}}); CHECK(e.get(16, 16).a == 255 && e.get(0, 31).a == 0);
+    e = img; effects::page_curl(e, 3, 50, 50, 2, {255, 255, 255, 255}, {0, 255, 0, 255}, false);
+    CHECK(e.get(31, 31).g == 255 && e.get(31, 31).r == 0 && e.get(2, 2).r == 200);   // corner shows the fill, far corner untouched
+}
+
 int main() {
+    test_geo_effects();
     test_mesh_and_displace();
     test_photo_fix_suite();
     test_color_ops();

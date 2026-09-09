@@ -114,7 +114,8 @@ for. Ranked by value per effort; work top to bottom, tick as they land.
       Chromatic Aberration Removal, Digital Camera Noise Removal (bilateral)
 - [x] Warp Brush (push, expand, contract, twirl, noise, iron out) and Mesh Warp;
       Scratch Remover, Object Remover (selection + source rectangle, feathered)
-- [ ] Effects long tail: Page Curl, Lights, Fur, Weave, Pattern, Balls and
+- [ ] Effects long tail (distortion, geometric, reflection and image effects done;
+      artistic, illumination, texture and art media pending): Page Curl, Lights, Fur, Weave, Pattern, Balls and
       Bubbles, Neon Glow, Glowing Edges, Colored Edges/Foil, Hot Wax, Enamel,
       Aged Newspaper, Contours, Topography, Magnifying Lens, Curlicues,
       Displacement Map, Polar Coordinates, Pixelate, Spiky Halo, Warp, Wind,

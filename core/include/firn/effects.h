@@ -74,4 +74,27 @@ void outer_bevel(Image& img, const uint8_t* region, int width, float angle_degre
 // Cutout: a shadow cast into the region by its edge (the inverse of Drop Shadow).
 void cutout(Image& img, const uint8_t* region, int offset_x, int offset_y, float opacity, float blur, Color color);
 
+
+// --- Geometric, distortion, reflection and image effects (effects_geo.cpp) ---
+// Edge handling: 0 wrap, 1 repeat, 2 fill color, 3 transparent.
+struct Edge { int mode = 1; Color fill{0, 0, 0, 255}; };
+void curlicues(Image& img, int columns, int rows, int radius, int strength);
+// Displacement from `map` (stretched over the image): luma offsets both axes
+// (one-dimensional) or red/green offset x/y; intensity in percent of size.
+void displacement_map(Image& img, const Image& map, float intensity, bool two_d, float blur, Edge edge);
+void polar_coordinates(Image& img, bool rect_to_polar, Edge edge);
+void spiky_halo(Image& img, float radius_percent, int spikes, float offset_percent, int bend);
+void warp(Image& img, float cx_percent, float cy_percent, float size_percent, int strength);
+void wind(Image& img, bool from_left, int strength);
+void circle(Image& img, Edge edge);
+void cylinder(Image& img, bool vertical, int strength);
+void pentagon(Image& img, Edge edge);
+void perspective(Image& img, bool vertical, int distortion, Edge edge);
+void skew(Image& img, bool vertical, int angle, Edge edge);
+void feedback(Image& img, int opacity, int intensity, float cx_percent, float cy_percent, bool elliptical);
+void rotating_mirror(Image& img, float angle, float cx_percent, float cy_percent, Edge edge);
+void pattern(Image& img, float angle, float cx_percent, float cy_percent, float scale_percent, int rotation);
+void offset(Image& img, int dx, int dy, Edge edge);
+void seamless_tiling(Image& img, int method /*0 edge, 1 corner, 2 mirror*/, int direction /*0 both, 1 horizontal, 2 vertical*/, int transition);
+void page_curl(Image& img, int corner /*0 top-left .. 3 bottom-right*/, float width_percent, float height_percent, int radius, Color back, Color fill, bool transparent_fill);
 }  // namespace firn::effects

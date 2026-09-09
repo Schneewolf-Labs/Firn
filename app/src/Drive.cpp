@@ -247,6 +247,8 @@ bool Driver::parse_line(const std::string& line, App& app) {
         Step s{Step::Save}; s.text = line.substr(5); steps_.push_back(s); wait(1);
     } else if (op == "open" && a.size() >= 2) {
         Step s{Step::Open}; s.text = line.substr(5); steps_.push_back(s); wait(2);
+    } else if (op == "adjust" && a.size() >= 2) {
+        Step s{Step::Adjust}; s.text = line.substr(7); steps_.push_back(s); wait(2);
     } else if (op == "state") {
         // ack carries the state
     } else if (op == "quit") {
@@ -330,6 +332,7 @@ void Driver::before_frame(App& app, SDL_Window* window) {
                 break;
             }
             case Step::Quit: app.quit = true; consumed_frame = true; break;
+            case Step::Adjust: if (!app.open_adjust_by_title(s.text.c_str())) { steps_.clear(); ack("error no dialog titled " + s.text); return; } consumed_frame = true; break;
             case Step::Save: if (!app.save_document(s.text)) { steps_.clear(); ack("error " + app.status); return; } consumed_frame = true; break;
             case Step::Open: if (!app.open_document(s.text)) { steps_.clear(); ack("error " + app.status); return; } consumed_frame = true; break;
             case Step::Ack: steps_.pop_front(); ack(state_text(app)); continue;
