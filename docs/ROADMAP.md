@@ -94,17 +94,45 @@ what to work on next.
 - [x] Painting directly on masks (Edit button / Layers > Mask > Edit Mask)
 - [x] Mask overlay view (red tint over hidden areas while editing)
 
-## 11. Further out
+## 11. MVP: the rest of what people use (in order)
 
-- [x] Vector layers and objects: native read/write (verified against the
-      stored composite and in the original), Object Selector, Pen, create-as-vector
-      shapes/lines/text, Vector Properties, Objects menu, preset shape / gradient /
-      styled line / pattern libraries, gradient and pattern materials
-- [ ] Vector leftovers: the original's text shape layout (no sample), dashes/caps
-      in saved shapes (only segment caps have a known slot), Fit Text to Path
-- [ ] Scripting (the original's Python command API; docs/COMMANDS.md is the inventory)
-- [ ] Printing and print layout
-- [ ] 16-bit channels, color management
-- [ ] Plugin filters (Adobe-style .8bf)
-- [ ] Deform, Perspective and Straighten tools; Warp and Mesh Warp
-- [ ] Browser palette for image folders
+Parity target: every tool and command a regular user of the original reaches
+for. Ranked by value per effort; work top to bottom, tick as they land.
+
+- [ ] Adjustment layers: Brightness/Contrast, Levels, Curves, HSL, Color
+      Balance, Invert, Threshold, Posterize; live, non-destructive, editable
+      from the palette, native read/write (block 12/26 in the format)
+- [ ] Deform tool (move/scale/rotate/skew/perspective a layer), Straighten,
+      Perspective Correction
+- [ ] Image menu odds and ends: Flip, Mirror, Negative Image, Grayscale, Add
+      Borders, Count Colors, Decrease/Increase Color Depth with palettes,
+      Split/Combine Channels, Arithmetic, Picture Frame
+- [ ] Photo fixes: One Step Photo Fix, Automatic Color/Contrast/Saturation
+      Enhancement, Clarify, Black and White Points, Histogram Adjustment,
+      Salt and Pepper, JPEG Artifact Removal, Fill Flash, Backlighting,
+      Chromatic Aberration Removal, Digital Camera Noise Removal
+- [ ] Warp Brush and Mesh Warp; Scratch Remover, Object Remover
+- [ ] Effects long tail: Page Curl, Lights, Fur, Weave, Pattern, Balls and
+      Bubbles, Neon Glow, Glowing Edges, Colored Edges/Foil, Hot Wax, Enamel,
+      Aged Newspaper, Contours, Topography, Magnifying Lens, Curlicues,
+      Displacement Map, Polar Coordinates, Pixelate, Spiky Halo, Warp, Wind,
+      Circle/Cylinder/Pentagon/Perspective/Skew, Feedback, Rotating Mirror,
+      Offset, Seamless Tiling, Blinds, Fine/Rough Leather, Mosaic Antique/Glass,
+      Polished Stone, Sandstone, Sculpture, Soft Plastic, Straw Wall, Texture,
+      Tiles, Black Pencil, Brush Strokes, Charcoal, Colored Chalk, Colored
+      Pencil, Pencil, User Defined Filter
+- [ ] Materials palette parity: swatches, recent colors, "all tools" lock
+- [ ] Scripting: the original's Python command API for the top commands in
+      docs/COMMANDS.md, so bundled scripts run
+- [ ] Plain printing
+- [ ] 16-bit channels and color management
+
+## Dropped (not worth the effort for this port)
+
+- Art Media layers and tools (oil brush, chalk, pastel, palette knife,
+  smear): a separate paint simulation and layer type with no format sample
+- Plugin filters (.8bf): Windows binaries
+- Digimarc watermarking, TWAIN scanning, screen capture, batch processing,
+  web tools (image slicer, image mapper, optimizer wizards)
+- Browser palette, Effect Browser thumbnails, Print Layout
+- Vector leftovers: Fit Text to Path, the original's text shape layout
