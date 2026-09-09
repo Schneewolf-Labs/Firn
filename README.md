@@ -36,6 +36,14 @@ ctest --test-dir build
 FIRN_WINDOW=1280x800 ./build/app/firn   # override the initial window size
 ```
 
+Install it (the app, `firn-convert`, a desktop entry and the icon):
+
+```sh
+cmake --install build --prefix ~/.local      # per user: ~/.local/bin/firn
+sudo cmake --install build                   # system wide: /usr/local
+```
+
+
 ## File formats
 
 Opens PNG, JPEG, BMP, TGA, GIF and PNM through stb, and the original

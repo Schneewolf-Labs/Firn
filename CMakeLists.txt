@@ -36,3 +36,18 @@ if(FIRN_BUILD_TESTS)
   enable_testing()
   add_subdirectory(tests)
 endif()
+
+# Installation: `cmake --install build` (default prefix /usr/local; add
+# --prefix ~/.local for a per-user install). Installs the app, the converter,
+# a desktop entry and the icon.
+include(GNUInstallDirs)
+if(FIRN_BUILD_APP)
+  install(TARGETS firn RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+  install(TARGETS firn-convert RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+  if(NOT WIN32)
+    install(FILES assets/firn.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
+    foreach(size 48 128 256)
+      install(FILES assets/icon-${size}.png DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/${size}x${size}/apps RENAME firn.png)
+    endforeach()
+  endif()
+endif()

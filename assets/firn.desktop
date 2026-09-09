@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Firn
+Comment=Raster image editor
+Exec=firn %F
+Icon=firn
+Terminal=false
+Categories=Graphics;RasterGraphics;2DGraphics;
+MimeType=image/png;image/jpeg;image/bmp;image/x-tga;image/gif;
+StartupWMClass=firn
