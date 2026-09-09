@@ -46,6 +46,7 @@ void LayerPixelCommand::execute(Document& doc) {
     Image& img = doc.layer(layer_).pixels;
     before_ = img;
     apply(img);
+    raster::apply_through_mask(img, before_, doc.selection());
     doc.touch();
 }
 
@@ -135,6 +136,27 @@ void FlipCommand::execute(Document& doc) {
 void MirrorCommand::execute(Document& doc) {
     for (size_t i = 0; i < doc.layer_count(); ++i) raster::mirror_horizontal(doc.layer(i).pixels);
     doc.touch();
+}
+
+void SelectionCommand::execute(Document& doc) {
+    before_ = doc.selection();
+    doc.set_selection(after_);
+}
+
+void SelectionCommand::undo(Document& doc) { doc.set_selection(before_); }
+
+void PasteLayerCommand::execute(Document& doc) {
+    prev_active_ = doc.active_layer();
+    index_ = doc.active_layer() < 0 ? doc.layer_count() : static_cast<size_t>(doc.active_layer()) + 1;
+    auto layer = std::make_unique<Layer>();
+    layer->name = layer_name_;
+    layer->pixels = pixels_;
+    doc.insert_layer(std::move(layer), index_);
+}
+
+void PasteLayerCommand::undo(Document& doc) {
+    doc.remove_layer(index_);
+    doc.set_active_layer(prev_active_);
 }
 
 // --- Layer structure ops -----------------------------------------------

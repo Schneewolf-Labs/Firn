@@ -109,6 +109,21 @@ void App::draw_canvas() {
     dl->AddImage((ImTextureID)(intptr_t)canvas_tex, p0, p1);
     dl->AddRect(ImVec2(p0.x - 1, p0.y - 1), ImVec2(p1.x + 1, p1.y + 1), IM_COL32(0, 0, 0, 255));
     if (hovered || active_button >= 0) tool().draw_overlay(*this, in);
+
+    // Marching ants along the selection boundary. Each unit edge is one
+    // segment; colour alternates along the outline and cycles with time.
+    sync_ants();
+    if (!ants.empty()) {
+        const int phase = static_cast<int>(ImGui::GetTime() * 10.0);
+        const float vx0 = view_pos.x, vy0 = view_pos.y, vx1 = view_pos.x + view_size.x, vy1 = view_pos.y + view_size.y;
+        for (const Edge& e : ants) {
+            const float sx = p0.x + e.x * zoom, sy = p0.y + e.y * zoom;
+            const float ex = e.horizontal ? sx + zoom : sx, ey = e.horizontal ? sy : sy + zoom;
+            if (std::max(sx, ex) < vx0 || std::min(sx, ex) > vx1 || std::max(sy, ey) < vy0 || std::min(sy, ey) > vy1) continue;
+            const ImU32 col = (((e.x + e.y + phase) / 4) & 1) ? IM_COL32(255, 255, 255, 255) : IM_COL32(0, 0, 0, 255);
+            dl->AddLine(ImVec2(sx, sy), ImVec2(ex, ey), col, 1.0f);
+        }
+    }
     dl->PopClipRect();
 
     // Status line at the bottom of the canvas window.

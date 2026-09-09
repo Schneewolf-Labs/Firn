@@ -1,6 +1,7 @@
 #include <memory>
 
 #include "App.h"
+#include "firn/mask.h"
 #include "imgui.h"
 
 using namespace firn;
@@ -27,6 +28,12 @@ void App::draw_menu() {
     if (ImGui::BeginMenu("Edit")) {
         if (ImGui::MenuItem("Undo", "Ctrl+Z", false, has_doc && history.can_undo())) undo();
         if (ImGui::MenuItem("Redo", "Ctrl+Y", false, has_doc && history.can_redo())) redo();
+        ImGui::Separator();
+        if (ImGui::MenuItem("Cut", "Ctrl+X", false, has_layer)) cut();
+        if (ImGui::MenuItem("Copy", "Ctrl+C", false, has_layer)) copy();
+        if (ImGui::MenuItem("Paste As New Image", "Ctrl+V", false, !clipboard.empty())) paste_as_new_image();
+        if (ImGui::MenuItem("Paste As New Layer", "Ctrl+L", false, has_doc && !clipboard.empty())) paste_as_new_layer();
+        if (ImGui::MenuItem("Clear", "Delete", false, has_layer)) clear_selection();
         ImGui::EndMenu();
     }
     if (ImGui::BeginMenu("View")) {
@@ -62,6 +69,20 @@ void App::draw_menu() {
         ImGui::MenuItem("(none yet)", nullptr, false, false);
         ImGui::EndMenu();
     }
+    if (ImGui::BeginMenu("Selections")) {
+        const bool has_sel = has_doc && doc->has_selection();
+        if (ImGui::MenuItem("Select All", "Ctrl+A", false, has_doc)) select_all();
+        if (ImGui::MenuItem("Select None", "Ctrl+D", false, has_sel)) select_none();
+        if (ImGui::MenuItem("Invert", "Ctrl+Shift+I", false, has_doc)) select_invert();
+        ImGui::Separator();
+        if (ImGui::BeginMenu("Modify", has_sel)) {
+            if (ImGui::MenuItem("Expand...")) show_sel_dialog = 1;
+            if (ImGui::MenuItem("Contract...")) show_sel_dialog = 2;
+            if (ImGui::MenuItem("Feather...")) show_sel_dialog = 3;
+            ImGui::EndMenu();
+        }
+        ImGui::EndMenu();
+    }
     if (ImGui::BeginMenu("Layers")) {
         if (ImGui::MenuItem("New Raster Layer", nullptr, false, has_doc))
             run(std::make_unique<AddLayerCommand>("Raster " + std::to_string(doc->layer_count())));
@@ -82,6 +103,8 @@ void App::draw_dialogs() {
     }
     if (show_blur_dialog) { ImGui::OpenPopup(blur_gaussian ? "Gaussian Blur" : "Average"); show_blur_dialog = false; }
     if (show_bc_dialog) { ImGui::OpenPopup("Brightness/Contrast"); show_bc_dialog = false; }
+    static const char* kSelDialogs[] = {nullptr, "Expand Selection", "Contract Selection", "Feather Selection"};
+    if (show_sel_dialog) { ImGui::OpenPopup(kSelDialogs[show_sel_dialog]); show_sel_dialog = 0; }
 
     if (ImGui::BeginPopupModal("New Image", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
         ImGui::InputInt("Width", &new_w);
@@ -137,6 +160,23 @@ void App::draw_dialogs() {
         ImGui::SliderInt("Contrast", &bc_contrast, -100, 100);
         if (ImGui::Button("OK")) {
             if (active_layer() >= 0) run(std::make_unique<BrightnessContrastCommand>(active_layer(), bc_brightness, bc_contrast));
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel")) ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
+    }
+    for (int which = 1; which <= 3; ++which) {
+        if (!ImGui::BeginPopupModal(kSelDialogs[which], nullptr, ImGuiWindowFlags_AlwaysAutoResize)) continue;
+        ImGui::SliderInt("Pixels", &sel_modify_px, 1, 100);
+        if (ImGui::Button("OK")) {
+            if (doc && doc->has_selection()) {
+                Mask m = doc->selection();
+                if (which == 1) mask::expand(m, sel_modify_px);
+                else if (which == 2) mask::contract(m, sel_modify_px);
+                else mask::feather(m, static_cast<float>(sel_modify_px));
+                set_selection(kSelDialogs[which], std::move(m));
+            }
             ImGui::CloseCurrentPopup();
         }
         ImGui::SameLine();

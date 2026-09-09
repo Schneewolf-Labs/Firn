@@ -3,6 +3,7 @@ add_library(firncore STATIC
   src/document.cpp
   src/commands.cpp
   src/raster.cpp
+  src/mask.cpp
   src/io.cpp
 )
 target_include_directories(firncore PUBLIC include)

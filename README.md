@@ -36,9 +36,15 @@ FIRN_WINDOW=1280x800 ./build/app/firn   # override the initial window size
 
 ## Tools
 
-Single-key shortcuts as in the original: **A** pan, **Z** zoom, **E** dropper,
-**B** paint brush, **X** eraser, **F** flood fill. `[` and `]` resize the
-brush. Left button uses the foreground material, right button the background.
+Single-key shortcuts as in the original: **A** pan, **Z** zoom, **S**
+selection, **L** freehand selection, **W** magic wand, **E** dropper, **B**
+paint brush, **X** eraser, **F** flood fill. `[` and `]` resize the brush.
+Left button uses the foreground material, right button the background.
 Space + drag or middle-drag pans with any tool; Escape cancels a stroke.
+
+Selections: Shift adds, Ctrl subtracts, a plain click deselects. Ctrl+A all,
+Ctrl+D none, Ctrl+Shift+I invert, Delete clears. Every pixel command and the
+brush, eraser, and fill tools are confined to the selection. Cut/Copy go to an
+internal clipboard; paste as a new layer (Ctrl+L) or a new image (Ctrl+V).
 
 Dear ImGui (docking branch) is fetched by CMake on first configure.

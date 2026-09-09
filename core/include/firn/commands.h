@@ -42,7 +42,8 @@ private:
 // --- Concrete commands -------------------------------------------------
 
 // Base for commands that rewrite a single layer's pixels. Snapshots the
-// layer before executing. Simple and correct; optimise with dirty rects later.
+// layer before executing and confines the result to the document's selection.
+// Simple and correct; optimise with dirty rects later.
 class LayerPixelCommand : public Command {
 public:
     explicit LayerPixelCommand(size_t layer) : layer_(layer) {}
@@ -106,6 +107,45 @@ public:
 protected:
     void apply(Image& img) override;
     float radius_;
+};
+
+// Edit > Clear: fills the selection (or the whole layer) with a colour.
+class ClearCommand : public LayerPixelCommand {
+public:
+    ClearCommand(size_t layer, Color c) : LayerPixelCommand(layer), color_(c) {}
+    std::string name() const override { return "Clear"; }
+protected:
+    void apply(Image& img) override { img.fill(color_); }
+    Color color_;
+};
+
+// Any change to the selection mask. Named after the gesture that made it so
+// the History palette reads like the original's.
+class SelectionCommand : public Command {
+public:
+    SelectionCommand(std::string name, Mask after) : name_(std::move(name)), after_(std::move(after)) {}
+    std::string name() const override { return name_; }
+    void execute(Document& doc) override;
+    void undo(Document& doc) override;
+private:
+    std::string name_;
+    Mask before_, after_;
+};
+
+// Inserts a new raster layer holding `pixels` (document-sized) above the
+// active layer. Used by Paste As New Layer.
+class PasteLayerCommand : public Command {
+public:
+    PasteLayerCommand(std::string layer_name, Image pixels)
+        : layer_name_(std::move(layer_name)), pixels_(std::move(pixels)) {}
+    std::string name() const override { return "Paste As New Layer"; }
+    void execute(Document& doc) override;
+    void undo(Document& doc) override;
+private:
+    std::string layer_name_;
+    Image pixels_;
+    size_t index_ = 0;
+    int prev_active_ = -1;
 };
 
 // Records an edit made live by a tool (brush stroke, flood fill). The tool

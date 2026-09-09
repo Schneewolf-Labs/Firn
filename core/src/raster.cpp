@@ -1,5 +1,7 @@
 #include "firn/raster.h"
 
+#include "firn/mask.h"
+
 #include <algorithm>
 #include <cmath>
 #include <cstring>
@@ -36,8 +38,8 @@ void blend_over(Image& img, int x, int y, Color c, float coverage) {
 
 // --- Stroke ------------------------------------------------------------
 
-Stroke::Stroke(const Image& base, Brush brush, Color color, StrokeMode mode)
-    : base_(base), brush_(brush), color_(color), mode_(mode),
+Stroke::Stroke(const Image& base, Brush brush, Color color, StrokeMode mode, const Mask* clip)
+    : base_(base), brush_(brush), color_(color), mode_(mode), clip_(clip && !clip->empty() ? clip : nullptr),
       mask_(static_cast<size_t>(base.width()) * base.height(), 0.0f) {}
 
 void Stroke::stamp(float cx, float cy) {
@@ -96,7 +98,8 @@ Rect Stroke::render(Image& dst) {
     for (int y = r.y0; y < r.y1; ++y) {
         for (int x = r.x0; x < r.x1; ++x) {
             const size_t i = static_cast<size_t>(y) * w + x;
-            const float m = mask_[i] * op;
+            float m = mask_[i] * op;
+            if (clip_) m *= clip_->data()[i] / 255.0f;
             const uint8_t* b = base_.data() + i * 4;
             uint8_t* d = dst.data() + i * 4;
             if (m <= 0.0f) {
@@ -117,9 +120,11 @@ Rect Stroke::render(Image& dst) {
 
 // --- Flood fill --------------------------------------------------------
 
-Rect flood_fill(Image& img, int x, int y, Color color, int tolerance, float opacity) {
+Rect flood_fill(Image& img, int x, int y, Color color, int tolerance, float opacity, const Mask* clip) {
     const int w = img.width(), h = img.height();
     if (x < 0 || y < 0 || x >= w || y >= h) return {};
+    if (clip && clip->empty()) clip = nullptr;
+    if (clip && clip->at(x, y) == 0) return {};
     const Color seed = img.get(x, y);
     auto matches = [&](int px, int py) {
         const Color c = img.get(px, py);
@@ -159,8 +164,25 @@ Rect flood_fill(Image& img, int x, int y, Color color, int tolerance, float opac
     }
     for (int py = bounds.y0; py < bounds.y1; ++py)
         for (int px = bounds.x0; px < bounds.x1; ++px)
-            if (in[static_cast<size_t>(py) * w + px]) blend_over(img, px, py, color, opacity);
+            if (in[static_cast<size_t>(py) * w + px])
+                blend_over(img, px, py, color, opacity * (clip ? clip->at(px, py) / 255.0f : 1.0f));
     return bounds;
+}
+
+void apply_through_mask(Image& dst, const Image& before, const Mask& mask) {
+    if (mask.empty()) return;
+    const size_t n = static_cast<size_t>(dst.width()) * dst.height();
+    uint8_t* d = dst.data();
+    const uint8_t* b = before.data();
+    const uint8_t* m = mask.data();
+    for (size_t i = 0; i < n; ++i) {
+        const int k = m[i];
+        if (k == 255) continue;
+        for (int c = 0; c < 4; ++c) {
+            const int v = (d[i * 4 + c] * k + b[i * 4 + c] * (255 - k) + 127) / 255;
+            d[i * 4 + c] = static_cast<uint8_t>(v);
+        }
+    }
 }
 
 // --- Whole-image ops ---------------------------------------------------

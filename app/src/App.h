@@ -37,6 +37,23 @@ struct App {
     firn::raster::Brush brush;
     int fill_tolerance = 20;
     float fill_opacity = 1.0f;
+    // Selection tool options (shared by Selection / Freehand / Magic Wand)
+    int sel_shape = 0;                  // 0 rectangle, 1 ellipse
+    int sel_mode = 0;                   // mask::Combine as int: 0 replace, 1 add, 2 subtract, 3 intersect
+    float sel_feather = 0.0f;
+    bool sel_antialias = true;
+    int wand_tolerance = 20;
+    bool wand_contiguous = true;
+    bool wand_sample_merged = false;
+
+    // Marching ants: unit edges of the selection outline, cached per selection revision.
+    struct Edge { int x, y; bool horizontal; };
+    std::vector<Edge> ants;
+    uint64_t ants_revision = ~0ull;
+
+    // Internal clipboard: document-sized RGBA with the selection baked into alpha.
+    struct Clipboard { firn::Image pixels; firn::raster::Rect bounds; bool empty() const { return pixels.empty(); } };
+    Clipboard clipboard;
     float fg_color[4] = {0.f, 0.f, 0.f, 1.f};
     float bg_color[4] = {1.f, 1.f, 1.f, 1.f};
 
@@ -47,11 +64,13 @@ struct App {
     bool show_blur_dialog = false;
     bool blur_gaussian = false;         // which blur the pending dialog is for
     bool show_bc_dialog = false;
+    int show_sel_dialog = 0;            // 1 expand, 2 contract, 3 feather
     bool show_imgui_demo = false;
     char path_buf[1024] = {};
     int new_w = 800, new_h = 600;
     float blur_radius = 3.0f;
     int bc_brightness = 0, bc_contrast = 0;
+    int sel_modify_px = 1;
     std::string status;
     bool quit = false;
 
@@ -67,6 +86,19 @@ struct App {
     Tool& tool() { return *tools[tool_index]; }
     void select_tool(int index);
     void zoom_about(ImVec2 screen, float factor);
+
+    // Selections and clipboard
+    void set_selection(const char* name, firn::Mask m);    // runs a SelectionCommand
+    void apply_selection_gesture(const char* name, firn::Mask shape);  // combine per sel_mode + feather
+    void select_all();
+    void select_none();
+    void select_invert();
+    void copy();
+    void cut();
+    void clear_selection();
+    void paste_as_new_layer();
+    void paste_as_new_image();
+    void sync_ants();
 
     // Per-frame UI (ui/*.cpp)
     void draw_menu();

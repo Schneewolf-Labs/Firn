@@ -38,6 +38,13 @@ std::unique_ptr<Layer> Document::remove_layer(size_t i) {
     return out;
 }
 
+void Document::set_selection(Mask m) {
+    // Normalise "selected nothing" to "no selection".
+    if (!m.empty() && !m.any()) m = Mask();
+    selection_ = std::move(m);
+    ++selection_revision_;
+}
+
 Image Document::composite() const {
     Image out(width_, height_, {0, 0, 0, 0});
     uint8_t* dst = out.data();

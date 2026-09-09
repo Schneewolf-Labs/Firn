@@ -4,6 +4,7 @@
 
 #include "App.h"
 #include "firn/commands.h"
+#include "firn/mask.h"
 #include "firn/raster.h"
 #include "tools/Tool.h"
 
@@ -87,7 +88,7 @@ public:
             else mode = raster::StrokeMode::Erase;
         }
         layer_ = app.active_layer();
-        stroke_ = std::make_unique<raster::Stroke>(L.pixels, brush, color, mode);
+        stroke_ = std::make_unique<raster::Stroke>(L.pixels, brush, color, mode, &app.doc->selection());
         stroke_->add_point(in.img_x, in.img_y);
         flush(app);
     }
@@ -156,7 +157,7 @@ public:
         const Color color = to_color(b == ImGuiMouseButton_Left ? app.fg_color : app.bg_color);
         const raster::Rect changed = raster::flood_fill(L.pixels, static_cast<int>(std::floor(in.img_x)),
                                                         static_cast<int>(std::floor(in.img_y)), color,
-                                                        app.fill_tolerance, app.fill_opacity);
+                                                        app.fill_tolerance, app.fill_opacity, &app.doc->selection());
         if (changed.empty()) return;
         app.doc->touch();
         app.commit(std::make_unique<LayerSnapshotCommand>(layer, name(), std::move(before), L.pixels));
@@ -171,12 +172,166 @@ public:
     }
 };
 
+// --- Selection tools ---------------------------------------------------
+
+// Options shared by the shape and freehand tools: mode, feather, antialias.
+void draw_selection_common(App& app) {
+    ImGui::SetNextItemWidth(110);
+    ImGui::Combo("Mode", &app.sel_mode, "Replace\0Add (Shift)\0Remove (Ctrl)\0Intersect\0");
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(110);
+    ImGui::SliderFloat("Feather", &app.sel_feather, 0.0f, 200.0f, "%.0f", ImGuiSliderFlags_Logarithmic);
+    ImGui::SameLine();
+    ImGui::Checkbox("Anti-alias", &app.sel_antialias);
+}
+
+// Shift/Ctrl held at press time override the mode, as in the original.
+int gesture_mode(const App& app) {
+    const ImGuiIO& io = ImGui::GetIO();
+    if (io.KeyShift) return 1;
+    if (io.KeyCtrl) return 2;
+    return app.sel_mode;
+}
+
+class SelectionTool : public Tool {
+public:
+    const char* name() const override { return "Selection"; }
+    const char* shortcut() const override { return "S"; }
+    void on_press(App& app, const ToolInput& in, ImGuiMouseButton) override {
+        if (!app.doc) return;
+        dragging_ = true;
+        x0_ = x1_ = in.img_x;
+        y0_ = y1_ = in.img_y;
+        mode_ = gesture_mode(app);
+    }
+    void on_drag(App&, const ToolInput& in, ImGuiMouseButton) override {
+        if (!dragging_) return;
+        x1_ = in.img_x;
+        y1_ = in.img_y;
+    }
+    void on_release(App& app, const ToolInput& in, ImGuiMouseButton) override {
+        if (!dragging_ || !app.doc) return;
+        dragging_ = false;
+        x1_ = in.img_x; y1_ = in.img_y;
+        const int w = app.doc->width(), h = app.doc->height();
+        if (std::abs(x1_ - x0_) < 1.0f || std::abs(y1_ - y0_) < 1.0f) {
+            // A click without a drag deselects, like the original.
+            app.select_none();
+            return;
+        }
+        Mask shape = app.sel_shape == 0
+            ? mask::rectangle(w, h, x0_, y0_, x1_, y1_, app.sel_antialias)
+            : mask::ellipse(w, h, (x0_ + x1_) * 0.5f, (y0_ + y1_) * 0.5f, (x1_ - x0_) * 0.5f, (y1_ - y0_) * 0.5f, app.sel_antialias);
+        const int saved = app.sel_mode;
+        app.sel_mode = mode_;
+        app.apply_selection_gesture("Selection", std::move(shape));
+        app.sel_mode = saved;
+    }
+    void cancel(App&) override { dragging_ = false; }
+    void draw_overlay(App& app, const ToolInput& in) override {
+        if (!dragging_) return;
+        const ImVec2 a(in.origin.x + x0_ * in.zoom, in.origin.y + y0_ * in.zoom);
+        const ImVec2 b(in.origin.x + x1_ * in.zoom, in.origin.y + y1_ * in.zoom);
+        if (app.sel_shape == 0) {
+            in.dl->AddRect(a, b, IM_COL32(0, 0, 0, 255));
+            in.dl->AddRect(ImVec2(a.x + 1, a.y + 1), ImVec2(b.x - 1, b.y - 1), IM_COL32(255, 255, 255, 255));
+        } else {
+            const ImVec2 c((a.x + b.x) * 0.5f, (a.y + b.y) * 0.5f);
+            in.dl->AddEllipse(c, ImVec2(std::abs(b.x - a.x) * 0.5f, std::abs(b.y - a.y) * 0.5f), IM_COL32(0, 0, 0, 255), 0.0f, 0, 1.0f);
+            in.dl->AddEllipse(c, ImVec2(std::abs(b.x - a.x) * 0.5f - 1, std::abs(b.y - a.y) * 0.5f - 1), IM_COL32(255, 255, 255, 255), 0.0f, 0, 1.0f);
+        }
+    }
+    void draw_options(App& app) override {
+        ImGui::SetNextItemWidth(110);
+        ImGui::Combo("Shape", &app.sel_shape, "Rectangle\0Ellipse\0");
+        ImGui::SameLine();
+        draw_selection_common(app);
+    }
+
+private:
+    bool dragging_ = false;
+    float x0_ = 0, y0_ = 0, x1_ = 0, y1_ = 0;
+    int mode_ = 0;
+};
+
+class FreehandTool : public Tool {
+public:
+    const char* name() const override { return "Freehand Selection"; }
+    const char* shortcut() const override { return "L"; }
+    void on_press(App& app, const ToolInput& in, ImGuiMouseButton) override {
+        if (!app.doc) return;
+        pts_.clear();
+        pts_.emplace_back(in.img_x, in.img_y);
+        mode_ = gesture_mode(app);
+    }
+    void on_drag(App&, const ToolInput& in, ImGuiMouseButton) override {
+        if (pts_.empty()) return;
+        const auto& l = pts_.back();
+        if (std::abs(l.first - in.img_x) >= 0.5f || std::abs(l.second - in.img_y) >= 0.5f) pts_.emplace_back(in.img_x, in.img_y);
+    }
+    void on_release(App& app, const ToolInput&, ImGuiMouseButton) override {
+        if (!app.doc) { pts_.clear(); return; }
+        if (pts_.size() < 3) { pts_.clear(); app.select_none(); return; }
+        Mask shape = mask::polygon(app.doc->width(), app.doc->height(), pts_, app.sel_antialias);
+        pts_.clear();
+        const int saved = app.sel_mode;
+        app.sel_mode = mode_;
+        app.apply_selection_gesture("Freehand Selection", std::move(shape));
+        app.sel_mode = saved;
+    }
+    void cancel(App&) override { pts_.clear(); }
+    void draw_overlay(App&, const ToolInput& in) override {
+        if (pts_.size() < 2) return;
+        for (size_t i = 0; i + 1 < pts_.size(); ++i) {
+            const ImVec2 a(in.origin.x + pts_[i].first * in.zoom, in.origin.y + pts_[i].second * in.zoom);
+            const ImVec2 b(in.origin.x + pts_[i + 1].first * in.zoom, in.origin.y + pts_[i + 1].second * in.zoom);
+            in.dl->AddLine(a, b, IM_COL32(0, 0, 0, 255), 3.0f);
+            in.dl->AddLine(a, b, IM_COL32(255, 255, 255, 255), 1.0f);
+        }
+    }
+    void draw_options(App& app) override { draw_selection_common(app); }
+
+private:
+    std::vector<std::pair<float, float>> pts_;
+    int mode_ = 0;
+};
+
+class MagicWandTool : public Tool {
+public:
+    const char* name() const override { return "Magic Wand"; }
+    const char* shortcut() const override { return "W"; }
+    void on_press(App& app, const ToolInput& in, ImGuiMouseButton) override {
+        if (!in.inside || !app.doc || app.active_layer() < 0) return;
+        const int x = static_cast<int>(std::floor(in.img_x)), y = static_cast<int>(std::floor(in.img_y));
+        Mask shape = app.wand_sample_merged
+            ? mask::magic_wand(app.doc->composite(), x, y, app.wand_tolerance, app.wand_contiguous)
+            : mask::magic_wand(app.doc->layer(app.active_layer()).pixels, x, y, app.wand_tolerance, app.wand_contiguous);
+        const int saved = app.sel_mode;
+        app.sel_mode = gesture_mode(app);
+        app.apply_selection_gesture("Magic Wand", std::move(shape));
+        app.sel_mode = saved;
+    }
+    void draw_options(App& app) override {
+        ImGui::SetNextItemWidth(110);
+        ImGui::SliderInt("Tolerance", &app.wand_tolerance, 0, 200);
+        ImGui::SameLine();
+        ImGui::Checkbox("Contiguous", &app.wand_contiguous);
+        ImGui::SameLine();
+        ImGui::Checkbox("Sample merged", &app.wand_sample_merged);
+        ImGui::SameLine();
+        draw_selection_common(app);
+    }
+};
+
 }  // namespace
 
 std::vector<std::unique_ptr<Tool>> make_default_tools() {
     std::vector<std::unique_ptr<Tool>> t;
     t.push_back(std::make_unique<PanTool>());
     t.push_back(std::make_unique<ZoomTool>());
+    t.push_back(std::make_unique<SelectionTool>());
+    t.push_back(std::make_unique<FreehandTool>());
+    t.push_back(std::make_unique<MagicWandTool>());
     t.push_back(std::make_unique<DropperTool>());
     t.push_back(std::make_unique<BrushTool>(false));
     t.push_back(std::make_unique<BrushTool>(true));

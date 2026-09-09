@@ -60,10 +60,18 @@ docs/    notes on the original: command inventory, module mapping.
   max-coverage mask). Do not "fix" overlapping stamps by blending them.
 - The **Background layer** (`Layer::background`) has no transparency: the
   eraser paints the background colour on it and clears alpha elsewhere.
+- **Selections are a `Mask` on the `Document`** (empty mask = none). Change
+  it only through `SelectionCommand` (`App::set_selection`) so it is undoable.
+  `LayerPixelCommand` clips its result to the selection automatically via
+  `raster::apply_through_mask`; tools pass `&doc->selection()` as the clip to
+  `raster::Stroke` / `raster::flood_fill`. New pixel commands get this for
+  free; new tools must opt in.
 - Index 0 is the bottom of the layer stack. Palettes list top first.
 - New tools go in `app/src/tools/Tools.cpp` and register in
   `make_default_tools()`; give them a single-letter `shortcut()` matching the
-  original where one exists (A pan, Z zoom, E dropper, B brush, X eraser, F fill).
+  original where one exists (A pan, Z zoom, S selection, E dropper, B brush,
+  X eraser, F fill). L freehand and W magic wand are ours; the original put
+  those on the S flyout.
 - Add a test in `tests/test_core.cpp` for every new raster op or command.
 
 ## Checking UI changes

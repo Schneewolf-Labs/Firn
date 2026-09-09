@@ -6,6 +6,7 @@
 #include "firn/commands.h"
 #include "firn/document.h"
 #include "firn/io.h"
+#include "firn/mask.h"
 #include "firn/raster.h"
 
 #define CHECK(cond)                                                              \
@@ -180,7 +181,96 @@ static void test_flip_mirror_snapshot() {
     CHECK(doc.layer(0).pixels.get(0, 0).r == 9);
 }
 
+static void test_mask_shapes() {
+    Mask r = mask::rectangle(10, 10, 2, 3, 6, 8, false);
+    CHECK(r.at(2, 3) == 255 && r.at(5, 7) == 255 && r.at(6, 7) == 0 && r.at(5, 8) == 0);
+    raster::Rect b = r.bounds();
+    CHECK(b.x0 == 2 && b.y0 == 3 && b.x1 == 6 && b.y1 == 8);
+    // Antialiased half-pixel edge gives half coverage.
+    Mask ra = mask::rectangle(10, 10, 2.5f, 3, 6, 8, true);
+    CHECK(ra.at(2, 3) >= 127 && ra.at(2, 3) <= 128 && ra.at(3, 3) == 255);
+
+    Mask e = mask::ellipse(20, 20, 10, 10, 6, 4, true);
+    CHECK(e.at(10, 10) == 255 && e.at(15, 10) > 0 && e.at(17, 10) == 0 && e.at(10, 15) == 0);
+
+    Mask p = mask::polygon(10, 10, {{1, 1}, {8, 1}, {8, 8}, {1, 8}}, false);  // a square
+    CHECK(p.at(1, 1) == 255 && p.at(7, 7) == 255 && p.at(8, 8) == 0 && p.at(0, 4) == 0);
+    Mask tri = mask::polygon(10, 10, {{0, 0}, {10, 0}, {0, 10}}, true);
+    CHECK(tri.at(1, 1) == 255 && tri.at(8, 8) == 0);
+    CHECK(tri.at(5, 4) > 0 && tri.at(5, 4) < 255);  // on the diagonal edge
+}
+
+static void test_mask_ops() {
+    Mask a = mask::rectangle(8, 8, 0, 0, 4, 8, false);
+    Mask b = mask::rectangle(8, 8, 2, 0, 6, 8, false);
+    Mask u = a; mask::combine(u, b, mask::Combine::Add);
+    CHECK(u.at(0, 0) == 255 && u.at(5, 0) == 255 && u.at(6, 0) == 0);
+    Mask d = a; mask::combine(d, b, mask::Combine::Subtract);
+    CHECK(d.at(1, 0) == 255 && d.at(2, 0) == 0);
+    Mask i = a; mask::combine(i, b, mask::Combine::Intersect);
+    CHECK(i.at(1, 0) == 0 && i.at(3, 0) == 255 && i.at(4, 0) == 0);
+    mask::invert(i);
+    CHECK(i.at(1, 0) == 255 && i.at(3, 0) == 0);
+
+    Mask sq = mask::rectangle(12, 12, 4, 4, 8, 8, false);
+    Mask ex = sq; mask::expand(ex, 2);
+    CHECK(ex.at(2, 5) == 255 && ex.at(1, 5) == 0 && ex.at(2, 2) == 0);  // circular, so no corner
+    Mask co = sq; mask::contract(co, 1);
+    CHECK(co.at(4, 4) == 0 && co.at(5, 5) == 255 && co.at(6, 6) == 255 && co.at(7, 7) == 0);
+    Mask all(12, 12, 255); mask::contract(all, 2);
+    CHECK(all.at(0, 5) == 0 && all.at(1, 5) == 0 && all.at(2, 5) == 255);  // shrinks from the image edge
+    Mask f = sq; mask::feather(f, 2.0f);
+    CHECK(f.at(6, 6) > 200 && f.at(3, 6) > 0 && f.at(3, 6) < 255 && f.at(0, 6) == 0);
+
+    Image img(6, 1, {0, 0, 0, 255});
+    img.set(2, 0, {255, 255, 255, 255});
+    img.set(5, 0, {0, 0, 0, 255});
+    Mask w = mask::magic_wand(img, 0, 0, 0, true);
+    CHECK(w.at(1, 0) == 255 && w.at(2, 0) == 0 && w.at(3, 0) == 0);  // blocked by the white pixel
+    Mask wg = mask::magic_wand(img, 0, 0, 0, false);
+    CHECK(wg.at(3, 0) == 255 && wg.at(5, 0) == 255 && wg.at(2, 0) == 0);
+}
+
+static void test_selection_clips_commands() {
+    Document doc(4, 1);
+    doc.add_layer("bg").pixels.fill({100, 100, 100, 255});
+    CommandStack hist;
+    hist.run(doc, std::make_unique<SelectionCommand>("Selection", mask::rectangle(4, 1, 1, 0, 3, 1, false)));
+    CHECK(doc.has_selection());
+    hist.run(doc, std::make_unique<InvertCommand>(0));
+    CHECK(doc.layer(0).pixels.get(0, 0).r == 100 && doc.layer(0).pixels.get(1, 0).r == 155 &&
+          doc.layer(0).pixels.get(2, 0).r == 155 && doc.layer(0).pixels.get(3, 0).r == 100);
+    hist.run(doc, std::make_unique<ClearCommand>(0, Color{0, 0, 0, 0}));
+    CHECK(doc.layer(0).pixels.get(1, 0).a == 0 && doc.layer(0).pixels.get(0, 0).a == 255);
+    hist.undo(doc); hist.undo(doc); hist.undo(doc);
+    CHECK(!doc.has_selection() && doc.layer(0).pixels.get(1, 0).r == 100);
+
+    // Brush and fill clip too.
+    Mask sel = mask::rectangle(4, 1, 0, 0, 2, 1, false);
+    Image base(4, 1, {0, 0, 0, 255});
+    raster::Brush b; b.size = 100; b.hardness = 1;
+    raster::Stroke st(base, b, {255, 255, 255, 255}, raster::StrokeMode::Paint, &sel);
+    Image out = base;
+    st.add_point(2, 0);
+    st.render(out);
+    CHECK(out.get(1, 0).r == 255 && out.get(2, 0).r == 0);
+    Image ff(4, 1, {0, 0, 0, 255});
+    raster::flood_fill(ff, 0, 0, {255, 0, 0, 255}, 0, 1.0f, &sel);
+    CHECK(ff.get(1, 0).r == 255 && ff.get(2, 0).r == 0);
+    CHECK(raster::flood_fill(ff, 3, 0, {255, 0, 0, 255}, 0, 1.0f, &sel).empty());  // seed outside selection
+
+    // Paste as new layer goes above the active layer and undoes cleanly.
+    doc.set_active_layer(0);
+    hist.run(doc, std::make_unique<PasteLayerCommand>("Raster 1", Image(4, 1, {9, 9, 9, 255})));
+    CHECK(doc.layer_count() == 2 && doc.layer(1).name == "Raster 1" && doc.active_layer() == 1);
+    hist.undo(doc);
+    CHECK(doc.layer_count() == 1 && doc.active_layer() == 0);
+}
+
 int main() {
+    test_mask_shapes();
+    test_mask_ops();
+    test_selection_clips_commands();
     test_stroke_opacity_does_not_build_up();
     test_stroke_erase();
     test_flood_fill();

@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "firn/image.h"
+#include "firn/mask.h"
 
 namespace firn {
 
@@ -41,6 +42,12 @@ public:
     // Flatten visible layers with normal blending into one image.
     Image composite() const;
 
+    // Selection: an empty mask means none. Commands and tools clip to it.
+    const Mask& selection() const { return selection_; }
+    bool has_selection() const { return !selection_.empty(); }
+    void set_selection(Mask m);
+    uint64_t selection_revision() const { return selection_revision_; }
+
     // Bumped on every mutation; the UI uses it to know when to re-upload.
     uint64_t revision() const { return revision_; }
     void touch() { ++revision_; }
@@ -51,6 +58,8 @@ private:
     std::vector<std::unique_ptr<Layer>> layers_;
     int active_ = -1;
     uint64_t revision_ = 0;
+    Mask selection_;
+    uint64_t selection_revision_ = 0;
 };
 
 }  // namespace firn

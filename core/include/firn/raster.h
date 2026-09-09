@@ -7,6 +7,10 @@
 // Low-level pixel operations shared by tools and commands. Everything here
 // works on a single straight-alpha RGBA8 Image and knows nothing about
 // layers or undo.
+namespace firn {
+class Mask;
+}
+
 namespace firn::raster {
 
 struct Rect {
@@ -30,7 +34,8 @@ enum class StrokeMode { Paint, Erase };
 // mask and the result is base composited with colour*mask*opacity.
 class Stroke {
 public:
-    Stroke(const Image& base, Brush brush, Color color, StrokeMode mode);
+    // `clip` (optional, must outlive the stroke) limits painting to a selection.
+    Stroke(const Image& base, Brush brush, Color color, StrokeMode mode, const Mask* clip = nullptr);
 
     // Add a point (image coordinates, sub-pixel ok). Stamps are placed along
     // the segment from the previous point at the brush spacing.
@@ -49,6 +54,7 @@ private:
     Brush brush_;
     Color color_;
     StrokeMode mode_;
+    const Mask* clip_;
     std::vector<float> mask_;
     Rect pending_;
     bool has_last_ = false;
@@ -59,7 +65,12 @@ private:
 // 4-connected flood fill from (x,y). Pixels whose max channel difference to
 // the seed is <= tolerance are filled with `color` composited at `opacity`.
 // Returns the bounding rect of changed pixels.
-Rect flood_fill(Image& img, int x, int y, Color color, int tolerance, float opacity = 1.0f);
+Rect flood_fill(Image& img, int x, int y, Color color, int tolerance, float opacity = 1.0f,
+                const Mask* clip = nullptr);
+
+// dst = lerp(before, dst, mask/255): keeps `before` where the mask is 0. Used
+// to confine whole-layer commands to the selection.
+void apply_through_mask(Image& dst, const Image& before, const Mask& mask);
 
 // Composite `c` over the pixel at (x,y) with extra coverage in 0..1.
 void blend_over(Image& img, int x, int y, Color c, float coverage);
