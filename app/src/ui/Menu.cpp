@@ -6,6 +6,8 @@
 
 using namespace firn;
 
+bool blend_combo(const char* label, BlendMode& mode);  // Palettes.cpp
+
 // Menu structure follows the original's: File, Edit, View, Image, Effects, Adjust,
 // Layers, Objects, Selections, Window, Help. Most entries are placeholders
 // until the corresponding commands exist.
@@ -85,10 +87,28 @@ void App::draw_menu() {
         ImGui::EndMenu();
     }
     if (ImGui::BeginMenu("Layers")) {
-        if (ImGui::MenuItem("New Raster Layer", nullptr, false, has_doc))
-            run(std::make_unique<AddLayerCommand>("Raster " + std::to_string(doc->layer_count())));
-        if (ImGui::MenuItem("Delete", nullptr, false, has_layer))
-            run(std::make_unique<RemoveLayerCommand>(layer));
+        const int n = has_doc ? static_cast<int>(doc->layer_count()) : 0;
+        const bool is_bg = has_layer && doc->layer(layer).background;
+        if (ImGui::MenuItem("New Raster Layer", nullptr, false, has_doc)) layer_new();
+        if (ImGui::MenuItem("Duplicate", nullptr, false, has_layer)) layer_duplicate();
+        if (ImGui::MenuItem("Delete", nullptr, false, has_layer && n > 1)) layer_delete();
+        if (ImGui::MenuItem("Properties...", nullptr, false, has_layer)) open_layer_properties();
+        ImGui::Separator();
+        if (ImGui::BeginMenu("Arrange", has_layer)) {
+            if (ImGui::MenuItem("Bring to Top", nullptr, false, layer < n - 1)) layer_arrange(n);
+            if (ImGui::MenuItem("Move Up", nullptr, false, layer < n - 1)) layer_arrange(+1);
+            if (ImGui::MenuItem("Move Down", nullptr, false, layer > 0)) layer_arrange(-1);
+            if (ImGui::MenuItem("Send to Bottom", nullptr, false, layer > 0)) layer_arrange(-n);
+            ImGui::EndMenu();
+        }
+        if (ImGui::BeginMenu("Merge", has_layer)) {
+            if (ImGui::MenuItem("Merge Down", nullptr, false, layer > 0)) layer_merge(0);
+            if (ImGui::MenuItem("Merge Visible", nullptr, false, n > 1)) layer_merge(1);
+            if (ImGui::MenuItem("Merge All (Flatten)", nullptr, false, n > 1)) layer_merge(2);
+            ImGui::EndMenu();
+        }
+        ImGui::Separator();
+        if (ImGui::MenuItem("Promote Background Layer", nullptr, false, is_bg)) layer_promote_background();
         ImGui::EndMenu();
     }
     ImGui::EndMainMenuBar();
@@ -105,8 +125,30 @@ void App::draw_dialogs() {
     if (show_bc_dialog) { ImGui::OpenPopup("Brightness/Contrast"); show_bc_dialog = false; }
     static const char* kSelDialogs[] = {nullptr, "Expand Selection", "Contract Selection", "Feather Selection"};
     if (show_sel_dialog) { ImGui::OpenPopup(kSelDialogs[show_sel_dialog]); show_sel_dialog = 0; }
+    if (show_layer_props_dialog) { ImGui::OpenPopup("Layer Properties"); show_layer_props_dialog = false; }
+
+    if (ImGui::BeginPopupModal("Layer Properties", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        if (ImGui::IsKeyPressed(ImGuiKey_Escape, false)) ImGui::CloseCurrentPopup();
+        LayerProps& p = layer_props_edit;
+        char name[256];
+        std::snprintf(name, sizeof(name), "%s", p.name.c_str());
+        if (ImGui::InputText("Name", name, sizeof(name))) p.name = name;
+        ImGui::Checkbox("Layer is visible", &p.visible);
+        float op = p.opacity * 100.0f;
+        if (ImGui::SliderFloat("Opacity", &op, 0.0f, 100.0f, "%.0f%%")) p.opacity = op / 100.0f;
+        ImGui::SetNextItemWidth(160);
+        blend_combo("Blend mode", p.blend);
+        if (ImGui::Button("OK")) {
+            if (doc && active_layer() >= 0) layer_set_props(doc->props(active_layer()), p);
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel")) ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
+    }
 
     if (ImGui::BeginPopupModal("New Image", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        if (ImGui::IsKeyPressed(ImGuiKey_Escape, false)) ImGui::CloseCurrentPopup();
         ImGui::InputInt("Width", &new_w);
         ImGui::InputInt("Height", &new_h);
         if (new_w < 1) new_w = 1;
@@ -117,6 +159,7 @@ void App::draw_dialogs() {
         ImGui::EndPopup();
     }
     if (ImGui::BeginPopupModal("Average", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        if (ImGui::IsKeyPressed(ImGuiKey_Escape, false)) ImGui::CloseCurrentPopup();
         int r = static_cast<int>(blur_radius);
         if (ImGui::SliderInt("Radius", &r, 1, 50)) blur_radius = static_cast<float>(r);
         if (ImGui::Button("OK")) {
@@ -128,6 +171,7 @@ void App::draw_dialogs() {
         ImGui::EndPopup();
     }
     if (ImGui::BeginPopupModal("Gaussian Blur", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        if (ImGui::IsKeyPressed(ImGuiKey_Escape, false)) ImGui::CloseCurrentPopup();
         ImGui::SliderFloat("Radius", &blur_radius, 0.1f, 100.0f, "%.1f", ImGuiSliderFlags_Logarithmic);
         if (ImGui::Button("OK")) {
             if (active_layer() >= 0) run(std::make_unique<GaussianBlurCommand>(active_layer(), blur_radius));
@@ -139,6 +183,7 @@ void App::draw_dialogs() {
         ImGui::EndPopup();
     }
     if (ImGui::BeginPopupModal("Brightness/Contrast", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        if (ImGui::IsKeyPressed(ImGuiKey_Escape, false)) ImGui::CloseCurrentPopup();
         ImGui::SliderInt("Brightness", &bc_brightness, -255, 255);
         ImGui::SliderInt("Contrast", &bc_contrast, -100, 100);
         if (ImGui::Button("OK")) {
@@ -151,6 +196,7 @@ void App::draw_dialogs() {
     }
     for (int which = 1; which <= 3; ++which) {
         if (!ImGui::BeginPopupModal(kSelDialogs[which], nullptr, ImGuiWindowFlags_AlwaysAutoResize)) continue;
+        if (ImGui::IsKeyPressed(ImGuiKey_Escape, false)) ImGui::CloseCurrentPopup();
         ImGui::SliderInt("Pixels", &sel_modify_px, 1, 100);
         if (ImGui::Button("OK")) {
             if (doc && doc->has_selection()) {

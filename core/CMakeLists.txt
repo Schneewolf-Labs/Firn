@@ -4,6 +4,7 @@ add_library(firncore STATIC
   src/commands.cpp
   src/raster.cpp
   src/mask.cpp
+  src/blend.cpp
   src/io.cpp
 )
 target_include_directories(firncore PUBLIC include)

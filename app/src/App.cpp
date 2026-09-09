@@ -213,6 +213,56 @@ void App::paste_as_new_image() {
     status = "Pasted as new image";
 }
 
+// --- Layers --------------------------------------------------------------
+
+void App::layer_new() {
+    if (doc) run(std::make_unique<AddLayerCommand>("Raster " + std::to_string(doc->layer_count())));
+}
+
+void App::layer_duplicate() {
+    if (doc && active_layer() >= 0) run(std::make_unique<DuplicateLayerCommand>(active_layer()));
+}
+
+void App::layer_delete() {
+    if (doc && active_layer() >= 0 && doc->layer_count() > 1) run(std::make_unique<RemoveLayerCommand>(active_layer()));
+}
+
+void App::layer_arrange(int delta) {
+    if (!doc || active_layer() < 0) return;
+    const int n = static_cast<int>(doc->layer_count());
+    const int from = active_layer();
+    const int to = std::clamp(from + delta, 0, n - 1);
+    if (to != from) run(std::make_unique<ArrangeLayerCommand>(from, to));
+}
+
+void App::layer_merge(int kind) {
+    if (!doc) return;
+    using K = MergeLayersCommand::Kind;
+    if (kind == 0) {
+        if (active_layer() > 0) run(std::make_unique<MergeLayersCommand>(K::Down, active_layer()));
+    } else if (kind == 1) {
+        run(std::make_unique<MergeLayersCommand>(K::Visible));
+    } else {
+        run(std::make_unique<MergeLayersCommand>(K::All));
+    }
+}
+
+void App::layer_promote_background() {
+    if (doc && active_layer() >= 0 && doc->layer(active_layer()).background)
+        run(std::make_unique<PromoteBackgroundCommand>(active_layer()));
+}
+
+void App::layer_set_props(const LayerProps& before, const LayerProps& after) {
+    if (doc && active_layer() >= 0 && !(before == after))
+        run(std::make_unique<LayerPropertiesCommand>(active_layer(), before, after));
+}
+
+void App::open_layer_properties() {
+    if (!doc || active_layer() < 0) return;
+    layer_props_edit = doc->props(active_layer());
+    show_layer_props_dialog = true;
+}
+
 // Rebuild the marching-ants edge list when the selection changes. An edge is
 // recorded wherever a selected pixel (>=128) borders an unselected one.
 void App::sync_ants() {

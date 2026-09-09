@@ -168,6 +168,96 @@ void AddLayerCommand::execute(Document& doc) {
 
 void AddLayerCommand::undo(Document& doc) { doc.remove_layer(index_); }
 
+void DuplicateLayerCommand::execute(Document& doc) {
+    auto copy = std::make_unique<Layer>(doc.layer(index_));
+    copy->name = "Copy of " + copy->name;
+    copy->background = false;
+    doc.insert_layer(std::move(copy), index_ + 1);
+}
+
+void DuplicateLayerCommand::undo(Document& doc) {
+    doc.remove_layer(index_ + 1);
+    doc.set_active_layer(static_cast<int>(index_));
+}
+
+void PromoteBackgroundCommand::execute(Document& doc) {
+    Layer& L = doc.layer(index_);
+    old_name_ = L.name;
+    L.background = false;
+    L.name = "Raster 1";
+    doc.touch();
+}
+
+void PromoteBackgroundCommand::undo(Document& doc) {
+    Layer& L = doc.layer(index_);
+    L.background = true;
+    L.name = old_name_;
+    doc.touch();
+}
+
+std::string MergeLayersCommand::name() const {
+    switch (kind_) {
+        case Kind::Down: return "Merge Down";
+        case Kind::Visible: return "Merge Visible";
+        default: return "Merge All (Flatten)";
+    }
+}
+
+void MergeLayersCommand::execute(Document& doc) {
+    before_ = doc.clone_layers();
+    before_active_ = doc.active_layer();
+    std::vector<Layer> out;
+
+    if (kind_ == Kind::Down) {
+        if (index_ == 0 || index_ >= doc.layer_count()) return;
+        // Both layers composited against nothing; the lower keeps its identity.
+        Layer merged = doc.layer(index_ - 1);
+        merged.pixels = doc.composite_range(index_ - 1, index_);
+        merged.opacity = 1.0f;
+        merged.blend = BlendMode::Normal;
+        merged.visible = true;
+        for (size_t i = 0; i < doc.layer_count(); ++i) {
+            if (i == index_) continue;
+            out.push_back(i == index_ - 1 ? merged : doc.layer(i));
+        }
+        doc.replace_layers(out, static_cast<int>(index_ - 1));
+        return;
+    }
+
+    Image flat = doc.composite();
+    if (kind_ == Kind::All) {
+        // A flattened image is a Background layer, which has no transparency.
+        Layer bg;
+        bg.name = "Background";
+        bg.background = true;
+        bg.pixels = Image(doc.width(), doc.height(), {255, 255, 255, 255});
+        for (int y = 0; y < doc.height(); ++y)
+            for (int x = 0; x < doc.width(); ++x) raster::blend_over(bg.pixels, x, y, flat.get(x, y), 1.0f);
+        out.push_back(std::move(bg));
+        doc.replace_layers(out, 0);
+        return;
+    }
+
+    // Visible: the merged layer takes the place of the lowest visible layer.
+    int first_visible = -1;
+    for (size_t i = 0; i < doc.layer_count(); ++i) {
+        const Layer& L = doc.layer(i);
+        if (L.visible) {
+            if (first_visible < 0) {
+                first_visible = static_cast<int>(out.size());
+                Layer merged;
+                merged.name = "Merged";
+                merged.pixels = flat;
+                out.push_back(std::move(merged));
+            }
+        } else {
+            out.push_back(L);
+        }
+    }
+    if (first_visible < 0) return;  // nothing visible, nothing to do
+    doc.replace_layers(out, first_visible);
+}
+
 void RemoveLayerCommand::execute(Document& doc) { removed_ = doc.remove_layer(index_); }
 
 void RemoveLayerCommand::undo(Document& doc) { doc.insert_layer(std::move(removed_), index_); }

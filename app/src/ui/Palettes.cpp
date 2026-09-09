@@ -1,4 +1,5 @@
 #include <cstdio>
+#include <cstring>
 #include <memory>
 
 #include "App.h"
@@ -49,14 +50,58 @@ static void draw_materials(App& app) {
     ImGui::End();
 }
 
+// Blend mode combo over the BlendMode enum; returns true when changed.
+bool blend_combo(const char* label, BlendMode& mode) {
+    bool changed = false;
+    if (ImGui::BeginCombo(label, blend_mode_name(mode))) {
+        for (int i = 0; i < static_cast<int>(BlendMode::Count); ++i) {
+            const auto m = static_cast<BlendMode>(i);
+            if (ImGui::Selectable(blend_mode_name(m), m == mode)) { mode = m; changed = true; }
+        }
+        ImGui::EndCombo();
+    }
+    return changed;
+}
+
 static void draw_layers(App& app) {
     ImGui::Begin("Layers");
     if (!app.doc) { ImGui::TextDisabled("No image"); ImGui::End(); return; }
     Document& doc = *app.doc;
+    const int active = app.active_layer();
 
-    if (ImGui::SmallButton("+")) app.run(std::make_unique<AddLayerCommand>("Raster " + std::to_string(doc.layer_count())));
+    if (ImGui::SmallButton("New")) app.layer_new();
     ImGui::SameLine();
-    if (ImGui::SmallButton("-") && app.active_layer() >= 0) app.run(std::make_unique<RemoveLayerCommand>(app.active_layer()));
+    if (ImGui::SmallButton("Dup")) app.layer_duplicate();
+    ImGui::SameLine();
+    if (ImGui::SmallButton("Del")) app.layer_delete();
+    ImGui::SameLine();
+    if (ImGui::SmallButton("Up")) app.layer_arrange(+1);
+    ImGui::SameLine();
+    if (ImGui::SmallButton("Down")) app.layer_arrange(-1);
+    ImGui::SameLine();
+    if (ImGui::SmallButton("Merge Down")) app.layer_merge(0);
+
+    // Active layer controls: blend mode and opacity. The slider previews
+    // live and commits one Layer Properties entry when released.
+    if (active >= 0) {
+        Layer& L = doc.layer(active);
+        ImGui::SetNextItemWidth(130);
+        BlendMode m = L.blend;
+        if (blend_combo("##blend", m)) {
+            LayerProps after = doc.props(active);
+            after.blend = m;
+            app.layer_set_props(doc.props(active), after);
+        }
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(-1);
+        float op = L.opacity * 100.0f;
+        if (ImGui::SliderFloat("##opacity", &op, 0.0f, 100.0f, "Opacity %.0f%%")) {
+            L.opacity = op / 100.0f;
+            doc.touch();
+        }
+        if (ImGui::IsItemActivated()) app.layer_props_before = doc.props(active);
+        if (ImGui::IsItemDeactivatedAfterEdit()) app.layer_set_props(app.layer_props_before, doc.props(active));
+    }
     ImGui::Separator();
 
     // Top of stack first, like every layer palette ever.
@@ -64,20 +109,23 @@ static void draw_layers(App& app) {
         Layer& L = doc.layer(i);
         ImGui::PushID(i);
         bool vis = L.visible;
-        if (ImGui::Checkbox("##vis", &vis)) { L.visible = vis; doc.touch(); }
-        ImGui::SameLine();
-        if (ImGui::Selectable(L.name.c_str(), app.active_layer() == i)) doc.set_active_layer(i);
-        if (L.background) { ImGui::SameLine(); ImGui::TextDisabled("(background)"); }
-        if (app.active_layer() == i) {
-            ImGui::Indent();
-            ImGui::SetNextItemWidth(-1);
-            float op = L.opacity * 100.0f;
-            if (ImGui::SliderFloat("##opacity", &op, 0.0f, 100.0f, "Opacity %.0f%%")) {
-                L.opacity = op / 100.0f;
-                doc.touch();
-            }
-            ImGui::Unindent();
+        if (ImGui::Checkbox("##vis", &vis)) {
+            LayerProps before = doc.props(i), after = before;
+            after.visible = vis;
+            doc.set_active_layer(i);
+            app.layer_set_props(before, after);
         }
+        ImGui::SameLine();
+        char label[160];
+        std::snprintf(label, sizeof(label), "%s%s%s", L.name.c_str(),
+                      L.blend != BlendMode::Normal ? "  [" : "", L.blend != BlendMode::Normal ? blend_mode_name(L.blend) : "");
+        if (L.blend != BlendMode::Normal) std::strcat(label, "]");
+        if (ImGui::Selectable(label, active == i, ImGuiSelectableFlags_AllowDoubleClick)) {
+            doc.set_active_layer(i);
+            if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) app.open_layer_properties();
+        }
+        if (L.background) { ImGui::SameLine(); ImGui::TextDisabled("(background)"); }
+        else if (L.opacity < 1.0f) { ImGui::SameLine(); ImGui::TextDisabled("%.0f%%", L.opacity * 100.0f); }
         ImGui::PopID();
     }
     ImGui::End();

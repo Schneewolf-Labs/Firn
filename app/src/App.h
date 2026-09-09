@@ -67,6 +67,9 @@ struct App {
     bool blur_gaussian = false;         // which blur the pending dialog is for
     bool show_bc_dialog = false;
     int show_sel_dialog = 0;            // 1 expand, 2 contract, 3 feather
+    bool show_layer_props_dialog = false;
+    firn::LayerProps layer_props_edit;  // dialog working copy
+    firn::LayerProps layer_props_before; // props at the start of a live slider drag
     bool show_imgui_demo = false;
     int new_w = 800, new_h = 600;
     float blur_radius = 3.0f;
@@ -103,6 +106,16 @@ struct App {
     void paste_as_new_layer();
     void paste_as_new_image();
     void sync_ants();
+
+    // Layers
+    void layer_new();
+    void layer_duplicate();
+    void layer_delete();
+    void layer_arrange(int delta);  // +1 up (towards top), -1 down; large values go to top/bottom
+    void layer_merge(int kind);     // 0 down, 1 visible, 2 all
+    void layer_promote_background();
+    void layer_set_props(const firn::LayerProps& before, const firn::LayerProps& after);
+    void open_layer_properties();
 
     // Per-frame UI (ui/*.cpp)
     void draw_menu();

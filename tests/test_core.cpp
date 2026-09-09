@@ -2,6 +2,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <memory>
+#include <string>
 
 #include "firn/commands.h"
 #include "firn/document.h"
@@ -286,7 +287,108 @@ static void test_save_formats() {
     CHECK(!io::save(img, "t.xyz", &err) && !err.empty());
 }
 
+static void test_blend_modes() {
+    auto px = [](BlendMode m, Color bottom, Color top, float op = 1.0f) {
+        Document doc(1, 1);
+        doc.add_layer("b").pixels.fill(bottom);
+        Layer& t = doc.add_layer("t");
+        t.pixels.fill(top);
+        t.blend = m;
+        t.opacity = op;
+        return doc.composite().get(0, 0);
+    };
+    CHECK(px(BlendMode::Multiply, {128, 128, 128, 255}, {128, 128, 128, 255}).r == 64);
+    CHECK(px(BlendMode::Screen, {128, 128, 128, 255}, {128, 128, 128, 255}).r == 192);
+    CHECK(px(BlendMode::Darken, {50, 200, 0, 255}, {100, 100, 100, 255}).g == 100);
+    CHECK(px(BlendMode::Lighten, {50, 200, 0, 255}, {100, 100, 100, 255}).r == 100);
+    CHECK(px(BlendMode::Difference, {200, 0, 0, 255}, {50, 0, 0, 255}).r == 150);
+    CHECK(px(BlendMode::Exclusion, {255, 0, 0, 255}, {255, 0, 0, 255}).r == 0);
+    CHECK(px(BlendMode::Overlay, {0, 0, 0, 255}, {255, 255, 255, 255}).r == 0);
+    CHECK(px(BlendMode::HardLight, {0, 0, 0, 255}, {255, 255, 255, 255}).r == 255);
+    CHECK(px(BlendMode::Dodge, {128, 128, 128, 255}, {255, 255, 255, 255}).r == 255);
+    CHECK(px(BlendMode::Burn, {128, 128, 128, 255}, {0, 0, 0, 255}).r == 0);
+    // Luminance keeps the bottom's hue: a grey top over pure red gives a red-ish result.
+    Color l = px(BlendMode::Luminance, {255, 0, 0, 255}, {128, 128, 128, 255});
+    CHECK(l.r > l.g && l.g == l.b);
+    // Hue of a grey source is undefined (zero saturation) -> result is grey.
+    Color h = px(BlendMode::Hue, {255, 0, 0, 255}, {128, 128, 128, 255});
+    CHECK(h.r == h.g && h.g == h.b);
+    // Color: takes the top's hue/sat with the bottom's luminance.
+    Color c = px(BlendMode::Color, {128, 128, 128, 255}, {255, 0, 0, 255});
+    CHECK(c.r > c.g && c.g == c.b);
+    // Opacity and transparent destination.
+    CHECK(px(BlendMode::Multiply, {0, 0, 0, 0}, {100, 100, 100, 255}).r == 100);  // over nothing = source
+    Color half = px(BlendMode::Normal, {0, 0, 0, 255}, {255, 255, 255, 255}, 0.5f);
+    CHECK(half.r >= 127 && half.r <= 128);
+    // Dissolve at 50%: about half the pixels of a 64x64 layer show through.
+    Document doc(64, 64);
+    doc.add_layer("b").pixels.fill({0, 0, 0, 255});
+    Layer& t = doc.add_layer("t");
+    t.pixels.fill({255, 255, 255, 128});
+    t.blend = BlendMode::Dissolve;
+    Image out = doc.composite();
+    int white = 0;
+    for (int y = 0; y < 64; ++y) for (int x = 0; x < 64; ++x) white += out.get(x, y).r == 255;
+    CHECK(white > 1600 && white < 2500);
+    CHECK(std::string(blend_mode_name(BlendMode::SoftLight)) == "Soft Light");
+}
+
+static void test_layer_structure_commands() {
+    Document doc(2, 1);
+    Layer& bg = doc.add_layer("Background");
+    bg.background = true;
+    bg.pixels.fill({255, 255, 255, 255});
+    Layer& r1 = doc.add_layer("Raster 1");
+    r1.pixels.set(0, 0, {0, 0, 0, 255});
+    Layer& r2 = doc.add_layer("Raster 2");
+    r2.pixels.set(1, 0, {255, 0, 0, 128});
+    r2.visible = false;
+    CommandStack hist;
+
+    hist.run(doc, std::make_unique<LayerPropertiesCommand>(1, doc.props(1), LayerProps{"Renamed", true, 0.5f, BlendMode::Multiply}));
+    CHECK(doc.layer(1).name == "Renamed" && doc.layer(1).opacity == 0.5f && doc.layer(1).blend == BlendMode::Multiply);
+    hist.undo(doc);
+    CHECK(doc.layer(1).name == "Raster 1" && doc.layer(1).opacity == 1.0f);
+
+    hist.run(doc, std::make_unique<DuplicateLayerCommand>(1));
+    CHECK(doc.layer_count() == 4 && doc.layer(2).name == "Copy of Raster 1" && doc.active_layer() == 2);
+    CHECK(doc.layer(2).pixels.get(0, 0).r == 0);
+    hist.undo(doc);
+    CHECK(doc.layer_count() == 3 && doc.active_layer() == 1);
+
+    hist.run(doc, std::make_unique<ArrangeLayerCommand>(1, 2));
+    CHECK(doc.layer(2).name == "Raster 1" && doc.layer(1).name == "Raster 2");
+    hist.undo(doc);
+    CHECK(doc.layer(1).name == "Raster 1");
+
+    hist.run(doc, std::make_unique<MergeLayersCommand>(MergeLayersCommand::Kind::Down, 1));
+    CHECK(doc.layer_count() == 2 && doc.layer(0).name == "Background" && doc.layer(0).background);
+    CHECK(doc.layer(0).pixels.get(0, 0).r == 0 && doc.layer(0).pixels.get(1, 0).r == 255);
+    hist.undo(doc);
+    CHECK(doc.layer_count() == 3 && doc.layer(0).pixels.get(0, 0).r == 255);
+
+    hist.run(doc, std::make_unique<MergeLayersCommand>(MergeLayersCommand::Kind::Visible));
+    CHECK(doc.layer_count() == 2 && doc.layer(0).name == "Merged" && doc.layer(1).name == "Raster 2" && !doc.layer(1).visible);
+    hist.undo(doc);
+    CHECK(doc.layer_count() == 3);
+
+    doc.layer(2).visible = true;
+    hist.run(doc, std::make_unique<MergeLayersCommand>(MergeLayersCommand::Kind::All));
+    CHECK(doc.layer_count() == 1 && doc.layer(0).background);
+    Color p = doc.layer(0).pixels.get(1, 0);  // half-red over white, opaque
+    CHECK(p.a == 255 && p.r == 255 && p.g >= 127 && p.g <= 128);
+    hist.undo(doc);
+    CHECK(doc.layer_count() == 3);
+
+    hist.run(doc, std::make_unique<PromoteBackgroundCommand>(0));
+    CHECK(!doc.layer(0).background && doc.layer(0).name == "Raster 1");
+    hist.undo(doc);
+    CHECK(doc.layer(0).background && doc.layer(0).name == "Background");
+}
+
 int main() {
+    test_blend_modes();
+    test_layer_structure_commands();
     test_save_formats();
     test_mask_shapes();
     test_mask_ops();

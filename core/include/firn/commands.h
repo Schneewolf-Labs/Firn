@@ -190,6 +190,66 @@ private:
     size_t index_ = 0;
 };
 
+class LayerPropertiesCommand : public Command {
+public:
+    // `before` is explicit because palettes preview the change live before committing.
+    LayerPropertiesCommand(size_t index, LayerProps before, LayerProps after)
+        : index_(index), before_(std::move(before)), after_(std::move(after)) {}
+    std::string name() const override { return "Layer Properties"; }
+    void execute(Document& doc) override { doc.set_props(index_, after_); }
+    void undo(Document& doc) override { doc.set_props(index_, before_); }
+private:
+    size_t index_;
+    LayerProps before_, after_;
+};
+
+class DuplicateLayerCommand : public Command {
+public:
+    explicit DuplicateLayerCommand(size_t index) : index_(index) {}
+    std::string name() const override { return "Duplicate Layer"; }
+    void execute(Document& doc) override;
+    void undo(Document& doc) override;
+private:
+    size_t index_;
+};
+
+class ArrangeLayerCommand : public Command {
+public:
+    ArrangeLayerCommand(size_t from, size_t to) : from_(from), to_(to) {}
+    std::string name() const override { return "Arrange Layer"; }
+    void execute(Document& doc) override { doc.move_layer(from_, to_); }
+    void undo(Document& doc) override { doc.move_layer(to_, from_); }
+private:
+    size_t from_, to_;
+};
+
+class PromoteBackgroundCommand : public Command {
+public:
+    explicit PromoteBackgroundCommand(size_t index) : index_(index) {}
+    std::string name() const override { return "Promote Background Layer"; }
+    void execute(Document& doc) override;
+    void undo(Document& doc) override;
+private:
+    size_t index_;
+    std::string old_name_;
+};
+
+// Merge Down / Merge Visible / Merge All (Flatten). Snapshots the whole
+// stack for undo; merges are rare enough that the memory is acceptable.
+class MergeLayersCommand : public Command {
+public:
+    enum class Kind { Down, Visible, All };
+    MergeLayersCommand(Kind kind, size_t index = 0) : kind_(kind), index_(index) {}
+    std::string name() const override;
+    void execute(Document& doc) override;
+    void undo(Document& doc) override { doc.replace_layers(before_, before_active_); }
+private:
+    Kind kind_;
+    size_t index_;
+    std::vector<Layer> before_;
+    int before_active_ = -1;
+};
+
 class RemoveLayerCommand : public Command {
 public:
     explicit RemoveLayerCommand(size_t index) : index_(index) {}

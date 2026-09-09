@@ -3,6 +3,7 @@
 #include <string>
 #include <vector>
 
+#include "firn/blend.h"
 #include "firn/image.h"
 #include "firn/mask.h"
 
@@ -15,7 +16,17 @@ struct Layer {
     // background colour on it instead of clearing alpha.
     bool background = false;
     float opacity = 1.0f;  // 0..1
+    BlendMode blend = BlendMode::Normal;
     Image pixels;
+};
+
+// The undoable subset of Layer, for LayerPropertiesCommand.
+struct LayerProps {
+    std::string name;
+    bool visible = true;
+    float opacity = 1.0f;
+    BlendMode blend = BlendMode::Normal;
+    bool operator==(const LayerProps&) const = default;
 };
 
 // The single source of truth. The UI and scripts both read this and
@@ -38,9 +49,19 @@ public:
     Layer& add_layer(std::string name, int at = -1);
     std::unique_ptr<Layer> remove_layer(size_t i);
     void insert_layer(std::unique_ptr<Layer> layer, size_t at);
+    void move_layer(size_t from, size_t to);
 
-    // Flatten visible layers with normal blending into one image.
+    // Whole-stack snapshot/restore, for commands that restructure many layers.
+    std::vector<Layer> clone_layers() const;
+    void replace_layers(const std::vector<Layer>& layers, int active);
+
+    // Flatten visible layers with their blend modes into one image.
     Image composite() const;
+    // Flatten layers [from, to] (inclusive, bottom to top) honouring visibility.
+    Image composite_range(size_t from, size_t to) const;
+
+    LayerProps props(size_t i) const;
+    void set_props(size_t i, const LayerProps& p);
 
     // Selection: an empty mask means none. Commands and tools clip to it.
     const Mask& selection() const { return selection_; }
