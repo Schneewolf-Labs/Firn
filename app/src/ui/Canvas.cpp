@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 
 #include "App.h"
 #include "imgui.h"
@@ -12,9 +13,36 @@ void App::draw_canvas() {
     ImGui::Begin("Image", nullptr, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
     ImGui::PopStyleVar();
 
-    const ImVec2 view_pos = ImGui::GetCursorScreenPos();
-    const ImVec2 view_size = ImGui::GetContentRegionAvail();
+    // One tab per open document. Selecting a tab activates that document;
+    // the close button asks about unsaved changes.
+    if (!docs.empty() && ImGui::BeginTabBar("##docs", ImGuiTabBarFlags_AutoSelectNewTabs | ImGuiTabBarFlags_FittingPolicyScroll)) {
+        int close_request = -1, select_request = -1;
+        for (int i = 0; i < static_cast<int>(docs.size()); ++i) {
+            char label[300];
+            std::snprintf(label, sizeof(label), "%s%s###doc%d", document_title(i).c_str(), document_modified(i) ? "*" : "", i);
+            bool open = true;
+            const ImGuiTabItemFlags flags = select_tab_request == i ? ImGuiTabItemFlags_SetSelected : 0;
+            if (ImGui::BeginTabItem(label, &open, flags)) {
+                if (i != current_doc && select_tab_request < 0) select_request = i;
+                ImGui::EndTabItem();
+            }
+            if (!open) close_request = i;
+        }
+        select_tab_request = -1;
+        ImGui::EndTabBar();
+        if (select_request >= 0) activate_document(select_request);
+        if (close_request >= 0) close_document(close_request);
+    }
+
+    ImVec2 view_pos = ImGui::GetCursorScreenPos();
+    ImVec2 view_size = ImGui::GetContentRegionAvail();
     ImDrawList* dl = ImGui::GetWindowDrawList();
+
+    // Rulers take a strip along the top and left; the canvas view shrinks.
+    const float ruler = show_rulers && doc ? 18.0f : 0.0f;
+    const ImVec2 ruler_origin = view_pos;
+    view_pos.x += ruler; view_pos.y += ruler;
+    view_size.x -= ruler; view_size.y -= ruler;
 
     if (!doc || !canvas_tex || view_size.x <= 0 || view_size.y <= 0) {
         dl->AddRectFilled(view_pos, ImVec2(view_pos.x + view_size.x, view_pos.y + view_size.y), IM_COL32(60, 60, 60, 255));
@@ -108,6 +136,19 @@ void App::draw_canvas() {
 
     dl->AddImage((ImTextureID)(intptr_t)canvas_tex, p0, p1);
     dl->AddRect(ImVec2(p0.x - 1, p0.y - 1), ImVec2(p1.x + 1, p1.y + 1), IM_COL32(0, 0, 0, 255));
+
+    // Grid: image-space lines every grid_spacing pixels, once they are far enough apart.
+    if (show_grid && grid_spacing > 0 && grid_spacing * zoom >= 4.0f) {
+        const ImU32 gc = IM_COL32(0, 0, 0, 90);
+        for (int gx = 0; gx <= doc->width(); gx += grid_spacing) {
+            const float sx = p0.x + gx * zoom;
+            if (sx >= view_pos.x && sx <= view_pos.x + view_size.x) dl->AddLine(ImVec2(sx, std::max(p0.y, view_pos.y)), ImVec2(sx, std::min(p1.y, view_pos.y + view_size.y)), gc);
+        }
+        for (int gy = 0; gy <= doc->height(); gy += grid_spacing) {
+            const float sy = p0.y + gy * zoom;
+            if (sy >= view_pos.y && sy <= view_pos.y + view_size.y) dl->AddLine(ImVec2(std::max(p0.x, view_pos.x), sy), ImVec2(std::min(p1.x, view_pos.x + view_size.x), sy), gc);
+        }
+    }
     if (hovered || active_button >= 0) tool().draw_overlay(*this, in);
 
     // Marching ants along the selection boundary. Each unit edge is one
@@ -125,6 +166,43 @@ void App::draw_canvas() {
         }
     }
     dl->PopClipRect();
+
+    // Rulers, drawn last so they sit over the canvas edge.
+    if (ruler > 0.0f) {
+        const ImU32 bg = IM_COL32(40, 40, 40, 255), fg = IM_COL32(200, 200, 200, 255);
+        const ImVec2 r0 = ruler_origin;
+        dl->AddRectFilled(r0, ImVec2(r0.x + view_size.x + ruler, r0.y + ruler), bg);
+        dl->AddRectFilled(r0, ImVec2(r0.x + ruler, r0.y + view_size.y + ruler), bg);
+        // Pick a tick step in image pixels giving >= 60 screen px between labels.
+        int step = 1;
+        static const int steps[] = {1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000};
+        for (int st : steps) { step = st; if (st * zoom >= 60.0f) break; }
+        const int minor = std::max(1, step / 5);
+        auto label = [&](int v, ImVec2 at) { char b[16]; std::snprintf(b, sizeof(b), "%d", v); dl->AddText(at, fg, b); };
+        const int first_x = static_cast<int>(std::floor((view_pos.x - p0.x) / zoom / minor)) * minor;
+        const int last_x = static_cast<int>(std::ceil((view_pos.x + view_size.x - p0.x) / zoom));
+        for (int v = first_x; v <= last_x; v += minor) {
+            const float sx = p0.x + v * zoom;
+            if (sx < view_pos.x) continue;
+            const bool major = v % step == 0;
+            dl->AddLine(ImVec2(sx, r0.y + (major ? 4.0f : 12.0f)), ImVec2(sx, r0.y + ruler), fg);
+            if (major) label(v, ImVec2(sx + 2, r0.y + 1));
+        }
+        const int first_y = static_cast<int>(std::floor((view_pos.y - p0.y) / zoom / minor)) * minor;
+        const int last_y = static_cast<int>(std::ceil((view_pos.y + view_size.y - p0.y) / zoom));
+        for (int v = first_y; v <= last_y; v += minor) {
+            const float sy = p0.y + v * zoom;
+            if (sy < view_pos.y) continue;
+            const bool major = v % step == 0;
+            dl->AddLine(ImVec2(r0.x + (major ? 4.0f : 12.0f), sy), ImVec2(r0.x + ruler, sy), fg);
+            if (major) label(v, ImVec2(r0.x + 1, sy + 1));
+        }
+        // Cursor position markers.
+        if (hovered) {
+            dl->AddLine(ImVec2(io.MousePos.x, r0.y), ImVec2(io.MousePos.x, r0.y + ruler), IM_COL32(255, 120, 0, 255));
+            dl->AddLine(ImVec2(r0.x, io.MousePos.y), ImVec2(r0.x + ruler, io.MousePos.y), IM_COL32(255, 120, 0, 255));
+        }
+    }
 
     // Status line at the bottom of the canvas window.
     if (hovered) {

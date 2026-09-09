@@ -3,6 +3,7 @@
 
 #include "App.h"
 #include "firn/adjust.h"
+#include "firn/io_psp.h"
 #include "firn/effects.h"
 #include "firn/mask.h"
 #include "imgui.h"
@@ -24,11 +25,20 @@ void App::draw_menu() {
     if (ImGui::BeginMenu("File")) {
         if (ImGui::MenuItem("New...", "Ctrl+N")) show_new_dialog = true;
         if (ImGui::MenuItem("Open...", "Ctrl+O")) request_open();
+        if (ImGui::BeginMenu("Recent Files", !config.recent_files.empty())) {
+            for (size_t i = 0; i < config.recent_files.size(); ++i) {
+                const std::string& r = config.recent_files[i];
+                if (ImGui::MenuItem(r.c_str())) { open_document(r); break; }
+            }
+            ImGui::EndMenu();
+        }
+        if (ImGui::MenuItem("Close", "Ctrl+W", false, has_doc)) close_document(current_doc);
+        if (ImGui::MenuItem("Close All", nullptr, false, has_doc)) { for (int i = static_cast<int>(docs.size()) - 1; i >= 0; --i) if (!document_modified(i)) close_document(i); if (!docs.empty()) close_document(0); }
         ImGui::Separator();
         if (ImGui::MenuItem("Save", "Ctrl+S", false, has_doc)) save();
         if (ImGui::MenuItem("Save As...", "Ctrl+Shift+S", false, has_doc)) request_save_as();
         ImGui::Separator();
-        if (ImGui::MenuItem("Exit")) quit = true;
+        if (ImGui::MenuItem("Exit")) request_quit();
         ImGui::EndMenu();
     }
     if (ImGui::BeginMenu("Edit")) {
@@ -45,6 +55,12 @@ void App::draw_menu() {
     if (ImGui::BeginMenu("View")) {
         if (ImGui::MenuItem("Fit to Window", nullptr, false, has_doc)) fit_requested = true;
         if (ImGui::MenuItem("Actual Size", nullptr, false, has_doc)) { zoom = 1.0f; pan_x = pan_y = 0.0f; }
+        ImGui::Separator();
+        ImGui::MenuItem("Rulers", nullptr, &show_rulers);
+        ImGui::MenuItem("Grid", nullptr, &show_grid);
+        ImGui::SetNextItemWidth(100);
+        ImGui::InputInt("Grid spacing", &grid_spacing);
+        grid_spacing = std::clamp(grid_spacing, 1, 1000);
         ImGui::Separator();
         ImGui::MenuItem("ImGui Demo", nullptr, &show_imgui_demo);
         ImGui::EndMenu();
@@ -182,6 +198,14 @@ void App::draw_menu() {
         if (ImGui::MenuItem("Promote Background Layer", nullptr, false, is_bg)) layer_promote_background();
         ImGui::EndMenu();
     }
+    if (ImGui::BeginMenu("Window")) {
+        for (int i = 0; i < static_cast<int>(docs.size()); ++i) {
+            const std::string label = document_title(i) + (document_modified(i) ? "*" : "");
+            if (ImGui::MenuItem(label.c_str(), nullptr, i == current_doc)) activate_document(i);
+        }
+        if (docs.empty()) ImGui::MenuItem("(no images open)", nullptr, false, false);
+        ImGui::EndMenu();
+    }
     ImGui::EndMainMenuBar();
 }
 
@@ -196,6 +220,37 @@ void App::draw_dialogs() {
     }
 
     if (show_new_dialog) { ImGui::OpenPopup("New Image"); show_new_dialog = false; }
+    if (pending_close >= 0 && !ImGui::IsPopupOpen("Unsaved Changes")) ImGui::OpenPopup("Unsaved Changes");
+
+    if (ImGui::BeginPopupModal("Unsaved Changes", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        const int idx = pending_close;
+        if (idx < 0 || idx >= static_cast<int>(docs.size())) { pending_close = -1; ImGui::CloseCurrentPopup(); }
+        else {
+            ImGui::Text("Save changes to \"%s\" before closing?", document_title(idx).c_str());
+            if (ImGui::Button("Save", ImVec2(90, 0))) {
+                activate_document(idx);
+                pending_close = -1;
+                ImGui::CloseCurrentPopup();
+                // Saving may need a dialog; close afterwards only if it succeeded in place.
+                if (!doc_path.empty() && io::is_psp_extension(doc_path) ? save_document(doc_path) : false) close_document(idx, true);
+                else { request_save_as(); pending_quit = false; }
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Don't Save", ImVec2(90, 0))) {
+                pending_close = -1;
+                ImGui::CloseCurrentPopup();
+                close_document(idx, true);
+                if (pending_quit) request_quit();
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Cancel", ImVec2(90, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape, false)) {
+                pending_close = -1;
+                pending_quit = false;
+                ImGui::CloseCurrentPopup();
+            }
+        }
+        ImGui::EndPopup();
+    }
     static const char* kSelDialogs[] = {nullptr, "Expand Selection", "Contract Selection", "Feather Selection"};
     if (show_sel_dialog) { ImGui::OpenPopup(kSelDialogs[show_sel_dialog]); show_sel_dialog = 0; }
     if (show_layer_props_dialog) { ImGui::OpenPopup("Layer Properties"); show_layer_props_dialog = false; }
@@ -204,6 +259,8 @@ void App::draw_dialogs() {
     if (show_rotate_dialog) { ImGui::OpenPopup("Free Rotate"); show_rotate_dialog = false; }
 
     auto escape = [] { if (ImGui::IsKeyPressed(ImGuiKey_Escape, false)) ImGui::CloseCurrentPopup(); };
+    // Enter accepts unless a multi-line field has the keyboard.
+    auto enter = [] { return ImGui::IsKeyPressed(ImGuiKey_Enter, false) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter, false); };
 
     if (ImGui::BeginPopupModal("New Image", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
         escape();
@@ -211,7 +268,7 @@ void App::draw_dialogs() {
         ImGui::InputInt("Height", &new_h);
         if (new_w < 1) new_w = 1;
         if (new_h < 1) new_h = 1;
-        if (ImGui::Button("OK")) { new_document(new_w, new_h); ImGui::CloseCurrentPopup(); }
+        if (ImGui::Button("OK") || enter()) { new_document(new_w, new_h); ImGui::CloseCurrentPopup(); }
         ImGui::SameLine();
         if (ImGui::Button("Cancel")) ImGui::CloseCurrentPopup();
         ImGui::EndPopup();
@@ -221,7 +278,7 @@ void App::draw_dialogs() {
         if (!ImGui::BeginPopupModal(kSelDialogs[which], nullptr, ImGuiWindowFlags_AlwaysAutoResize)) continue;
         escape();
         ImGui::SliderInt("Pixels", &sel_modify_px, 1, 100);
-        if (ImGui::Button("OK")) {
+        if (ImGui::Button("OK") || enter()) {
             if (doc && doc->has_selection()) {
                 Mask m = doc->selection();
                 if (which == 1) mask::expand(m, sel_modify_px);
@@ -247,7 +304,7 @@ void App::draw_dialogs() {
         if (ImGui::SliderFloat("Opacity", &op, 0.0f, 100.0f, "%.0f%%")) p.opacity = op / 100.0f;
         ImGui::SetNextItemWidth(160);
         blend_combo("Blend mode", p.blend);
-        if (ImGui::Button("OK")) {
+        if (ImGui::Button("OK") || enter()) {
             if (doc && active_layer() >= 0) layer_set_props(doc->props(active_layer()), p);
             ImGui::CloseCurrentPopup();
         }
@@ -285,7 +342,7 @@ void App::draw_dialogs() {
         ImGui::SetNextItemWidth(160);
         ImGui::Combo("Resample", &resize_filter, "Pixel resize\0Bilinear\0Bicubic\0");
         ImGui::Text("%d x %d  ->  %d x %d", doc ? doc->width() : 0, doc ? doc->height() : 0, resize_w, resize_h);
-        if (ImGui::Button("OK")) {
+        if (ImGui::Button("OK") || enter()) {
             if (doc && (resize_w != doc->width() || resize_h != doc->height())) {
                 tool().cancel(*this);
                 run(std::make_unique<ResizeCommand>(resize_w, resize_h, static_cast<raster::Filter>(resize_filter)));
@@ -315,7 +372,7 @@ void App::draw_dialogs() {
             ImGui::PopID();
         }
         ImGui::TextDisabled("Background layers are padded with the background colour.");
-        if (ImGui::Button("OK")) {
+        if (ImGui::Button("OK") || enter()) {
             if (doc && (canvas_w != doc->width() || canvas_h != doc->height())) {
                 const int dx = canvas_w - doc->width(), dy = canvas_h - doc->height();
                 const int ox = (canvas_anchor % 3) * dx / 2, oy = (canvas_anchor / 3) * dy / 2;
@@ -338,7 +395,7 @@ void App::draw_dialogs() {
         ImGui::SetNextItemWidth(160);
         ImGui::SliderFloat("Degrees", &rotate_degrees, 0.0f, 359.99f, "%.2f");
         ImGui::TextDisabled("Uncovered corners take the background colour on Background layers.");
-        if (ImGui::Button("OK")) { rotate(rotate_cw ? rotate_degrees : -rotate_degrees); ImGui::CloseCurrentPopup(); }
+        if (ImGui::Button("OK") || enter()) { rotate(rotate_cw ? rotate_degrees : -rotate_degrees); ImGui::CloseCurrentPopup(); }
         ImGui::SameLine();
         if (ImGui::Button("Cancel")) ImGui::CloseCurrentPopup();
         ImGui::EndPopup();

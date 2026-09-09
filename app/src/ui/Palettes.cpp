@@ -117,9 +117,8 @@ static void draw_layers(App& app) {
         }
         ImGui::SameLine();
         char label[160];
-        std::snprintf(label, sizeof(label), "%s%s%s", L.name.c_str(),
-                      L.blend != BlendMode::Normal ? "  [" : "", L.blend != BlendMode::Normal ? blend_mode_name(L.blend) : "");
-        if (L.blend != BlendMode::Normal) std::strcat(label, "]");
+        if (L.blend != BlendMode::Normal) std::snprintf(label, sizeof(label), "%s  [%s]", L.name.c_str(), blend_mode_name(L.blend));
+        else std::snprintf(label, sizeof(label), "%s", L.name.c_str());
         if (ImGui::Selectable(label, active == i, ImGuiSelectableFlags_AllowDoubleClick)) {
             doc.set_active_layer(i);
             if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) app.open_layer_properties();

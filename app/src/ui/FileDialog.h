@@ -15,6 +15,8 @@ public:
     void open(Mode mode, std::string title, std::vector<std::string> extensions, const std::string& initial_path);
     bool draw();
     const std::string& path() const { return result_; }
+    std::string directory() const { return dir_.string(); }
+    void set_directory(const std::string& dir);
 
 private:
     struct Entry {

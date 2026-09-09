@@ -25,4 +25,8 @@ target_include_directories(imgui PUBLIC
 )
 target_link_libraries(imgui PUBLIC SDL2::SDL2 OpenGL::GL)
 # Silence third-party warnings.
-target_compile_options(imgui PRIVATE -w)
+if(MSVC)
+  target_compile_options(imgui PRIVATE /w)
+else()
+  target_compile_options(imgui PRIVATE -w)
+endif()

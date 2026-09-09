@@ -13,19 +13,53 @@
 #include "firn/document.h"
 #include "firn/raster.h"
 #include "firn/text.h"
+#include "Config.h"
 #include "tools/Tool.h"
 #include "ui/FileDialog.h"
 
 // Application state shared by all UI panels. The UI is immediate-mode: every
 // frame it reads this and the Document and emits Commands. Nothing in the UI
 // owns pixels.
-struct App {
-    App();
-
-    // Document
+// Everything that belongs to one open image. The current document's copy
+// lives directly in App's members; inactive ones are parked in App::docs.
+struct DocState {
     std::unique_ptr<firn::Document> doc;
     firn::CommandStack history;
     std::string doc_path;
+    std::string title;
+    size_t saved_cursor = 0;
+    float zoom = 1.0f, pan_x = 0.0f, pan_y = 0.0f;
+    bool fit_requested = true;
+    firn::raster::Rect crop_rect;
+};
+
+struct App {
+    App();
+
+    // Document (the current one; see DocState)
+    std::unique_ptr<firn::Document> doc;
+    firn::CommandStack history;
+    std::string doc_path;
+    std::string doc_title;
+    size_t saved_cursor = 0;
+    std::vector<DocState> docs;         // one slot per open image; docs[current_doc].doc is null (it lives above)
+    int current_doc = -1;
+    int untitled_counter = 0;
+    int select_tab_request = -1;        // tab index to select on the next frame
+    int pending_close = -1;             // document awaiting the unsaved-changes prompt
+    bool pending_quit = false;
+    bool modified() const { return doc && history.cursor() != saved_cursor; }
+    void stash_current();               // App members -> docs[current_doc]
+    void activate_document(int index);
+    void add_document(std::unique_ptr<firn::Document> d, const std::string& path);
+    void close_document(int index, bool force = false);
+    void request_quit();
+    std::string document_title(int index) const;
+    bool document_modified(int index) const;
+
+    Config config;
+    bool show_rulers = true, show_grid = false;
+    int grid_spacing = 10;
 
     // Canvas view
     GLuint canvas_tex = 0;

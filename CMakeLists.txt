@@ -13,7 +13,12 @@ endif()
 option(FIRN_BUILD_APP   "Build the Dear ImGui desktop app" ON)
 option(FIRN_BUILD_TESTS "Build core tests" ON)
 
-add_compile_options(-Wall -Wextra -Wpedantic)
+if(MSVC)
+  add_compile_options(/W3 /utf-8)
+  add_compile_definitions(_CRT_SECURE_NO_WARNINGS NOMINMAX)
+else()
+  add_compile_options(-Wall -Wextra -Wpedantic)
+endif()
 
 # Header-only third party
 add_library(stb INTERFACE)

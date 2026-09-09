@@ -106,6 +106,17 @@ docs/    notes on the original: command inventory, module mapping, FORMAT.md
   Fonts are discovered by scanning the usual directories plus
   `FIRN_FONT_DIRS`; the Text dialog previews on a temporary layer that is
   never recorded, then commits through `PasteLayerCommand`.
+- **Documents**: the current image's state lives in App's members (`doc`,
+  `history`, `doc_path`, zoom/pan); other open images are parked in
+  `App::docs` as `DocState` and swapped in by `activate_document`. Always
+  create documents through `add_document` and close through
+  `close_document`, which handles the unsaved-changes prompt.
+- Settings persist through `Config` (`~/.config/firn/firn.cfg`; the ImGui
+  layout is `layout.ini` beside it). Add new persisted fields there.
+- CI (`.github/workflows/build.yml`) builds and tests on Linux and Windows.
+  Keep the code portable: no GCC-only flags outside the `if(NOT MSVC)`
+  blocks, NOMINMAX is defined project-wide, `main()` is plain (SDL's
+  entry point is disabled).
 - Add a test in `tests/test_core.cpp` for every new raster op or command.
 
 ## Checking UI changes

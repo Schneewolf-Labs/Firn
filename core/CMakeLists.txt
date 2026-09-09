@@ -14,4 +14,6 @@ add_library(firncore STATIC
 target_include_directories(firncore PUBLIC include)
 target_link_libraries(firncore PRIVATE stb)
 # Vendored stb headers are not ours to fix.
-set_source_files_properties(src/io.cpp src/io_psp.cpp src/text.cpp PROPERTIES COMPILE_OPTIONS "-Wno-missing-field-initializers;-Wno-unused-function")
+if(NOT MSVC)
+  set_source_files_properties(src/io.cpp src/io_psp.cpp src/text.cpp PROPERTIES COMPILE_OPTIONS "-Wno-missing-field-initializers;-Wno-unused-function")
+endif()

@@ -1,11 +1,16 @@
 // Firn: SDL2 + OpenGL3 + Dear ImGui (docking) bootstrap.
 #include <cstdio>
 #include <cstdlib>
+#include <string>
 
 #include <SDL.h>
 #include <SDL_opengl.h>
+#ifdef _WIN32
+#include <windows.h>  // SDL_opengl.h needs it first on Windows; NOMINMAX is set project-wide
+#endif
 
 #include "App.h"
+#include "Config.h"
 #include "imgui.h"
 #include "imgui_impl_opengl3.h"
 #include "imgui_internal.h"  // DockBuilder
@@ -44,6 +49,9 @@ static void build_default_layout(ImGuiID dockspace_id) {
 }
 
 int main(int argc, char** argv) {
+#ifdef SDL_MAIN_HANDLED
+    SDL_SetMainReady();
+#endif
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) != 0) {
         std::fprintf(stderr, "SDL_Init: %s\n", SDL_GetError());
         return 1;
@@ -60,7 +68,9 @@ int main(int argc, char** argv) {
 
     auto flags = (SDL_WindowFlags)(SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI);
     // Window size is overridable for driving the app from scripts/screenshots.
-    int win_w = 1400, win_h = 900;
+    Config boot;
+    boot.load();
+    int win_w = boot.window_w, win_h = boot.window_h;
     if (const char* e = std::getenv("FIRN_WINDOW")) std::sscanf(e, "%dx%d", &win_w, &win_h);
     SDL_Window* window = SDL_CreateWindow(kAppTitle, SDL_WINDOWPOS_CENTERED,
                                           SDL_WINDOWPOS_CENTERED, win_w, win_h, flags);
@@ -77,6 +87,8 @@ int main(int argc, char** argv) {
     ImGuiIO& io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+    const std::string ini_path = Config::layout_path();
+    io.IniFilename = ini_path.c_str();
     ImGui::StyleColorsDark();
 
     ImGui_ImplSDL2_InitForOpenGL(window, gl_context);
@@ -92,10 +104,10 @@ int main(int argc, char** argv) {
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
             ImGui_ImplSDL2_ProcessEvent(&event);
-            if (event.type == SDL_QUIT) app.quit = true;
+            if (event.type == SDL_QUIT) app.request_quit();
             if (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_CLOSE &&
                 event.window.windowID == SDL_GetWindowID(window))
-                app.quit = true;
+                app.request_quit();
         }
         if (SDL_GetWindowFlags(window) & SDL_WINDOW_MINIMIZED) {
             SDL_Delay(10);
@@ -128,6 +140,11 @@ int main(int argc, char** argv) {
         SDL_GL_SwapWindow(window);
     }
 
+    if (!std::getenv("FIRN_WINDOW")) SDL_GetWindowSize(window, &app.config.window_w, &app.config.window_h);
+    app.config.show_rulers = app.show_rulers;
+    app.config.show_grid = app.show_grid;
+    app.config.grid_spacing = app.grid_spacing;
+    app.config.save();
     if (app.canvas_tex) glDeleteTextures(1, &app.canvas_tex);
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplSDL2_Shutdown();

@@ -63,7 +63,7 @@ void adjust_modal(App& app, const char* title, Body body, Op op) {
     app.preview_update(op);
     ImGui::Separator();
     if (!app.preview.live) ImGui::TextDisabled("Large image: preview updates when a slider is released.");
-    const bool ok = ImGui::Button("OK", ImVec2(80, 0));
+    const bool ok = ImGui::Button("OK", ImVec2(80, 0)) || ImGui::IsKeyPressed(ImGuiKey_Enter, false) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter, false);
     ImGui::SameLine();
     const bool cancel = ImGui::Button("Cancel", ImVec2(80, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape, false);
     if (ok) {

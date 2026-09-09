@@ -11,17 +11,118 @@
 
 using namespace firn;
 
-App::App() : tools(make_default_tools()) {}
+App::App() : tools(make_default_tools()) {
+    config.load();
+    file_dialog.set_directory(config.last_directory);
+    show_rulers = config.show_rulers;
+    show_grid = config.show_grid;
+    grid_spacing = config.grid_spacing;
+}
+
+// --- Documents -----------------------------------------------------------
+
+void App::stash_current() {
+    if (current_doc < 0 || current_doc >= static_cast<int>(docs.size())) return;
+    DocState& s = docs[current_doc];
+    s.doc = std::move(doc);
+    s.history = std::move(history);
+    s.doc_path = doc_path;
+    s.title = doc_title;
+    s.saved_cursor = saved_cursor;
+    s.zoom = zoom; s.pan_x = pan_x; s.pan_y = pan_y;
+    s.fit_requested = fit_requested;
+    s.crop_rect = crop_rect;
+    history = CommandStack();
+}
+
+void App::activate_document(int index) {
+    if (index < 0 || index >= static_cast<int>(docs.size()) || index == current_doc) return;
+    tool().cancel(*this);
+    preview_cancel();
+    stash_current();
+    DocState& s = docs[index];
+    doc = std::move(s.doc);
+    history = std::move(s.history);
+    doc_path = s.doc_path;
+    doc_title = s.title;
+    saved_cursor = s.saved_cursor;
+    zoom = s.zoom; pan_x = s.pan_x; pan_y = s.pan_y;
+    fit_requested = s.fit_requested;
+    crop_rect = s.crop_rect;
+    current_doc = index;
+    canvas_tex_revision = ~0ull;  // force re-upload
+    select_tab_request = index;
+}
+
+void App::add_document(std::unique_ptr<Document> d, const std::string& path) {
+    tool().cancel(*this);
+    preview_cancel();
+    stash_current();
+    docs.emplace_back();
+    current_doc = static_cast<int>(docs.size()) - 1;
+    doc = std::move(d);
+    history.clear();
+    doc_path = path;
+    if (path.empty()) doc_title = "Untitled " + std::to_string(++untitled_counter);
+    else { const auto slash = path.find_last_of("/\\"); doc_title = slash == std::string::npos ? path : path.substr(slash + 1); }
+    saved_cursor = 0;
+    zoom = 1.0f; pan_x = pan_y = 0.0f;
+    fit_requested = true;
+    crop_rect = {};
+    canvas_tex_revision = ~0ull;
+    select_tab_request = current_doc;
+}
+
+std::string App::document_title(int index) const {
+    return index == current_doc ? doc_title : docs[index].title;
+}
+
+bool App::document_modified(int index) const {
+    if (index == current_doc) return modified();
+    const DocState& s = docs[index];
+    return s.doc && s.history.cursor() != s.saved_cursor;
+}
+
+void App::close_document(int index, bool force) {
+    if (index < 0 || index >= static_cast<int>(docs.size())) return;
+    if (!force && document_modified(index)) { pending_close = index; return; }
+    if (index == current_doc) {
+        tool().cancel(*this);
+        preview_cancel();
+        doc.reset();
+        history.clear();
+        doc_path.clear();
+        docs.erase(docs.begin() + index);
+        current_doc = -1;
+        canvas_tex_revision = ~0ull;
+        if (!docs.empty()) {
+            // activate_document stashes the (now empty) current state; there is none.
+            const int next = std::min(index, static_cast<int>(docs.size()) - 1);
+            DocState& s = docs[next];
+            doc = std::move(s.doc); history = std::move(s.history); doc_path = s.doc_path; doc_title = s.title;
+            saved_cursor = s.saved_cursor; zoom = s.zoom; pan_x = s.pan_x; pan_y = s.pan_y; fit_requested = s.fit_requested; crop_rect = s.crop_rect;
+            current_doc = next;
+            select_tab_request = next;
+        }
+    } else {
+        docs.erase(docs.begin() + index);
+        if (index < current_doc) --current_doc;
+    }
+    if (pending_quit && docs.empty()) quit = true;
+}
+
+void App::request_quit() {
+    for (size_t i = 0; i < docs.size(); ++i)
+        if (document_modified(static_cast<int>(i))) { pending_quit = true; pending_close = static_cast<int>(i); return; }
+    quit = true;
+}
 
 void App::new_document(int w, int h) {
-    tool().cancel(*this);
-    doc = std::make_unique<Document>(w, h);
-    Layer& bg = doc->add_layer("Background");
+    auto d = std::make_unique<Document>(w, h);
+    Layer& bg = d->add_layer("Background");
     bg.background = true;
     bg.pixels.fill({255, 255, 255, 255});
-    history.clear();
-    doc_path.clear();
-    fit_requested = true;
+    add_document(std::move(d), "");
     status = "New image " + std::to_string(w) + "x" + std::to_string(h);
 }
 
@@ -33,11 +134,9 @@ bool App::open_document(const std::string& path) {
         status = "Open failed: " + err;
         return false;
     }
-    tool().cancel(*this);
-    doc = std::move(loaded);
-    history.clear();
-    doc_path = path;
-    fit_requested = true;
+    add_document(std::move(loaded), path);
+    config.touch_recent(path);
+    config.last_directory = file_dialog.directory();
     status = "Opened " + path;
     for (const auto& w : warnings) status += "\n" + w;
     return true;
@@ -51,6 +150,9 @@ bool App::save_document(const std::string& path) {
         return false;
     }
     doc_path = path;
+    { const auto slash = path.find_last_of("/\\"); doc_title = slash == std::string::npos ? path : path.substr(slash + 1); }
+    saved_cursor = history.cursor();
+    config.touch_recent(path);
     status = "Saved " + path;
     if (!io::is_psp_extension(path) && doc->layer_count() > 1) status += "\nFlattened: only .PspImage keeps layers.";
     return true;
@@ -367,6 +469,7 @@ void App::handle_shortcuts() {
     if (ctrl && ImGui::IsKeyPressed(ImGuiKey_Y, false)) redo();
     if (ctrl && ImGui::IsKeyPressed(ImGuiKey_N, false)) show_new_dialog = true;
     if (ctrl && ImGui::IsKeyPressed(ImGuiKey_O, false)) request_open();
+    if (ctrl && ImGui::IsKeyPressed(ImGuiKey_W, false)) close_document(current_doc);
     if (ctrl && io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_S, false)) request_save_as();
     else if (ctrl && ImGui::IsKeyPressed(ImGuiKey_S, false)) save();
     if (ctrl && io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_I, false)) select_invert();

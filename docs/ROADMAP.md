@@ -59,9 +59,10 @@ what to work on next.
 
 ## 7. Workspace
 
-- [ ] Multiple open documents (tabs), recent files, remember window and dialog state
-- [ ] Rulers, grid, guides
-- [ ] Windows build verified
+- [x] Multiple open documents (tabs), recent files, remember window and dialog state
+- [x] Rulers, grid
+- [ ] Guides (drag from rulers), snap to grid
+- [ ] Windows build verified (CI workflow added; see Actions)
 
 ## 8. Format completeness
 

@@ -82,6 +82,11 @@ void FileDialog::open(Mode mode, std::string title, std::vector<std::string> ext
     }
 }
 
+void FileDialog::set_directory(const std::string& dir) {
+    std::error_code ec;
+    if (!dir.empty() && fs::is_directory(dir, ec)) dir_ = dir;
+}
+
 void FileDialog::set_dir(const fs::path& dir) {
     std::error_code ec;
     fs::path canon = fs::weakly_canonical(dir, ec);
