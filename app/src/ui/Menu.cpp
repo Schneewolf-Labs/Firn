@@ -40,6 +40,8 @@ void App::draw_menu() {
         if (ImGui::MenuItem("Save", "Ctrl+S", false, has_doc)) save();
         if (ImGui::MenuItem("Save As...", "Ctrl+Shift+S", false, has_doc)) request_save_as();
         ImGui::Separator();
+        if (ImGui::MenuItem("Preferences...")) { prefs_edit = config; show_prefs_dialog = true; }
+        ImGui::Separator();
         if (ImGui::MenuItem("Exit")) request_quit();
         ImGui::EndMenu();
     }
@@ -307,6 +309,46 @@ void App::draw_dialogs() {
     if (show_jpeg_dialog) { ImGui::OpenPopup("JPEG Options"); show_jpeg_dialog = false; }
     if (show_info_dialog) { ImGui::OpenPopup("Image Information"); show_info_dialog = false; }
     if (show_alpha_save_dialog) { ImGui::OpenPopup("Save Selection To Alpha Channel"); show_alpha_save_dialog = false; }
+    if (show_prefs_dialog) { ImGui::OpenPopup("Preferences"); show_prefs_dialog = false; }
+
+    if (ImGui::BeginPopupModal("Preferences", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        Config& c = prefs_edit;
+        ImGui::SeparatorText("General");
+        ImGui::SetNextItemWidth(160); ImGui::SliderInt("Undo steps per image", &c.undo_limit, 1, 1000);
+        ImGui::SetNextItemWidth(160); ImGui::SliderInt("Default JPEG quality", &c.jpeg_quality, 1, 100);
+        ImGui::SetNextItemWidth(160); ImGui::SliderInt("Checkerboard cell (px)", &c.checker_size, 2, 64);
+        ImGui::SetNextItemWidth(160); ImGui::InputInt("New image width", &c.new_width);
+        ImGui::SetNextItemWidth(160); ImGui::InputInt("New image height", &c.new_height);
+        c.new_width = std::clamp(c.new_width, 1, 30000); c.new_height = std::clamp(c.new_height, 1, 30000);
+        ImGui::SeparatorText("View");
+        ImGui::Checkbox("Rulers", &c.show_rulers); ImGui::SameLine(); ImGui::Checkbox("Grid", &c.show_grid);
+        ImGui::SetNextItemWidth(160); ImGui::InputInt("Grid spacing", &c.grid_spacing);
+        c.grid_spacing = std::clamp(c.grid_spacing, 1, 1000);
+        ImGui::SeparatorText("Extra library folders (besides ~/.config/firn/*)");
+        char buf[1024];
+        auto path_field = [&](const char* label, std::string& value) {
+            std::snprintf(buf, sizeof(buf), "%s", value.c_str());
+            ImGui::SetNextItemWidth(360);
+            if (ImGui::InputText(label, buf, sizeof(buf))) value = buf;
+        };
+        path_field("Picture tubes", c.extra_tube_dir);
+        path_field("Brush tips", c.extra_brush_dir);
+        path_field("Textures", c.extra_texture_dir);
+        ImGui::Separator();
+        if (ImGui::Button("OK", ImVec2(90, 0)) || ImGui::IsKeyPressed(ImGuiKey_Enter, false)) {
+            const std::string keep_dir = config.last_directory;
+            const auto keep_recent = config.recent_files;
+            config = c;
+            config.last_directory = keep_dir;
+            config.recent_files = keep_recent;
+            apply_config();
+            config.save();
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel", ImVec2(90, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape, false)) ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
+    }
 
     if (ImGui::BeginPopupModal("Save Selection To Alpha Channel", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
         if (ImGui::IsWindowAppearing()) ImGui::SetKeyboardFocusHere();

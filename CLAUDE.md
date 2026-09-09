@@ -125,7 +125,17 @@ docs/    notes on the original: command inventory, module mapping, FORMAT.md
   create documents through `add_document` and close through
   `close_document`, which handles the unsaved-changes prompt.
 - Settings persist through `Config` (`~/.config/firn/firn.cfg`; the ImGui
-  layout is `layout.ini` beside it). Add new persisted fields there.
+  layout is `layout.ini` beside it). Add new persisted fields there, expose
+  them in File > Preferences, and push them into live state in
+  `App::apply_config`.
+- **Libraries** (picture tubes, brush tips, paper textures) are scanned
+  lazily by `App::ensure_*` from `~/.config/firn/{tubes,brushes,textures}`,
+  the `FIRN_*_DIRS` env vars, the Preferences folders, and the gitignored
+  sample folders under `WindowsInstall/` in a development build.
+- **Saved selections** live in `Document::alpha_channels()` and round-trip
+  through the native format; the current selection itself is not stored.
+- The toolbar and status bar (`app/src/ui/Toolbar.cpp`) sit outside the
+  dock space; the canvas reports cursor facts to the status bar.
 - CI (`.github/workflows/build.yml`) builds and tests on Linux and Windows.
   Keep the code portable: no GCC-only flags outside the `if(NOT MSVC)`
   blocks, NOMINMAX is defined project-wide, `main()` is plain (SDL's

@@ -1221,7 +1221,19 @@ static void test_brush_texture() {
     CHECK(ho.get(0, 0).r >= 127 && ho.get(0, 0).r <= 128 && ho.get(1, 0).r == 255);
 }
 
+static void test_history_limit() {
+    Document doc(1, 1);
+    doc.add_layer("bg").pixels.fill({0, 0, 0, 255});
+    CommandStack hist;
+    hist.set_limit(3);
+    for (int i = 0; i < 5; ++i) hist.run(doc, std::make_unique<InvertCommand>(0));
+    CHECK(hist.size() == 3 && hist.cursor() == 3);
+    hist.undo(doc); hist.undo(doc); hist.undo(doc);
+    CHECK(!hist.can_undo() && doc.layer(0).pixels.get(0, 0).r == 0);  // 5 inverts, 3 undone -> 2 applied -> original
+}
+
 int main() {
+    test_history_limit();
     test_brush_texture();
     test_kaleidoscope_sunburst();
     test_brush_tip();

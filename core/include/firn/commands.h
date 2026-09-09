@@ -29,6 +29,9 @@ public:
     void undo(Document& doc);
     void redo(Document& doc);
     void clear();
+    // Oldest entries are dropped beyond this many (0 = unlimited).
+    void set_limit(size_t n) { limit_ = n; trim(); }
+    size_t limit() const { return limit_; }
 
     // For the history panel.
     size_t size() const { return done_.size(); }
@@ -36,8 +39,10 @@ public:
     const Command& at(size_t i) const { return *done_.at(i); }
 
 private:
+    void trim();
     std::vector<std::unique_ptr<Command>> done_;
     size_t cursor_ = 0;  // entries [0, cursor_) are applied
+    size_t limit_ = 0;
 };
 
 // --- Concrete commands -------------------------------------------------

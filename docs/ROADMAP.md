@@ -83,7 +83,7 @@ what to work on next.
 
 - [x] Keyboard zoom (+ / -, Ctrl+0 fit, Ctrl+Alt+0 actual), Image Information dialog, JPEG quality prompt
 - [x] Toolbar with common actions and materials; status bar with message, cursor, zoom and image facts
-- [ ] Preferences dialog
+- [x] Preferences dialog (undo limit, JPEG quality, checkerboard, new-image size, view options, library folders)
 
 ## 8. Format completeness
 

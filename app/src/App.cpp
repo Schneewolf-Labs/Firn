@@ -18,9 +18,23 @@ static Image mask_to_image(const Mask& m);
 App::App() : tools(make_default_tools()) {
     config.load();
     file_dialog.set_directory(config.last_directory);
+    apply_config();
+}
+
+void App::apply_config() {
     show_rulers = config.show_rulers;
     show_grid = config.show_grid;
     grid_spacing = config.grid_spacing;
+    jpeg_quality = config.jpeg_quality;
+    new_w = config.new_width;
+    new_h = config.new_height;
+    history.set_limit(config.undo_limit);
+    for (DocState& d : docs) d.history.set_limit(config.undo_limit);
+    // Library folders may have changed: rescan on next use.
+    tubes_loaded = brush_tips_loaded = textures_loaded = false;
+    tubes.clear(); brush_tips.clear(); textures.clear();
+    tube_index = -1; brush_tip_index = -1; texture_index = -1;
+    brush.tip.reset(); brush.texture.reset();
 }
 
 // --- Documents -----------------------------------------------------------
@@ -83,6 +97,7 @@ void App::add_document(std::unique_ptr<Document> d, const std::string& path) {
     current_doc = static_cast<int>(docs.size()) - 1;
     doc = std::move(d);
     history.clear();
+    history.set_limit(config.undo_limit);
     doc_path = path;
     if (path.empty()) doc_title = "Untitled " + std::to_string(++untitled_counter);
     else { const auto slash = path.find_last_of("/\\"); doc_title = slash == std::string::npos ? path : path.substr(slash + 1); }
@@ -442,6 +457,7 @@ void App::ensure_brush_tips() {
     brush_tips_loaded = true;
     namespace fs = std::filesystem;
     std::vector<fs::path> dirs;
+    if (!config.extra_brush_dir.empty()) dirs.emplace_back(config.extra_brush_dir);
     if (const char* extra = std::getenv("FIRN_BRUSH_DIRS")) {
         std::string s = extra;
         size_t start = 0;
@@ -507,6 +523,7 @@ void App::ensure_textures() {
     textures_loaded = true;
     namespace fs = std::filesystem;
     std::vector<fs::path> dirs;
+    if (!config.extra_texture_dir.empty()) dirs.emplace_back(config.extra_texture_dir);
     if (const char* extra = std::getenv("FIRN_TEXTURE_DIRS")) {
         std::string s = extra;
         size_t start = 0;
@@ -555,6 +572,7 @@ void App::ensure_tubes() {
     tubes_loaded = true;
     namespace fs = std::filesystem;
     std::vector<fs::path> dirs;
+    if (!config.extra_tube_dir.empty()) dirs.emplace_back(config.extra_tube_dir);
     if (const char* extra = std::getenv("FIRN_TUBE_DIRS")) {
         std::string s = extra;
         size_t start = 0;

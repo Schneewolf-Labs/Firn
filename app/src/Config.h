@@ -11,6 +11,11 @@ struct Config {
     std::string last_directory;
     bool show_rulers = true, show_grid = false;
     int grid_spacing = 10;
+    int jpeg_quality = 90;
+    int undo_limit = 100;             // history entries kept per document
+    int checker_size = 12;            // transparency checkerboard cell, in screen px
+    int new_width = 800, new_height = 600;
+    std::string extra_tube_dir, extra_brush_dir, extra_texture_dir;
 
     static std::string directory();          // created on demand
     static std::string layout_path();        // imgui.ini location

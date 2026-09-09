@@ -158,7 +158,7 @@ void App::draw_canvas() {
 
     // Checkerboard for transparency.
     {
-        const float cell = 12.0f;
+        const float cell = static_cast<float>(config.checker_size);
         const float x0 = std::max(p0.x, view_pos.x), y0 = std::max(p0.y, view_pos.y);
         const float x1 = std::min(p1.x, view_pos.x + view_size.x), y1 = std::min(p1.y, view_pos.y + view_size.y);
         int row = 0;

@@ -145,6 +145,9 @@ struct App {
     int kal_petals = 6; float kal_angle = 0, kal_radius = 50;
     float sun_x = 0.5f, sun_y = 0.5f, sun_brightness = 0.8f, sun_ray_brightness = 0.6f; int sun_rays = 12; float sun_color[3] = {1, 1, 0.9f};
     bool show_info_dialog = false;
+    bool show_prefs_dialog = false;
+    Config prefs_edit;                  // working copy while the dialog is open
+    void apply_config();                // push config values into live state
     int threshold_value = 128, posterize_levels = 6, solarize_threshold = 128;
     firn::adjust::ChannelMix mixer;
     int mixer_row = 0;

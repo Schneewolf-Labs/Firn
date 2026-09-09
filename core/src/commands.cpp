@@ -16,12 +16,21 @@ void CommandStack::run(Document& doc, std::unique_ptr<Command> cmd) {
     cmd->execute(doc);
     done_.push_back(std::move(cmd));
     cursor_ = done_.size();
+    trim();
 }
 
 void CommandStack::push_applied(std::unique_ptr<Command> cmd) {
     done_.resize(cursor_);
     done_.push_back(std::move(cmd));
     cursor_ = done_.size();
+    trim();
+}
+
+void CommandStack::trim() {
+    if (limit_ == 0 || done_.size() <= limit_) return;
+    const size_t drop = done_.size() - limit_;
+    done_.erase(done_.begin(), done_.begin() + drop);
+    cursor_ = cursor_ > drop ? cursor_ - drop : 0;
 }
 
 void CommandStack::undo(Document& doc) {
