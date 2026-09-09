@@ -1,0 +1,10 @@
+build/
+build-*/
+imgui.ini
+*.o
+*.a
+*.so
+compile_commands.json
+.cache/
+# Backup of the original Windows install; large binaries, not source.
+WindowsInstall/
