@@ -13,6 +13,7 @@ add_executable(firn
   src/App.cpp
   src/Vectors.cpp
   src/Drive.cpp
+  src/Script.cpp
   src/Config.cpp
   src/ui/Canvas.cpp
   src/ui/Palettes.cpp

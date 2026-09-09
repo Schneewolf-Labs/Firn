@@ -10,6 +10,7 @@
 
 #include "firn/adjust.h"
 #include "firn/effects.h"
+#include "firn/json.h"
 #include "firn/commands.h"
 #include "firn/document.h"
 #include "firn/io.h"
@@ -1760,7 +1761,22 @@ static void test_art_effects() {
     e = img; effects::user_defined_filter(e, box, 25, 0); CHECK(e.get(20, 20).r > 90 && e.get(20, 20).r < 160);
 }
 
+static void test_json() {
+    json::Value v;
+    std::string err;
+    CHECK(json::parse(R"({"a": 1, "b": [true, "x\ny", -2.5, null], "c": {"d": "e"}})", v, &err));
+    CHECK(v.get("a").as_number() == 1 && v.get("b")[0].as_bool() && v.get("b")[1].as_string() == "x\ny" && v.get("b")[2].as_number() == -2.5);
+    CHECK(v.get("c.d").as_string() == "e" && v.get("missing.key").is_null() && v.get("b").size() == 4);
+    CHECK(json::Value::string("True").as_bool() && !json::Value::string("False").as_bool(true));
+    CHECK(json::dump(v) == R"({"a":1,"b":[true,"x\ny",-2.5,null],"c":{"d":"e"}})");
+    CHECK(!json::parse("{\"a\": }", v, &err) && !err.empty());
+    json::Value o = json::Value::object();
+    o.set("w", json::Value::number(3.5)); o.set("w", json::Value::number(4));
+    CHECK(o.size() == 1 && o.get("w").as_number() == 4);
+}
+
 int main() {
+    test_json();
     test_art_effects();
     test_geo_effects();
     test_mesh_and_displace();

@@ -12,6 +12,7 @@
 #include "firn/effects.h"
 #include "firn/commands.h"
 #include "firn/io_psp.h"
+#include "firn/json.h"
 #include "firn/document.h"
 #include "firn/raster.h"
 #include "firn/text.h"
@@ -145,6 +146,9 @@ struct App {
     void preview_cancel();
     void draw_adjust_dialogs();
     bool open_adjust_by_title(const char* title);   // opens an adjust/effect dialog by its title (scripting, driver)
+    // Scripting: runs one of the original's App.Do commands (Script.cpp);
+    // returns a JSON result, or a message with *ok false.
+    std::string do_command(const std::string& name, const firn::json::Value& params, bool* ok);
     // Parameters, remembered between uses like the original's dialogs.
     int colorize_hue = 0, colorize_sat = 128;
     int hsl_h = 0, hsl_s = 0, hsl_l = 0;

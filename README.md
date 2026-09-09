@@ -93,3 +93,22 @@ brush, eraser, and fill tools are confined to the selection. Cut/Copy go to an
 internal clipboard; paste as a new layer (Ctrl+L) or a new image (Ctrl+V).
 
 Dear ImGui (docking branch) is fetched by CMake on first configure.
+
+## Scripting
+
+Firn runs the original's Python scripts. Start the app with its driver
+socket (`python3 scripts/drive.py --launch image.png`) and run a script
+against it:
+
+```sh
+python3 scripts/firn-script.py "Thumbnail_150.PspScript"
+python3 scripts/firn-script.py -c "App.Do(Environment, 'GaussianBlur', {'Radius': 4.0})"
+```
+
+`App.Do(Environment, 'Command', {...})` calls are sent as JSON to the app,
+which implements them with the original's parameter names (see
+`app/src/Script.cpp` for the list, about 110 commands covering files,
+layers, selections, adjustments, effects, and materials); results such as
+`ReturnImageInfo` come back as dicts. `App.Constants.X.Y` evaluates to the
+value's name. Windows-only modules used by a few bundled scripts are not
+available.

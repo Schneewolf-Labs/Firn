@@ -149,6 +149,13 @@ docs/    notes on the original: command inventory, module mapping, FORMAT.md
   (within their group) through their mask and opacity. Create with
   `AddAdjustmentLayerCommand`, edit with `SetAdjustmentCommand`; the dialog
   in `app/src/ui/AdjustmentLayer.cpp` edits the layer live and commits on OK.
+- **Scripting** (`app/src/Script.cpp`): `App::do_command(name, json)`
+  implements the original's `App.Do` commands with its parameter names
+  (the command API reference is linked from `docs/FORMAT.md`). The driver
+  socket carries them (`do <Command> <json>`) and `scripts/firn-script.py`
+  is the Python side that runs `.PspScript` files. Add a command by
+  reading its parameter page and mapping it onto existing App functions;
+  never invent parameter names.
 - **The official format spec** (versions 7 and 8) and the scripting command
   API are linked from `docs/FORMAT.md` (References); consult them before
   reverse-engineering a block from samples.
