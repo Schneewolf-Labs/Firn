@@ -79,6 +79,7 @@ void blend_over(Image& img, int x, int y, Color c, float coverage);
 void greyscale(Image& img);
 void brightness_contrast(Image& img, int brightness, int contrast);  // -255..255, -100..100
 void gaussian_blur(Image& img, float radius);
+void box_blur(Image& img, int radius);  // the original's "Average"
 void flip_vertical(Image& img);
 void mirror_horizontal(Image& img);
 

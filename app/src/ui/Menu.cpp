@@ -2,6 +2,7 @@
 #include <memory>
 
 #include "App.h"
+#include "firn/adjust.h"
 #include "firn/mask.h"
 #include "imgui.h"
 
@@ -66,22 +67,43 @@ void App::draw_menu() {
         ImGui::EndMenu();
     }
     if (ImGui::BeginMenu("Adjust")) {
-        if (ImGui::BeginMenu("Brightness and Contrast")) {
-            if (ImGui::MenuItem("Brightness/Contrast...", nullptr, false, has_layer)) show_bc_dialog = true;
+        if (ImGui::BeginMenu("Brightness and Contrast", has_layer)) {
+            if (ImGui::MenuItem("Brightness/Contrast...")) open_adjust = Adj::BrightnessContrast;
+            if (ImGui::MenuItem("Curves...")) open_adjust = Adj::Curves;
+            if (ImGui::MenuItem("Gamma Correction...")) open_adjust = Adj::Gamma;
+            if (ImGui::MenuItem("Histogram Equalize")) run(std::make_unique<AdjustCommand>(layer, "Histogram Equalize", adjust::histogram_equalize));
+            if (ImGui::MenuItem("Histogram Stretch")) run(std::make_unique<AdjustCommand>(layer, "Histogram Stretch", adjust::histogram_stretch));
+            if (ImGui::MenuItem("Levels...")) open_adjust = Adj::Levels;
+            if (ImGui::MenuItem("Threshold...")) open_adjust = Adj::Threshold;
             ImGui::EndMenu();
         }
-        if (ImGui::BeginMenu("Blur")) {
-            if (ImGui::MenuItem("Average...", nullptr, false, has_layer)) show_blur_dialog = true;
-            if (ImGui::MenuItem("Gaussian Blur...", nullptr, false, has_layer)) { show_blur_dialog = true; blur_gaussian = true; }
+        if (ImGui::BeginMenu("Color Balance", has_layer)) {
+            if (ImGui::MenuItem("Channel Mixer...")) open_adjust = Adj::ChannelMixer;
+            ImGui::EndMenu();
+        }
+        if (ImGui::BeginMenu("Hue and Saturation", has_layer)) {
+            if (ImGui::MenuItem("Colorize...")) open_adjust = Adj::Colorize;
+            if (ImGui::MenuItem("Hue/Saturation/Lightness...")) open_adjust = Adj::HSL;
+            ImGui::EndMenu();
+        }
+        if (ImGui::BeginMenu("Blur", has_layer)) {
+            if (ImGui::MenuItem("Average...")) open_adjust = Adj::Average;
+            if (ImGui::MenuItem("Gaussian Blur...")) open_adjust = Adj::Gaussian;
             ImGui::EndMenu();
         }
         ImGui::Separator();
+        if (ImGui::MenuItem("Automatic Contrast Enhancement", nullptr, false, has_layer))
+            run(std::make_unique<AdjustCommand>(layer, "Automatic Contrast Enhancement", [](Image& img) { adjust::auto_contrast(img); }));
         if (ImGui::MenuItem("Negative Image", "Ctrl+I", false, has_layer))
             run(std::make_unique<InvertCommand>(layer));
         ImGui::EndMenu();
     }
     if (ImGui::BeginMenu("Effects")) {
-        ImGui::MenuItem("(none yet)", nullptr, false, false);
+        if (ImGui::BeginMenu("Artistic Effects", has_layer)) {
+            if (ImGui::MenuItem("Posterize...")) open_adjust = Adj::Posterize;
+            if (ImGui::MenuItem("Solarize...")) open_adjust = Adj::Solarize;
+            ImGui::EndMenu();
+        }
         ImGui::EndMenu();
     }
     if (ImGui::BeginMenu("Selections")) {
@@ -127,14 +149,15 @@ void App::draw_menu() {
 }
 
 void App::draw_dialogs() {
-    if (show_new_dialog) { ImGui::OpenPopup("New Image"); show_new_dialog = false; }
+    draw_adjust_dialogs();
+
     if (file_dialog.draw()) {
         if (file_op == PendingFileOp::Open) open_document(file_dialog.path());
         else if (file_op == PendingFileOp::SaveAs) save_document(file_dialog.path());
         file_op = PendingFileOp::None;
     }
-    if (show_blur_dialog) { ImGui::OpenPopup(blur_gaussian ? "Gaussian Blur" : "Average"); show_blur_dialog = false; }
-    if (show_bc_dialog) { ImGui::OpenPopup("Brightness/Contrast"); show_bc_dialog = false; }
+
+    if (show_new_dialog) { ImGui::OpenPopup("New Image"); show_new_dialog = false; }
     static const char* kSelDialogs[] = {nullptr, "Expand Selection", "Contract Selection", "Feather Selection"};
     if (show_sel_dialog) { ImGui::OpenPopup(kSelDialogs[show_sel_dialog]); show_sel_dialog = 0; }
     if (show_layer_props_dialog) { ImGui::OpenPopup("Layer Properties"); show_layer_props_dialog = false; }
@@ -142,8 +165,61 @@ void App::draw_dialogs() {
     if (show_canvas_dialog) { ImGui::OpenPopup("Canvas Size"); show_canvas_dialog = false; }
     if (show_rotate_dialog) { ImGui::OpenPopup("Free Rotate"); show_rotate_dialog = false; }
 
+    auto escape = [] { if (ImGui::IsKeyPressed(ImGuiKey_Escape, false)) ImGui::CloseCurrentPopup(); };
+
+    if (ImGui::BeginPopupModal("New Image", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        escape();
+        ImGui::InputInt("Width", &new_w);
+        ImGui::InputInt("Height", &new_h);
+        if (new_w < 1) new_w = 1;
+        if (new_h < 1) new_h = 1;
+        if (ImGui::Button("OK")) { new_document(new_w, new_h); ImGui::CloseCurrentPopup(); }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel")) ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
+    }
+
+    for (int which = 1; which <= 3; ++which) {
+        if (!ImGui::BeginPopupModal(kSelDialogs[which], nullptr, ImGuiWindowFlags_AlwaysAutoResize)) continue;
+        escape();
+        ImGui::SliderInt("Pixels", &sel_modify_px, 1, 100);
+        if (ImGui::Button("OK")) {
+            if (doc && doc->has_selection()) {
+                Mask m = doc->selection();
+                if (which == 1) mask::expand(m, sel_modify_px);
+                else if (which == 2) mask::contract(m, sel_modify_px);
+                else mask::feather(m, static_cast<float>(sel_modify_px));
+                set_selection(kSelDialogs[which], std::move(m));
+            }
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel")) ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
+    }
+
+    if (ImGui::BeginPopupModal("Layer Properties", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        escape();
+        LayerProps& p = layer_props_edit;
+        char name[256];
+        std::snprintf(name, sizeof(name), "%s", p.name.c_str());
+        if (ImGui::InputText("Name", name, sizeof(name))) p.name = name;
+        ImGui::Checkbox("Layer is visible", &p.visible);
+        float op = p.opacity * 100.0f;
+        if (ImGui::SliderFloat("Opacity", &op, 0.0f, 100.0f, "%.0f%%")) p.opacity = op / 100.0f;
+        ImGui::SetNextItemWidth(160);
+        blend_combo("Blend mode", p.blend);
+        if (ImGui::Button("OK")) {
+            if (doc && active_layer() >= 0) layer_set_props(doc->props(active_layer()), p);
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel")) ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
+    }
+
     if (ImGui::BeginPopupModal("Resize", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
-        if (ImGui::IsKeyPressed(ImGuiKey_Escape, false)) ImGui::CloseCurrentPopup();
+        escape();
         const float aspect = doc ? static_cast<float>(doc->width()) / doc->height() : 1.0f;
         ImGui::RadioButton("Pixels", &resize_by_percent, 0);
         ImGui::SameLine();
@@ -183,8 +259,9 @@ void App::draw_dialogs() {
         if (ImGui::Button("Cancel")) ImGui::CloseCurrentPopup();
         ImGui::EndPopup();
     }
+
     if (ImGui::BeginPopupModal("Canvas Size", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
-        if (ImGui::IsKeyPressed(ImGuiKey_Escape, false)) ImGui::CloseCurrentPopup();
+        escape();
         ImGui::SetNextItemWidth(120);
         if (ImGui::InputInt("Width", &canvas_w)) canvas_w = std::max(1, canvas_w);
         ImGui::SetNextItemWidth(120);
@@ -214,8 +291,9 @@ void App::draw_dialogs() {
         if (ImGui::Button("Cancel")) ImGui::CloseCurrentPopup();
         ImGui::EndPopup();
     }
+
     if (ImGui::BeginPopupModal("Free Rotate", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
-        if (ImGui::IsKeyPressed(ImGuiKey_Escape, false)) ImGui::CloseCurrentPopup();
+        escape();
         ImGui::RadioButton("Right (clockwise)", &rotate_cw, 1);
         ImGui::SameLine();
         ImGui::RadioButton("Left", &rotate_cw, 0);
@@ -223,92 +301,6 @@ void App::draw_dialogs() {
         ImGui::SliderFloat("Degrees", &rotate_degrees, 0.0f, 359.99f, "%.2f");
         ImGui::TextDisabled("Uncovered corners take the background colour on Background layers.");
         if (ImGui::Button("OK")) { rotate(rotate_cw ? rotate_degrees : -rotate_degrees); ImGui::CloseCurrentPopup(); }
-        ImGui::SameLine();
-        if (ImGui::Button("Cancel")) ImGui::CloseCurrentPopup();
-        ImGui::EndPopup();
-    }
-
-    if (ImGui::BeginPopupModal("Layer Properties", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
-        if (ImGui::IsKeyPressed(ImGuiKey_Escape, false)) ImGui::CloseCurrentPopup();
-        LayerProps& p = layer_props_edit;
-        char name[256];
-        std::snprintf(name, sizeof(name), "%s", p.name.c_str());
-        if (ImGui::InputText("Name", name, sizeof(name))) p.name = name;
-        ImGui::Checkbox("Layer is visible", &p.visible);
-        float op = p.opacity * 100.0f;
-        if (ImGui::SliderFloat("Opacity", &op, 0.0f, 100.0f, "%.0f%%")) p.opacity = op / 100.0f;
-        ImGui::SetNextItemWidth(160);
-        blend_combo("Blend mode", p.blend);
-        if (ImGui::Button("OK")) {
-            if (doc && active_layer() >= 0) layer_set_props(doc->props(active_layer()), p);
-            ImGui::CloseCurrentPopup();
-        }
-        ImGui::SameLine();
-        if (ImGui::Button("Cancel")) ImGui::CloseCurrentPopup();
-        ImGui::EndPopup();
-    }
-
-    if (ImGui::BeginPopupModal("New Image", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
-        if (ImGui::IsKeyPressed(ImGuiKey_Escape, false)) ImGui::CloseCurrentPopup();
-        ImGui::InputInt("Width", &new_w);
-        ImGui::InputInt("Height", &new_h);
-        if (new_w < 1) new_w = 1;
-        if (new_h < 1) new_h = 1;
-        if (ImGui::Button("OK")) { new_document(new_w, new_h); ImGui::CloseCurrentPopup(); }
-        ImGui::SameLine();
-        if (ImGui::Button("Cancel")) ImGui::CloseCurrentPopup();
-        ImGui::EndPopup();
-    }
-    if (ImGui::BeginPopupModal("Average", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
-        if (ImGui::IsKeyPressed(ImGuiKey_Escape, false)) ImGui::CloseCurrentPopup();
-        int r = static_cast<int>(blur_radius);
-        if (ImGui::SliderInt("Radius", &r, 1, 50)) blur_radius = static_cast<float>(r);
-        if (ImGui::Button("OK")) {
-            if (active_layer() >= 0) run(std::make_unique<BoxBlurCommand>(active_layer(), r));
-            ImGui::CloseCurrentPopup();
-        }
-        ImGui::SameLine();
-        if (ImGui::Button("Cancel")) ImGui::CloseCurrentPopup();
-        ImGui::EndPopup();
-    }
-    if (ImGui::BeginPopupModal("Gaussian Blur", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
-        if (ImGui::IsKeyPressed(ImGuiKey_Escape, false)) ImGui::CloseCurrentPopup();
-        ImGui::SliderFloat("Radius", &blur_radius, 0.1f, 100.0f, "%.1f", ImGuiSliderFlags_Logarithmic);
-        if (ImGui::Button("OK")) {
-            if (active_layer() >= 0) run(std::make_unique<GaussianBlurCommand>(active_layer(), blur_radius));
-            blur_gaussian = false;
-            ImGui::CloseCurrentPopup();
-        }
-        ImGui::SameLine();
-        if (ImGui::Button("Cancel")) { blur_gaussian = false; ImGui::CloseCurrentPopup(); }
-        ImGui::EndPopup();
-    }
-    if (ImGui::BeginPopupModal("Brightness/Contrast", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
-        if (ImGui::IsKeyPressed(ImGuiKey_Escape, false)) ImGui::CloseCurrentPopup();
-        ImGui::SliderInt("Brightness", &bc_brightness, -255, 255);
-        ImGui::SliderInt("Contrast", &bc_contrast, -100, 100);
-        if (ImGui::Button("OK")) {
-            if (active_layer() >= 0) run(std::make_unique<BrightnessContrastCommand>(active_layer(), bc_brightness, bc_contrast));
-            ImGui::CloseCurrentPopup();
-        }
-        ImGui::SameLine();
-        if (ImGui::Button("Cancel")) ImGui::CloseCurrentPopup();
-        ImGui::EndPopup();
-    }
-    for (int which = 1; which <= 3; ++which) {
-        if (!ImGui::BeginPopupModal(kSelDialogs[which], nullptr, ImGuiWindowFlags_AlwaysAutoResize)) continue;
-        if (ImGui::IsKeyPressed(ImGuiKey_Escape, false)) ImGui::CloseCurrentPopup();
-        ImGui::SliderInt("Pixels", &sel_modify_px, 1, 100);
-        if (ImGui::Button("OK")) {
-            if (doc && doc->has_selection()) {
-                Mask m = doc->selection();
-                if (which == 1) mask::expand(m, sel_modify_px);
-                else if (which == 2) mask::contract(m, sel_modify_px);
-                else mask::feather(m, static_cast<float>(sel_modify_px));
-                set_selection(kSelDialogs[which], std::move(m));
-            }
-            ImGui::CloseCurrentPopup();
-        }
         ImGui::SameLine();
         if (ImGui::Button("Cancel")) ImGui::CloseCurrentPopup();
         ImGui::EndPopup();

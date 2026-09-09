@@ -361,6 +361,7 @@ void App::sync_canvas_texture() {
 void App::handle_shortcuts() {
     ImGuiIO& io = ImGui::GetIO();
     if (io.WantTextInput) return;
+    if (ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId)) return;  // dialogs own the keyboard
     const bool ctrl = io.KeyCtrl;
     if (ctrl && ImGui::IsKeyPressed(ImGuiKey_Z, false)) { io.KeyShift ? redo() : undo(); }
     if (ctrl && ImGui::IsKeyPressed(ImGuiKey_Y, false)) redo();

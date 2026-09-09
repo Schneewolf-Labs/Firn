@@ -1,0 +1,249 @@
+// Adjustment and effect dialogs with live preview. Each dialog edits its
+// parameters, the preview session re-applies the operation to the active
+// layer (clipped to the selection), and OK records one history entry.
+#include <algorithm>
+#include <cmath>
+
+#include "App.h"
+#include "firn/adjust.h"
+#include "firn/raster.h"
+#include "imgui.h"
+
+using namespace firn;
+
+// --- Preview session -------------------------------------------------------
+
+void App::preview_begin(const char* name) {
+    if (!doc || active_layer() < 0) return;
+    preview.active = true;
+    preview.layer = active_layer();
+    preview.name = name;
+    preview.before = doc->layer(preview.layer).pixels;
+    preview.histogram = adjust::histogram_luma(preview.before);
+    preview.dirty = true;
+    preview.live = static_cast<size_t>(preview.before.width()) * preview.before.height() <= 1024 * 1024;
+}
+
+void App::preview_update(const std::function<void(Image&)>& op, bool force) {
+    if (!preview.active || !doc || !preview.dirty) return;
+    // Large layers only re-render once the slider is released.
+    if (!force && !preview.live && ImGui::IsAnyItemActive()) return;
+    Image work = preview.before;
+    op(work);
+    raster::apply_through_mask(work, preview.before, doc->selection());
+    doc->layer(preview.layer).pixels = std::move(work);
+    doc->touch();
+    preview.dirty = false;
+}
+
+void App::preview_commit() {
+    if (!preview.active || !doc) return;
+    commit(std::make_unique<LayerSnapshotCommand>(preview.layer, preview.name, preview.before, doc->layer(preview.layer).pixels));
+    preview = Preview{};
+}
+
+void App::preview_cancel() {
+    if (preview.active && doc && preview.layer < doc->layer_count()) {
+        doc->layer(preview.layer).pixels = preview.before;
+        doc->touch();
+    }
+    preview = Preview{};
+}
+
+namespace {
+
+// One modal dialog: `body` draws the controls and returns true when a
+// parameter changed; `op` applies the current parameters to an image.
+template <class Body, class Op>
+void adjust_modal(App& app, const char* title, Body body, Op op) {
+    if (!ImGui::BeginPopupModal(title, nullptr, ImGuiWindowFlags_AlwaysAutoResize)) return;
+    if (ImGui::IsWindowAppearing()) app.preview_begin(title);
+    if (body()) app.preview.dirty = true;
+    app.preview_update(op);
+    ImGui::Separator();
+    if (!app.preview.live) ImGui::TextDisabled("Large image: preview updates when a slider is released.");
+    const bool ok = ImGui::Button("OK", ImVec2(80, 0));
+    ImGui::SameLine();
+    const bool cancel = ImGui::Button("Cancel", ImVec2(80, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape, false);
+    if (ok) {
+        app.preview_update(op, true);
+        app.preview_commit();
+        ImGui::CloseCurrentPopup();
+    } else if (cancel) {
+        app.preview_cancel();
+        ImGui::CloseCurrentPopup();
+    }
+    ImGui::EndPopup();
+}
+
+void draw_histogram(const std::array<int, 256>& h, ImVec2 size) {
+    int peak = 1;
+    for (int v : h) peak = std::max(peak, v);
+    const ImVec2 p0 = ImGui::GetCursorScreenPos();
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    dl->AddRectFilled(p0, ImVec2(p0.x + size.x, p0.y + size.y), IM_COL32(30, 30, 30, 255));
+    for (int i = 0; i < 256; ++i) {
+        const float x0 = p0.x + size.x * i / 256.0f, x1 = p0.x + size.x * (i + 1) / 256.0f;
+        const float hh = size.y * std::sqrt(static_cast<float>(h[i]) / peak);  // sqrt so small counts stay visible
+        dl->AddRectFilled(ImVec2(x0, p0.y + size.y - hh), ImVec2(x1, p0.y + size.y), IM_COL32(180, 180, 180, 255));
+    }
+    ImGui::Dummy(size);
+}
+
+// Editable curve: click to add a point, drag to move, right-click to remove.
+bool curve_editor(App& app, const ImVec2 size) {
+    bool changed = false;
+    const ImVec2 p0 = ImGui::GetCursorScreenPos();
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    ImGui::InvisibleButton("curve", size, ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonRight);
+    const bool hovered = ImGui::IsItemHovered();
+    auto to_screen = [&](float x, float y) { return ImVec2(p0.x + x / 255.0f * size.x, p0.y + size.y - y / 255.0f * size.y); };
+    auto from_screen = [&](ImVec2 s) {
+        return std::pair<float, float>{std::clamp((s.x - p0.x) / size.x * 255.0f, 0.0f, 255.0f),
+                                       std::clamp((p0.y + size.y - s.y) / size.y * 255.0f, 0.0f, 255.0f)};
+    };
+    auto& pts = app.curve_points;
+    const ImVec2 mouse = ImGui::GetIO().MousePos;
+    auto nearest = [&]() {
+        int best = -1;
+        float bd = 10.0f;
+        for (size_t i = 0; i < pts.size(); ++i) {
+            const ImVec2 s = to_screen(pts[i].first, pts[i].second);
+            const float d = std::hypot(s.x - mouse.x, s.y - mouse.y);
+            if (d < bd) { bd = d; best = static_cast<int>(i); }
+        }
+        return best;
+    };
+    if (hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+        app.curve_drag = nearest();
+        if (app.curve_drag < 0) {
+            pts.push_back(from_screen(mouse));
+            std::sort(pts.begin(), pts.end());
+            app.curve_drag = static_cast<int>(std::find(pts.begin(), pts.end(), pts.back()) - pts.begin());
+            for (size_t i = 0; i < pts.size(); ++i) if (pts[i] == from_screen(mouse)) app.curve_drag = static_cast<int>(i);
+            changed = true;
+        }
+    }
+    if (app.curve_drag >= 0 && ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
+        auto p = from_screen(mouse);
+        // Keep endpoints on the edges and points ordered.
+        if (app.curve_drag == 0) p.first = 0;
+        else if (app.curve_drag == static_cast<int>(pts.size()) - 1) p.first = 255;
+        else p.first = std::clamp(p.first, pts[app.curve_drag - 1].first + 1, pts[app.curve_drag + 1].first - 1);
+        if (pts[app.curve_drag] != p) { pts[app.curve_drag] = p; changed = true; }
+    } else {
+        app.curve_drag = -1;
+    }
+    if (hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Right)) {
+        const int n = nearest();
+        if (n > 0 && n < static_cast<int>(pts.size()) - 1) { pts.erase(pts.begin() + n); changed = true; }
+    }
+    // Draw: grid, curve, points.
+    dl->AddRectFilled(p0, ImVec2(p0.x + size.x, p0.y + size.y), IM_COL32(30, 30, 30, 255));
+    for (int i = 1; i < 4; ++i) {
+        dl->AddLine(ImVec2(p0.x + size.x * i / 4, p0.y), ImVec2(p0.x + size.x * i / 4, p0.y + size.y), IM_COL32(60, 60, 60, 255));
+        dl->AddLine(ImVec2(p0.x, p0.y + size.y * i / 4), ImVec2(p0.x + size.x, p0.y + size.y * i / 4), IM_COL32(60, 60, 60, 255));
+    }
+    const adjust::Lut lut = adjust::curve_lut(pts);
+    for (int x = 1; x < 256; ++x) dl->AddLine(to_screen(x - 1.0f, lut[x - 1]), to_screen(static_cast<float>(x), lut[x]), IM_COL32(230, 230, 230, 255), 1.5f);
+    for (size_t i = 0; i < pts.size(); ++i)
+        dl->AddCircleFilled(to_screen(pts[i].first, pts[i].second), 4.0f, static_cast<int>(i) == app.curve_drag ? IM_COL32(255, 200, 0, 255) : IM_COL32(120, 180, 255, 255));
+    return changed;
+}
+
+}  // namespace
+
+void App::draw_adjust_dialogs() {
+    static const char* kTitles[] = {nullptr, "Brightness/Contrast", "Curves", "Gamma Correction", "Levels", "Threshold",
+                                    "Channel Mixer", "Colorize", "Hue/Saturation/Lightness", "Average", "Gaussian Blur",
+                                    "Posterize", "Solarize"};
+    if (open_adjust != Adj::None) {
+        if (doc && active_layer() >= 0) ImGui::OpenPopup(kTitles[static_cast<int>(open_adjust)]);
+        open_adjust = Adj::None;
+    }
+
+    adjust_modal(*this, "Brightness/Contrast",
+        [&] { bool c = ImGui::SliderInt("Brightness", &bc_brightness, -255, 255); c |= ImGui::SliderInt("Contrast", &bc_contrast, -100, 100); return c; },
+        [&](Image& img) { adjust::apply_lut(img, adjust::brightness_contrast_lut(bc_brightness, bc_contrast)); });
+
+    adjust_modal(*this, "Curves",
+        [&] {
+            bool c = curve_editor(*this, ImVec2(256, 256));
+            ImGui::TextDisabled("Click to add a point, drag to move, right-click to remove.");
+            if (ImGui::SmallButton("Reset")) { curve_points = {{0, 0}, {255, 255}}; c = true; }
+            return c;
+        },
+        [&](Image& img) { adjust::apply_lut(img, adjust::curve_lut(curve_points)); });
+
+    adjust_modal(*this, "Gamma Correction",
+        [&] { return ImGui::SliderFloat("Gamma", &gamma_value, 0.1f, 5.0f, "%.2f", ImGuiSliderFlags_Logarithmic); },
+        [&](Image& img) { adjust::apply_lut(img, adjust::gamma_lut(gamma_value)); });
+
+    adjust_modal(*this, "Levels",
+        [&] {
+            draw_histogram(preview.histogram, ImVec2(256, 80));
+            bool c = false;
+            ImGui::TextUnformatted("Input levels");
+            c |= ImGui::SliderInt("Low##in", &lv_in_lo, 0, 254);
+            c |= ImGui::SliderFloat("Gamma", &lv_gamma, 0.1f, 5.0f, "%.2f", ImGuiSliderFlags_Logarithmic);
+            c |= ImGui::SliderInt("High##in", &lv_in_hi, 1, 255);
+            if (lv_in_hi <= lv_in_lo) lv_in_hi = lv_in_lo + 1;
+            ImGui::TextUnformatted("Output levels");
+            c |= ImGui::SliderInt("Low##out", &lv_out_lo, 0, 255);
+            c |= ImGui::SliderInt("High##out", &lv_out_hi, 0, 255);
+            if (ImGui::SmallButton("Reset")) { lv_in_lo = 0; lv_in_hi = 255; lv_gamma = 1; lv_out_lo = 0; lv_out_hi = 255; c = true; }
+            return c;
+        },
+        [&](Image& img) { adjust::apply_lut(img, adjust::levels_lut(lv_in_lo, lv_gamma, lv_in_hi, lv_out_lo, lv_out_hi)); });
+
+    adjust_modal(*this, "Threshold",
+        [&] { draw_histogram(preview.histogram, ImVec2(256, 60)); return ImGui::SliderInt("Threshold", &threshold_value, 1, 255); },
+        [&](Image& img) { adjust::greyscale_then_threshold(img, threshold_value); });
+
+    adjust_modal(*this, "Channel Mixer",
+        [&] {
+            bool c = ImGui::Checkbox("Monochrome", &mixer.monochrome);
+            if (!mixer.monochrome) { ImGui::SameLine(); ImGui::SetNextItemWidth(100); ImGui::Combo("Output channel", &mixer_row, "Red\0Green\0Blue\0"); }
+            const int row = mixer.monochrome ? 0 : mixer_row;
+            c |= ImGui::SliderFloat("Red", &mixer.mix[row][0], -200.0f, 200.0f, "%.0f%%");
+            c |= ImGui::SliderFloat("Green", &mixer.mix[row][1], -200.0f, 200.0f, "%.0f%%");
+            c |= ImGui::SliderFloat("Blue", &mixer.mix[row][2], -200.0f, 200.0f, "%.0f%%");
+            c |= ImGui::SliderFloat("Constant", &mixer.constant[row], -200.0f, 200.0f, "%.0f%%");
+            if (ImGui::SmallButton("Reset")) { mixer = adjust::ChannelMix{}; c = true; }
+            return c;
+        },
+        [&](Image& img) { adjust::channel_mixer(img, mixer); });
+
+    adjust_modal(*this, "Colorize",
+        [&] {
+            bool c = ImGui::SliderInt("Hue", &colorize_hue, 0, 359);
+            c |= ImGui::SliderInt("Saturation", &colorize_sat, 0, 255);
+            return c;
+        },
+        [&](Image& img) { adjust::colorize(img, colorize_hue, colorize_sat); });
+
+    adjust_modal(*this, "Hue/Saturation/Lightness",
+        [&] {
+            bool c = ImGui::SliderInt("Hue", &hsl_h, -180, 180);
+            c |= ImGui::SliderInt("Saturation", &hsl_s, -100, 100);
+            c |= ImGui::SliderInt("Lightness", &hsl_l, -100, 100);
+            return c;
+        },
+        [&](Image& img) { adjust::hsl_adjust(img, hsl_h, hsl_s, hsl_l); });
+
+    adjust_modal(*this, "Average",
+        [&] { return ImGui::SliderInt("Radius", &box_radius, 1, 50); },
+        [&](Image& img) { raster::box_blur(img, box_radius); });
+
+    adjust_modal(*this, "Gaussian Blur",
+        [&] { return ImGui::SliderFloat("Radius", &blur_radius, 0.1f, 100.0f, "%.1f", ImGuiSliderFlags_Logarithmic); },
+        [&](Image& img) { raster::gaussian_blur(img, blur_radius); });
+
+    adjust_modal(*this, "Posterize",
+        [&] { return ImGui::SliderInt("Levels", &posterize_levels, 2, 255, "%d", ImGuiSliderFlags_Logarithmic); },
+        [&](Image& img) { adjust::apply_lut(img, adjust::posterize_lut(posterize_levels)); });
+
+    adjust_modal(*this, "Solarize",
+        [&] { return ImGui::SliderInt("Threshold", &solarize_threshold, 1, 254); },
+        [&](Image& img) { adjust::apply_lut(img, adjust::solarize_lut(solarize_threshold)); });
+}

@@ -270,6 +270,47 @@ void gaussian_blur(Image& img, float radius) {
     }
 }
 
+// Separable box blur on all four channels. Straight-alpha blur is not
+// colour-correct at transparent edges; premultiplied comes later.
+void box_blur(Image& img, int radius) {
+    const int w = img.width(), h = img.height(), r = std::max(0, radius);
+    if (r == 0 || w == 0 || h == 0) return;
+
+    std::vector<uint8_t> tmp(img.size_bytes());
+    const uint8_t* src = img.data();
+    uint8_t* dst = tmp.data();
+
+    // Horizontal pass: src -> tmp
+    for (int y = 0; y < h; ++y) {
+        for (int x = 0; x < w; ++x) {
+            int sum[4] = {0, 0, 0, 0}, cnt = 0;
+            for (int k = -r; k <= r; ++k) {
+                int xx = std::clamp(x + k, 0, w - 1);
+                const uint8_t* s = src + (static_cast<size_t>(y) * w + xx) * 4;
+                for (int c = 0; c < 4; ++c) sum[c] += s[c];
+                ++cnt;
+            }
+            uint8_t* d = dst + (static_cast<size_t>(y) * w + x) * 4;
+            for (int c = 0; c < 4; ++c) d[c] = static_cast<uint8_t>(sum[c] / cnt);
+        }
+    }
+    // Vertical pass: tmp -> img
+    uint8_t* out = img.data();
+    for (int y = 0; y < h; ++y) {
+        for (int x = 0; x < w; ++x) {
+            int sum[4] = {0, 0, 0, 0}, cnt = 0;
+            for (int k = -r; k <= r; ++k) {
+                int yy = std::clamp(y + k, 0, h - 1);
+                const uint8_t* s = dst + (static_cast<size_t>(yy) * w + x) * 4;
+                for (int c = 0; c < 4; ++c) sum[c] += s[c];
+                ++cnt;
+            }
+            uint8_t* d = out + (static_cast<size_t>(y) * w + x) * 4;
+            for (int c = 0; c < 4; ++c) d[c] = static_cast<uint8_t>(sum[c] / cnt);
+        }
+    }
+}
+
 void flip_vertical(Image& img) {
     const int w = img.width(), h = img.height();
     const size_t row = static_cast<size_t>(w) * 4;

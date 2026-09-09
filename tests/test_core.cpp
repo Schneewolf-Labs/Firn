@@ -4,6 +4,7 @@
 #include <memory>
 #include <string>
 
+#include "firn/adjust.h"
 #include "firn/commands.h"
 #include "firn/document.h"
 #include "firn/io.h"
@@ -606,7 +607,81 @@ static void test_psp_writer_roundtrip() {
     CHECK(back->layer(2).name == "Empty" && back->layer(2).pixels.get(0, 0).a == 0);
 }
 
+static void test_adjust_module() {
+    // HSL round trip.
+    for (Color c : {Color{255, 0, 0, 255}, Color{10, 200, 90, 255}, Color{128, 128, 128, 255}, Color{0, 0, 255, 255}}) {
+        adjust::HSL h = adjust::rgb_to_hsl(c.r, c.g, c.b);
+        uint8_t r, g, b;
+        adjust::hsl_to_rgb(h, &r, &g, &b);
+        CHECK(std::abs(r - c.r) <= 1 && std::abs(g - c.g) <= 1 && std::abs(b - c.b) <= 1);
+    }
+    CHECK(adjust::rgb_to_hsl(255, 0, 0).h == 0.0f && adjust::rgb_to_hsl(0, 255, 0).h == 120.0f);
+
+    // Colorize keeps lightness; a grey becomes the requested hue.
+    Image img(1, 1, {100, 100, 100, 255});
+    adjust::colorize(img, 0, 255);
+    Color c = img.get(0, 0);
+    CHECK(c.r > c.g && c.g == c.b && c.g == 0);  // pure red at lightness 100/255 -> r=200
+    CHECK(c.r == 200);
+    // HSL: hue shift 120 turns red green; +100 lightness is white; -100 saturation is grey.
+    Image red(1, 1, {255, 0, 0, 255});
+    adjust::hsl_adjust(red, 120, 0, 0);
+    CHECK(red.get(0, 0).g == 255 && red.get(0, 0).r == 0);
+    adjust::hsl_adjust(red, 0, 0, 100);
+    CHECK(red.get(0, 0).r == 255 && red.get(0, 0).b == 255);
+    Image red2(1, 1, {255, 0, 0, 255});
+    adjust::hsl_adjust(red2, 0, -100, 0);
+    CHECK(red2.get(0, 0).r == red2.get(0, 0).g);
+
+    // LUTs.
+    adjust::Lut lv = adjust::levels_lut(64, 1.0f, 192, 0, 255);
+    CHECK(lv[64] == 0 && lv[192] == 255 && lv[128] >= 127 && lv[128] <= 128);
+    adjust::Lut ga = adjust::gamma_lut(2.0f);
+    CHECK(ga[0] == 0 && ga[255] == 255 && ga[64] > 64);
+    CHECK(adjust::threshold_lut(128)[127] == 0 && adjust::threshold_lut(128)[128] == 255);
+    adjust::Lut po = adjust::posterize_lut(2);
+    CHECK(po[0] == 0 && po[127] == 0 && po[128] == 255);
+    adjust::Lut so = adjust::solarize_lut(128);
+    CHECK(so[100] == 100 && so[200] == 55);
+    adjust::Lut bc = adjust::brightness_contrast_lut(50, 0);
+    CHECK(bc[100] == 150);
+    adjust::Lut id = adjust::curve_lut({{0, 0}, {255, 255}});
+    CHECK(id[0] == 0 && id[100] == 100 && id[255] == 255);
+    adjust::Lut s = adjust::curve_lut({{0, 0}, {64, 32}, {192, 224}, {255, 255}});
+    CHECK(s[64] == 32 && s[192] == 224 && s[128] > 100 && s[128] < 156);
+    for (int i = 1; i < 256; ++i) CHECK(s[i] >= s[i - 1]);  // monotone
+
+    // Channel mixer: swap red and blue; monochrome uses row 0.
+    Image mix(1, 1, {200, 50, 10, 255});
+    adjust::ChannelMix m;
+    m.mix[0][0] = 0; m.mix[0][2] = 100; m.mix[2][2] = 0; m.mix[2][0] = 100;
+    adjust::channel_mixer(mix, m);
+    CHECK(mix.get(0, 0).r == 10 && mix.get(0, 0).b == 200 && mix.get(0, 0).g == 50);
+    adjust::ChannelMix mono;
+    mono.monochrome = true;
+    mono.mix[0][0] = 100; mono.mix[0][1] = 0; mono.mix[0][2] = 0;
+    Image mono_img(1, 1, {200, 50, 10, 255});
+    adjust::channel_mixer(mono_img, mono);
+    CHECK(mono_img.get(0, 0).r == 200 && mono_img.get(0, 0).g == 200 && mono_img.get(0, 0).b == 200);
+
+    // Histogram ops on a low-contrast image.
+    Image lowc(2, 1);
+    lowc.set(0, 0, {100, 100, 100, 255});
+    lowc.set(1, 0, {150, 150, 150, 255});
+    Image st = lowc;
+    adjust::histogram_stretch(st);
+    CHECK(st.get(0, 0).r == 0 && st.get(1, 0).r == 255);
+    Image ac = lowc;
+    adjust::auto_contrast(ac, 0.0f);
+    CHECK(ac.get(0, 0).r == 0 && ac.get(1, 0).r == 255);
+    Image eq = lowc;
+    adjust::histogram_equalize(eq);
+    CHECK(eq.get(1, 0).r == 255 && eq.get(0, 0).r < eq.get(1, 0).r);
+    CHECK(adjust::histogram_luma(lowc)[100] == 1 && adjust::histogram_luma(lowc)[150] == 1);
+}
+
 int main() {
+    test_adjust_module();
     test_psp_writer_roundtrip();
     test_geometry();
     test_psp_reader();

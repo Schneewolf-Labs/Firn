@@ -1,4 +1,5 @@
 #pragma once
+#include <functional>
 #include <memory>
 #include <string>
 #include <vector>
@@ -80,6 +81,18 @@ public:
 protected:
     void apply(Image& img) override;
     int radius_;
+};
+
+// Any in-place pixel function as an undoable, selection-clipped command.
+class AdjustCommand : public LayerPixelCommand {
+public:
+    AdjustCommand(size_t layer, std::string name, std::function<void(Image&)> fn)
+        : LayerPixelCommand(layer), name_(std::move(name)), fn_(std::move(fn)) {}
+    std::string name() const override { return name_; }
+protected:
+    void apply(Image& img) override { fn_(img); }
+    std::string name_;
+    std::function<void(Image&)> fn_;
 };
 
 class GreyscaleCommand : public LayerPixelCommand {

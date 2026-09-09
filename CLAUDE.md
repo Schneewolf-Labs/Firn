@@ -70,6 +70,14 @@ docs/    notes on the original: command inventory, module mapping, FORMAT.md
   `raster::apply_through_mask`; tools pass `&doc->selection()` as the clip to
   `raster::Stroke` / `raster::flood_fill`. New pixel commands get this for
   free; new tools must opt in.
+- **Adjustment and effect dialogs** live in `app/src/ui/Adjust.cpp` and use
+  `adjust_modal(app, title, body, op)`: `body` draws widgets and returns
+  true on change, `op` applies the parameters to an `Image`. The preview
+  session re-applies `op` to the active layer live (on slider release for
+  layers over 1 MP), OK commits one `LayerSnapshotCommand`, Cancel restores.
+  Add new pixel operations to `core` (`adjust.h` for colour, `raster.h` for
+  spatial) with a test, then one `adjust_modal` call and a menu item.
+  Instant menu items use `AdjustCommand(layer, name, fn)`.
 - **Canvas-size changes** derive from `GeometryCommand`: implement
   `transform(in, out)` producing every layer at the new size plus the
   selection; undo restores a full `Document::State` snapshot.

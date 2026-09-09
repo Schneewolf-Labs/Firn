@@ -5,6 +5,7 @@ add_library(firncore STATIC
   src/raster.cpp
   src/mask.cpp
   src/blend.cpp
+  src/adjust.cpp
   src/io.cpp
   src/io_psp.cpp
 )

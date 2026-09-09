@@ -1,11 +1,14 @@
 #pragma once
+#include <functional>
 #include <memory>
+#include <array>
 #include <string>
 #include <vector>
 
 #include <SDL_opengl.h>
 
 #include "imgui.h"
+#include "firn/adjust.h"
 #include "firn/commands.h"
 #include "firn/document.h"
 #include "firn/raster.h"
@@ -63,9 +66,34 @@ struct App {
     enum class PendingFileOp { None, Open, SaveAs };
     PendingFileOp file_op = PendingFileOp::None;
     bool show_new_dialog = false;
-    bool show_blur_dialog = false;
-    bool blur_gaussian = false;         // which blur the pending dialog is for
-    bool show_bc_dialog = false;
+    // Adjustment / effect dialogs with live preview (ui/Adjust.cpp)
+    enum class Adj { None, BrightnessContrast, Curves, Gamma, Levels, Threshold, ChannelMixer, Colorize, HSL,
+                     Average, Gaussian, Posterize, Solarize };
+    Adj open_adjust = Adj::None;
+    struct Preview {
+        bool active = false;
+        size_t layer = 0;
+        std::string name;
+        firn::Image before;
+        std::array<int, 256> histogram{};
+        bool dirty = true;
+        bool live = true;               // small layer: re-apply on every change
+    } preview;
+    void preview_begin(const char* name);
+    void preview_update(const std::function<void(firn::Image&)>& op, bool force = false);
+    void preview_commit();
+    void preview_cancel();
+    void draw_adjust_dialogs();
+    // Parameters, remembered between uses like the original's dialogs.
+    int colorize_hue = 0, colorize_sat = 128;
+    int hsl_h = 0, hsl_s = 0, hsl_l = 0;
+    int lv_in_lo = 0, lv_in_hi = 255, lv_out_lo = 0, lv_out_hi = 255;
+    float lv_gamma = 1.0f, gamma_value = 1.0f;
+    int threshold_value = 128, posterize_levels = 6, solarize_threshold = 128;
+    firn::adjust::ChannelMix mixer;
+    int mixer_row = 0;
+    std::vector<std::pair<float, float>> curve_points{{0, 0}, {255, 255}};
+    int curve_drag = -1;
     int show_sel_dialog = 0;            // 1 expand, 2 contract, 3 feather
     bool show_layer_props_dialog = false;
     bool show_resize_dialog = false;
@@ -89,6 +117,7 @@ struct App {
     bool show_imgui_demo = false;
     int new_w = 800, new_h = 600;
     float blur_radius = 3.0f;
+    int box_radius = 3;
     int bc_brightness = 0, bc_contrast = 0;
     int sel_modify_px = 1;
     std::string status;

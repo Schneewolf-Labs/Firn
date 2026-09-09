@@ -29,11 +29,12 @@ what to work on next.
 
 ## 3. Adjustments with live preview (the most-called script commands)
 
-- [ ] Preview framework: dialogs apply to the layer live, commit on OK, restore on Cancel
-- [ ] Colorize, Hue/Saturation/Lightness, Levels, Curves
-- [ ] Posterize, Solarize, Threshold, Channel Mixer
-- [ ] Auto contrast, histogram equalize/stretch
-- [ ] Brightness/Contrast and the blurs move onto the preview framework
+- [x] Preview framework: dialogs apply to the layer live, commit on OK, restore on Cancel
+- [x] Colorize, Hue/Saturation/Lightness, Levels, Curves
+- [x] Posterize, Solarize, Threshold, Channel Mixer
+- [x] Auto contrast, histogram equalize/stretch
+- [x] Brightness/Contrast and the blurs move onto the preview framework
+- [ ] Gamma per channel, Color Balance (shadows/midtones/highlights), Hue Map
 
 ## 4. Effects
 
