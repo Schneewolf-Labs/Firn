@@ -248,6 +248,9 @@ bool Driver::parse_line(const std::string& line, App& app) {
         Step s{Step::Save}; s.text = line.substr(5); steps_.push_back(s); wait(1);
     } else if (op == "open" && a.size() >= 2) {
         Step s{Step::Open}; s.text = line.substr(5); steps_.push_back(s); wait(2);
+    } else if (op == "drop" && a.size() >= 2) {
+        // drop:PATH pushes the SDL drop event, exercising the same path as a real drag-and-drop.
+        Step s{Step::Drop}; s.text = line.substr(5); steps_.push_back(s); wait(2);
     } else if (op == "do" && a.size() >= 2) {
         // do <Command> <json params>
         Step s{Step::Do}; s.text = line.substr(3); steps_.push_back(s); wait(1);
@@ -364,6 +367,16 @@ void Driver::before_frame(App& app, SDL_Window* window) {
             case Step::Adjust: if (!app.open_adjust_by_title(s.text.c_str())) { steps_.clear(); ack("error no dialog titled " + s.text); return; } consumed_frame = true; break;
             case Step::Save: if (!app.save_document(s.text)) { steps_.clear(); ack("error " + app.status); return; } consumed_frame = true; break;
             case Step::Open: if (!app.open_document(s.text)) { steps_.clear(); ack("error " + app.status); return; } consumed_frame = true; break;
+            case Step::Drop: {
+                SDL_Event e{};
+                e.type = SDL_DROPFILE;
+                e.drop.windowID = SDL_GetWindowID(window);
+                e.drop.file = static_cast<char*>(SDL_malloc(s.text.size() + 1));
+                std::memcpy(e.drop.file, s.text.c_str(), s.text.size() + 1);
+                SDL_PushEvent(&e);
+                consumed_frame = true;
+                break;
+            }
             case Step::Ack: steps_.pop_front(); ack(state_text(app)); continue;
         }
         steps_.pop_front();

@@ -168,6 +168,10 @@ void App::new_document(int w, int h) {
 bool App::open_document(const std::string& path) {
     std::string err;
     std::vector<std::string> warnings;
+    if (!std::filesystem::exists(path)) {
+        status = "Open failed: no such file: " + path;
+        return false;
+    }
     auto loaded = io::load_document(path, &err, &warnings);
     if (!loaded) {
         status = "Open failed: " + err;

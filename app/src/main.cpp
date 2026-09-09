@@ -100,6 +100,7 @@ int main(int argc, char** argv) {
         return 1;
     }
     set_window_icon(window);
+    SDL_EventState(SDL_DROPFILE, SDL_ENABLE);
     SDL_GLContext gl_context = SDL_GL_CreateContext(window);
     SDL_GL_MakeCurrent(window, gl_context);
     SDL_GL_SetSwapInterval(1);
@@ -131,6 +132,11 @@ int main(int argc, char** argv) {
             if (driver.active() && (event.type == SDL_MOUSEMOTION || event.type == SDL_MOUSEBUTTONDOWN || event.type == SDL_MOUSEBUTTONUP || event.type == SDL_MOUSEWHEEL)) continue;
             ImGui_ImplSDL2_ProcessEvent(&event);
             if (event.type == SDL_QUIT) app.request_quit();
+            // Files dropped onto the window open as documents (one per file).
+            if (event.type == SDL_DROPFILE && event.drop.file) {
+                if (!app.open_document(event.drop.file)) std::fprintf(stderr, "%s\n", app.status.c_str());
+                SDL_free(event.drop.file);
+            }
             if (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_CLOSE &&
                 event.window.windowID == SDL_GetWindowID(window))
                 app.request_quit();

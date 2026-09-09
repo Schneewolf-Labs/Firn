@@ -26,6 +26,7 @@ touched, and real mouse events are ignored while driving. Steps
     wait:N                         let N frames run
     shot:FILE                      save the framebuffer to FILE (PNG)
     save:PATH  open:PATH            save the current image / open a file (no file dialog)
+    drop:PATH                       open a file the way a drag-and-drop onto the window does
     adjust:TITLE                   open an Adjust/Effects dialog by its title (then key:Enter applies it)
     profile:assign|convert|remove:sRGB|AdobeRGB|ProPhoto   color management actions
     state                          print the app state (tool, layers, selection, zoom, origin, history, status)
