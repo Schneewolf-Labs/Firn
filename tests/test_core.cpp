@@ -1188,7 +1188,28 @@ static void test_kaleidoscope_sunburst() {
     CHECK(lit > 0);
 }
 
+static void test_brush_texture() {
+    // 2x1 texture: left pixel black (no paint), right pixel white (full).
+    Image tex(2, 1);
+    tex.set(0, 0, {0, 0, 0, 255});
+    tex.set(1, 0, {255, 255, 255, 255});
+    Image base(8, 4, {0, 0, 0, 255});
+    raster::Brush b; b.size = 100; b.hardness = 1; b.texture = raster::BrushTip::texture_from_image(tex); b.texture_strength = 1.0f;
+    raster::Stroke st(base, b, {255, 255, 255, 255}, raster::StrokeMode::Paint);
+    Image out = base;
+    st.add_point(4, 2);
+    st.render(out);
+    CHECK(out.get(0, 0).r == 0 && out.get(1, 0).r == 255 && out.get(2, 3).r == 0 && out.get(3, 3).r == 255);
+    b.texture_strength = 0.5f;
+    raster::Stroke half(base, b, {255, 255, 255, 255}, raster::StrokeMode::Paint);
+    Image ho = base;
+    half.add_point(4, 2);
+    half.render(ho);
+    CHECK(ho.get(0, 0).r >= 127 && ho.get(0, 0).r <= 128 && ho.get(1, 0).r == 255);
+}
+
 int main() {
+    test_brush_texture();
     test_kaleidoscope_sunburst();
     test_brush_tip();
     test_tube_info();

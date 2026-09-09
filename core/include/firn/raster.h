@@ -29,6 +29,8 @@ struct BrushTip {
     // Builds a tip from an image: darker pixels cover more (white = nothing),
     // weighted by alpha, as the original's brush files are stored.
     static std::shared_ptr<const BrushTip> from_image(const Image& img);
+    // Builds a texture: lighter pixels let more paint through.
+    static std::shared_ptr<const BrushTip> texture_from_image(const Image& img);
 };
 
 struct Brush {
@@ -40,6 +42,10 @@ struct Brush {
     float flow = 0.1f;
     bool square = false;     // square stamp instead of round
     std::shared_ptr<const BrushTip> tip;  // custom tip; overrides round/square and hardness
+    // Paper texture: a tiled coverage map (light = more paint) mixed into every
+    // stamp by `texture_strength` (0 = ignore texture, 1 = full).
+    std::shared_ptr<const BrushTip> texture;
+    float texture_strength = 0.5f;
 };
 
 // Paint: color. Erase: clear alpha. Clone: pixels from a source image at an

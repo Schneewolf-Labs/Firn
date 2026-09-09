@@ -55,6 +55,27 @@ std::shared_ptr<const BrushTip> BrushTip::from_image(const Image& img) {
     return tip;
 }
 
+std::shared_ptr<const BrushTip> BrushTip::texture_from_image(const Image& img) {
+    auto t = std::make_shared<BrushTip>();
+    t->width = img.width();
+    t->height = img.height();
+    t->coverage.resize(static_cast<size_t>(img.width()) * img.height());
+    for (size_t i = 0; i < t->coverage.size(); ++i) {
+        const uint8_t* p = img.data() + i * 4;
+        t->coverage[i] = (p[0] * 299 + p[1] * 587 + p[2] * 114) / 255000.0f;
+    }
+    return t;
+}
+
+// Texture weight at an image pixel: 1 without a texture.
+static inline float texture_weight(const Brush& b, int x, int y) {
+    if (!b.texture || b.texture->width <= 0 || b.texture_strength <= 0.0f) return 1.0f;
+    const int tx = ((x % b.texture->width) + b.texture->width) % b.texture->width;
+    const int ty = ((y % b.texture->height) + b.texture->height) % b.texture->height;
+    const float t = b.texture->coverage[static_cast<size_t>(ty) * b.texture->width + tx];
+    return 1.0f - b.texture_strength * (1.0f - t);
+}
+
 void Stroke::stamp(float cx, float cy) {
     if (brush_.tip && brush_.tip->width > 0) { stamp_tip(cx, cy); return; }
     const float r = std::max(brush_.size * 0.5f, 0.5f);
@@ -74,6 +95,7 @@ void Stroke::stamp(float cx, float cy) {
             else if (brush_.hardness >= 1.0f || r - inner < 1.0f) cov = std::clamp(r + 0.5f - d, 0.0f, 1.0f);
             else cov = std::clamp((r - d) / (r - inner), 0.0f, 1.0f);
             if (cov <= 0.0f) continue;
+            cov *= texture_weight(brush_, x, y);
             float& m = mask_[static_cast<size_t>(y) * w + x];
             m = brush_.accumulate ? std::min(1.0f, m + cov * brush_.flow) : std::max(m, cov);
         }
@@ -108,7 +130,7 @@ void Stroke::stamp_tip(float cx, float cy) {
         for (int x = box.x0; x < box.x1; ++x) {
             const float u = ((x + 0.5f) - (cx - tw * 0.5f)) / scale - 0.5f;
             const float v = ((y + 0.5f) - (cy - th * 0.5f)) / scale - 0.5f;
-            const float cov = std::clamp(sample(u, v), 0.0f, 1.0f);
+            const float cov = std::clamp(sample(u, v), 0.0f, 1.0f) * texture_weight(brush_, x, y);
             if (cov <= 0.0f) continue;
             float& m = mask_[static_cast<size_t>(y) * w + x];
             m = brush_.accumulate ? std::min(1.0f, m + cov * brush_.flow) : std::max(m, cov);

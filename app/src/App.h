@@ -211,6 +211,13 @@ struct App {
     void ensure_brush_tips();
     void select_brush_tip(int index);
     void brush_tip_from_selection();
+    // Paper textures
+    struct TextureEntry { std::string path, name; std::shared_ptr<const firn::raster::BrushTip> texture; };
+    std::vector<TextureEntry> textures;
+    bool textures_loaded = false;
+    int texture_index = -1;
+    void ensure_textures();
+    void select_texture(int index);
     // Picture tubes
     struct TubeEntry { std::string path, name; };
     std::vector<TubeEntry> tubes;

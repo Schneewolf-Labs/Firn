@@ -500,6 +500,54 @@ void App::brush_tip_from_selection() {
     status = "Brush tip created from the selection.";
 }
 
+// --- Paper textures --------------------------------------------------------
+
+void App::ensure_textures() {
+    if (textures_loaded) return;
+    textures_loaded = true;
+    namespace fs = std::filesystem;
+    std::vector<fs::path> dirs;
+    if (const char* extra = std::getenv("FIRN_TEXTURE_DIRS")) {
+        std::string s = extra;
+        size_t start = 0;
+        while (start <= s.size()) {
+            const size_t end = s.find(':', start);
+            dirs.emplace_back(s.substr(start, end == std::string::npos ? std::string::npos : end - start));
+            if (end == std::string::npos) break;
+            start = end + 1;
+        }
+    }
+    dirs.emplace_back(fs::path(Config::directory()) / "textures");
+#ifdef FIRN_SOURCE_DIR
+    dirs.emplace_back(fs::path(FIRN_SOURCE_DIR) / "WindowsInstall" / "Textures");
+#endif
+    for (const fs::path& d : dirs) {
+        std::error_code ec;
+        if (!fs::is_directory(d, ec)) continue;
+        for (const auto& de : fs::recursive_directory_iterator(d, fs::directory_options::skip_permission_denied, ec)) {
+            if (!de.is_regular_file(ec)) continue;
+            std::string ext = de.path().extension().string();
+            for (char& c : ext) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+            if (ext != ".bmp" && ext != ".png" && ext != ".jpg" && ext != ".jpeg") continue;
+            textures.push_back({de.path().string(), de.path().stem().string(), nullptr});
+        }
+    }
+    std::sort(textures.begin(), textures.end(), [](const TextureEntry& a, const TextureEntry& b) { return a.name < b.name; });
+}
+
+void App::select_texture(int index) {
+    if (index < 0 || index >= static_cast<int>(textures.size())) { texture_index = -1; brush.texture.reset(); return; }
+    TextureEntry& e = textures[index];
+    if (!e.texture) {
+        std::string err;
+        auto img = io::load(e.path, &err);
+        if (!img) { status = "Texture failed: " + err; return; }
+        e.texture = raster::BrushTip::texture_from_image(*img);
+    }
+    texture_index = index;
+    brush.texture = e.texture;
+}
+
 // --- Picture tubes ---------------------------------------------------------
 
 void App::ensure_tubes() {

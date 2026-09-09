@@ -307,6 +307,22 @@ public:
             ImGui::EndCombo();
         }
         if (app.doc && app.doc->has_selection()) { ImGui::SameLine(); if (ImGui::SmallButton("Tip from selection")) app.brush_tip_from_selection(); }
+        ImGui::SameLine();
+        app.ensure_textures();
+        ImGui::SetNextItemWidth(140);
+        const char* tex_label = app.texture_index >= 0 ? app.textures[app.texture_index].name.c_str() : "(none)";
+        if (ImGui::BeginCombo("Texture", tex_label)) {
+            if (ImGui::Selectable("(none)", app.texture_index < 0)) app.select_texture(-1);
+            for (size_t i = 0; i < app.textures.size(); ++i)
+                if (ImGui::Selectable(app.textures[i].name.c_str(), static_cast<int>(i) == app.texture_index)) app.select_texture(static_cast<int>(i));
+            ImGui::EndCombo();
+        }
+        if (app.brush.texture) {
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(90);
+            float ts = app.brush.texture_strength * 100.0f;
+            if (ImGui::SliderFloat("Strength", &ts, 0.0f, 100.0f, "%.0f%%")) app.brush.texture_strength = ts / 100.0f;
+        }
         switch (kind_) {
             case Kind::Airbrush: {
                 ImGui::SameLine();

@@ -56,7 +56,7 @@ what to work on next.
 - [x] Round and square brush shapes
 - [x] Picture Tube tool (.PspTube cells, scale, step, placement, selection modes)
 - [x] Custom brush tips (.PspBrush and PNG tips, tip from selection)
-- [ ] Stamp textures (paper grain under strokes)
+- [x] Paper textures under strokes (.bmp/.png tiles, strength)
 
 ## 6. Text and shapes
 

@@ -59,7 +59,8 @@ Space + drag or middle-drag pans with any tool; Escape cancels a stroke.
 
 Brush tips: the brush tools take a custom tip from `.PspBrush` or PNG files
 in `~/.config/firn/brushes` (or `FIRN_BRUSH_DIRS`), or from the current
-selection. Saving as JPEG asks for the quality.
+selection, and a paper texture from `~/.config/firn/textures` (or
+`FIRN_TEXTURE_DIRS`). Saving as JPEG asks for the quality.
 
 Picture Tubes: the Picture Tube tool stamps cells from `.PspTube` files found
 in `~/.config/firn/tubes` (or `FIRN_TUBE_DIRS`), with the original's random,
