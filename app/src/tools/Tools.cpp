@@ -1176,13 +1176,16 @@ std::vector<std::unique_ptr<Tool>> make_default_tools() {
     t.push_back(std::make_unique<ZoomTool>());
     t.push_back(std::make_unique<MoveTool>());
     t.push_back(std::make_unique<CropTool>());
+    auto warp = make_warp_tools();   // 0 Warp Brush, 1 Mesh Warp, 2 Scratch Remover, 3 Object Remover
     for (auto& d : make_deform_tools()) t.push_back(std::move(d));
+    t.push_back(std::move(warp[1]));
     t.push_back(std::make_unique<SelectionTool>());
     t.push_back(std::make_unique<FreehandTool>());
     t.push_back(std::make_unique<MagicWandTool>());
     t.push_back(std::make_unique<DropperTool>());
     t.push_back(std::make_unique<BrushTool>(BrushTool::Kind::Paint));
     t.push_back(std::make_unique<BrushTool>(BrushTool::Kind::Airbrush));
+    t.push_back(std::move(warp[0]));
     t.push_back(std::make_unique<BrushTool>(BrushTool::Kind::LightenDarken));
     t.push_back(std::make_unique<BrushTool>(BrushTool::Kind::DodgeBurn));
     t.push_back(std::make_unique<SmudgeTool>());
@@ -1192,6 +1195,8 @@ std::vector<std::unique_ptr<Tool>> make_default_tools() {
     t.push_back(std::make_unique<BrushTool>(BrushTool::Kind::Hue));
     t.push_back(std::make_unique<RedEyeTool>());
     t.push_back(std::make_unique<BrushTool>(BrushTool::Kind::Clone));
+    t.push_back(std::move(warp[2]));
+    t.push_back(std::move(warp[3]));
     t.push_back(std::make_unique<BrushTool>(BrushTool::Kind::ColorReplacer));
     t.push_back(std::make_unique<BrushTool>(BrushTool::Kind::Eraser));
     t.push_back(std::make_unique<FloodFillTool>());

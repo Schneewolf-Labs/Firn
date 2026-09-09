@@ -173,6 +173,15 @@ Image warp(const Image& src, const float H[9], int w, int h);
 // Bounds of the pixels with alpha > 0; the full image when it is all transparent.
 Rect content_bounds(const Image& img);
 
+// Mesh Warp: the (cols+1) x (rows+1) grid of nodes lists destination
+// positions of the regular source grid over the image, row-major.
+Image mesh_warp(const Image& src, int cols, int rows, const std::vector<std::pair<float, float>>& nodes);
+// Displacement warp for the Warp Brush: out(x, y) = src(x + dx, y + dy).
+Image displace(const Image& src, const std::vector<float>& dx, const std::vector<float>& dy);
+// Scratch Remover: fills the strip of `width` along the line from pixels
+// sampled just outside both edges.
+void scratch_fill(Image& img, float x0, float y0, float x1, float y1, float width);
+
 // Same resample for 8-bit masks (selection follows the geometry).
 void resample_mask(const uint8_t* src, int sw, int sh, uint8_t* dst, int dw, int dh);
 

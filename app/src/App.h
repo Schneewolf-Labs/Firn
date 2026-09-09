@@ -232,6 +232,10 @@ struct App {
     void load_palette(const std::string& path);
     void save_palette(const std::string& path);
     firn::Document* document_at(int index);   // any open document by tab index
+    // Warp and remover tools
+    int warp_mode = 0, warp_strength = 50;
+    int mesh_cols = 4, mesh_rows = 4;
+    int scratch_width = 12, remover_feather = 4;
     // Deform family options
     int straighten_mode = 0;             // 0 auto, 1 vertical, 2 horizontal
     bool straighten_all_layers = true, straighten_crop = true;

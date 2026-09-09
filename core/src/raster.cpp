@@ -933,4 +933,123 @@ Rect content_bounds(const Image& img) {
     return {x0, y0, x1 + 1, y1 + 1};
 }
 
+
+// --- Mesh and displacement warps -------------------------------------------------
+
+namespace {
+struct Sampler {
+    const Image& src;
+    int w, h;
+    explicit Sampler(const Image& s) : src(s), w(s.width()), h(s.height()) {}
+    void at(float x, float y, uint8_t* d) const {  // premultiplied bilinear, straight result
+        const int x0 = static_cast<int>(std::floor(x)), y0 = static_cast<int>(std::floor(y));
+        const float fx = x - x0, fy = y - y0;
+        float v[4] = {0, 0, 0, 0};
+        for (int j = 0; j < 2; ++j)
+            for (int i = 0; i < 2; ++i) {
+                const int px = std::clamp(x0 + i, 0, w - 1), py = std::clamp(y0 + j, 0, h - 1);
+                const float wt = (i ? fx : 1 - fx) * (j ? fy : 1 - fy);
+                const uint8_t* s = src.data() + (static_cast<size_t>(py) * w + px) * 4;
+                const float a = s[3] / 255.0f;
+                v[0] += s[0] * a * wt; v[1] += s[1] * a * wt; v[2] += s[2] * a * wt; v[3] += s[3] * wt;
+            }
+        const float a = std::clamp(v[3], 0.0f, 255.0f);
+        for (int c = 0; c < 3; ++c) d[c] = a > 0.0f ? static_cast<uint8_t>(std::clamp(v[c] / (a / 255.0f), 0.0f, 255.0f) + 0.5f) : 0;
+        d[3] = static_cast<uint8_t>(a + 0.5f);
+    }
+};
+}  // namespace
+
+Image mesh_warp(const Image& src, int cols, int rows, const std::vector<std::pair<float, float>>& nodes) {
+    const int w = src.width(), h = src.height();
+    Image out(w, h, {0, 0, 0, 0});
+    if (cols < 1 || rows < 1 || nodes.size() != static_cast<size_t>((cols + 1) * (rows + 1))) return src;
+    const Sampler sampler(src);
+    auto node = [&](int c, int r) { return nodes[static_cast<size_t>(r * (cols + 1) + c)]; };
+    auto src_node = [&](int c, int r) { return std::pair<float, float>{static_cast<float>(w) * c / cols, static_cast<float>(h) * r / rows}; };
+    // Each cell splits into two triangles; every destination pixel inside a
+    // destination triangle takes its barycentric position in the source one.
+    auto tri = [&](std::pair<float, float> d0, std::pair<float, float> d1, std::pair<float, float> d2,
+                   std::pair<float, float> s0, std::pair<float, float> s1, std::pair<float, float> s2) {
+        const int x0 = std::max(0, static_cast<int>(std::floor(std::min({d0.first, d1.first, d2.first}))));
+        const int x1 = std::min(w - 1, static_cast<int>(std::ceil(std::max({d0.first, d1.first, d2.first}))));
+        const int y0 = std::max(0, static_cast<int>(std::floor(std::min({d0.second, d1.second, d2.second}))));
+        const int y1 = std::min(h - 1, static_cast<int>(std::ceil(std::max({d0.second, d1.second, d2.second}))));
+        const float det = (d1.first - d0.first) * (d2.second - d0.second) - (d2.first - d0.first) * (d1.second - d0.second);
+        if (std::abs(det) < 1e-6f) return;
+        for (int y = y0; y <= y1; ++y)
+            for (int x = x0; x <= x1; ++x) {
+                const float px = x + 0.5f, py = y + 0.5f;
+                const float l1 = ((px - d0.first) * (d2.second - d0.second) - (d2.first - d0.first) * (py - d0.second)) / det;
+                const float l2 = ((d1.first - d0.first) * (py - d0.second) - (px - d0.first) * (d1.second - d0.second)) / det;
+                const float l0 = 1.0f - l1 - l2;
+                const float eps = -0.002f;
+                if (l0 < eps || l1 < eps || l2 < eps) continue;
+                const float sx = l0 * s0.first + l1 * s1.first + l2 * s2.first - 0.5f;
+                const float sy = l0 * s0.second + l1 * s1.second + l2 * s2.second - 0.5f;
+                sampler.at(sx, sy, out.data() + (static_cast<size_t>(y) * w + x) * 4);
+            }
+    };
+    for (int r = 0; r < rows; ++r)
+        for (int c = 0; c < cols; ++c) {
+            tri(node(c, r), node(c + 1, r), node(c, r + 1), src_node(c, r), src_node(c + 1, r), src_node(c, r + 1));
+            tri(node(c + 1, r), node(c + 1, r + 1), node(c, r + 1), src_node(c + 1, r), src_node(c + 1, r + 1), src_node(c, r + 1));
+        }
+    return out;
+}
+
+Image displace(const Image& src, const std::vector<float>& dx, const std::vector<float>& dy) {
+    const int w = src.width(), h = src.height();
+    Image out(w, h, {0, 0, 0, 0});
+    if (dx.size() != static_cast<size_t>(w) * h || dy.size() != dx.size()) return src;
+    const Sampler sampler(src);
+    const unsigned hw = std::max(1u, std::thread::hardware_concurrency());
+    const int bands = static_cast<int>(std::min<size_t>(hw, static_cast<size_t>(std::max(1, w * h / 65536))));
+    auto rows = [&](int ya, int yb) {
+        for (int y = ya; y < yb; ++y)
+            for (int x = 0; x < w; ++x) {
+                const size_t i = static_cast<size_t>(y) * w + x;
+                if (dx[i] == 0.0f && dy[i] == 0.0f) { std::memcpy(out.data() + i * 4, src.data() + i * 4, 4); continue; }
+                const float sx = x + dx[i], sy = y + dy[i];
+                if (sx < -1 || sy < -1 || sx > w || sy > h) continue;
+                sampler.at(sx, sy, out.data() + i * 4);
+            }
+    };
+    if (bands <= 1) { rows(0, h); return out; }
+    std::vector<std::thread> pool;
+    for (int b = 0; b < bands; ++b) pool.emplace_back(rows, h * b / bands, h * (b + 1) / bands);
+    for (auto& t : pool) t.join();
+    return out;
+}
+
+void scratch_fill(Image& img, float x0, float y0, float x1, float y1, float width) {
+    const int w = img.width(), h = img.height();
+    float ex = x1 - x0, ey = y1 - y0;
+    const float len = std::hypot(ex, ey);
+    if (len < 1.0f) return;
+    ex /= len; ey /= len;
+    const float nx = -ey, ny = ex;
+    const float half = std::max(1.0f, width * 0.5f);
+    const Image src = img;
+    const Sampler sampler(src);
+    const int bx0 = std::max(0, static_cast<int>(std::floor(std::min(x0, x1) - half - 1))), bx1 = std::min(w - 1, static_cast<int>(std::ceil(std::max(x0, x1) + half + 1)));
+    const int by0 = std::max(0, static_cast<int>(std::floor(std::min(y0, y1) - half - 1))), by1 = std::min(h - 1, static_cast<int>(std::ceil(std::max(y0, y1) + half + 1)));
+    for (int y = by0; y <= by1; ++y)
+        for (int x = bx0; x <= bx1; ++x) {
+            const float px = x + 0.5f - x0, py = y + 0.5f - y0;
+            const float along = px * ex + py * ey, across = px * nx + py * ny;
+            if (along < 0 || along > len || std::abs(across) > half) continue;
+            // Blend the two colors just outside the strip by position across it.
+            uint8_t a[4], b[4];
+            const float ax = x0 + ex * along + nx * (half + 1.5f), ay = y0 + ey * along + ny * (half + 1.5f);
+            const float bx = x0 + ex * along - nx * (half + 1.5f), by = y0 + ey * along - ny * (half + 1.5f);
+            sampler.at(ax - 0.5f, ay - 0.5f, a);
+            sampler.at(bx - 0.5f, by - 0.5f, b);
+            const float t = (across + half) / (2.0f * half);
+            uint8_t* d = img.data() + (static_cast<size_t>(y) * w + x) * 4;
+            if (!d[3]) continue;
+            for (int c = 0; c < 3; ++c) d[c] = static_cast<uint8_t>(b[c] + (a[c] - b[c]) * t + 0.5f);
+        }
+}
+
 }  // namespace firn::raster

@@ -112,7 +112,8 @@ for. Ranked by value per effort; work top to bottom, tick as they land.
       Enhancement, Clarify, Black and White Points, Histogram Adjustment,
       Salt and Pepper, JPEG Artifact Removal, Fill Flash, Backlighting,
       Chromatic Aberration Removal, Digital Camera Noise Removal (bilateral)
-- [ ] Warp Brush and Mesh Warp; Scratch Remover, Object Remover
+- [x] Warp Brush (push, expand, contract, twirl, noise, iron out) and Mesh Warp;
+      Scratch Remover, Object Remover (selection + source rectangle, feathered)
 - [ ] Effects long tail: Page Curl, Lights, Fur, Weave, Pattern, Balls and
       Bubbles, Neon Glow, Glowing Edges, Colored Edges/Foil, Hot Wax, Enamel,
       Aged Newspaper, Contours, Topography, Magnifying Lens, Curlicues,

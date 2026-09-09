@@ -27,6 +27,7 @@ add_executable(firn
   src/tools/Tools.cpp
   src/tools/VectorTools.cpp
   src/tools/DeformTools.cpp
+  src/tools/WarpTools.cpp
 )
 target_include_directories(firn PRIVATE src)
 # Lets a development build find the sample tubes in the (gitignored) backup.

@@ -48,3 +48,4 @@ public:
 std::vector<std::unique_ptr<Tool>> make_default_tools();
 std::vector<std::unique_ptr<Tool>> make_vector_tools();   // VectorTools.cpp
 std::vector<std::unique_ptr<Tool>> make_deform_tools();   // DeformTools.cpp
+std::vector<std::unique_ptr<Tool>> make_warp_tools();     // WarpTools.cpp: Warp Brush, Mesh Warp, Scratch Remover, Object Remover

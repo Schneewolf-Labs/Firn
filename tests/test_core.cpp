@@ -1656,7 +1656,31 @@ static void test_photo_fix_suite() {
     CHECK(osf.get(8, 8).a == 255 && osf.get(15, 0).r != img.get(15, 0).r);
 }
 
+static void test_mesh_and_displace() {
+    Image img(16, 16, {0, 0, 0, 0});
+    for (int y = 4; y < 12; ++y) for (int x = 4; x < 12; ++x) img.set(x, y, {200, 100, 50, 255});
+    // Identity mesh reproduces the image.
+    std::vector<std::pair<float, float>> nodes;
+    for (int r = 0; r <= 2; ++r) for (int c = 0; c <= 2; ++c) nodes.emplace_back(8.0f * c, 8.0f * r);
+    Image same = raster::mesh_warp(img, 2, 2, nodes);
+    CHECK(same.get(6, 6).r == 200 && same.get(2, 2).a == 0 && same.get(11, 11).a == 255);
+    // Moving the center node right shifts content near it.
+    nodes[4] = {12.0f, 8.0f};
+    Image moved = raster::mesh_warp(img, 2, 2, nodes);
+    CHECK(moved.get(13, 8).a == 255 && moved.get(4, 8).a == 0);
+    // A constant displacement is a translation.
+    std::vector<float> dx(256, 2.0f), dy(256, 0.0f);
+    Image shifted = raster::displace(img, dx, dy);
+    CHECK(shifted.get(2, 6).r == 200 && shifted.get(11, 6).a == 0);
+    // Scratch fill bridges a dark line with the colors beside it.
+    Image scratch(20, 20, {100, 100, 100, 255});
+    for (int x = 0; x < 20; ++x) scratch.set(x, 10, {0, 0, 0, 255});
+    raster::scratch_fill(scratch, 0, 10.5f, 20, 10.5f, 3);
+    CHECK(scratch.get(10, 10).r > 90);
+}
+
 int main() {
+    test_mesh_and_displace();
     test_photo_fix_suite();
     test_color_ops();
     test_warp();
