@@ -131,7 +131,10 @@ for. Ranked by value per effort; work top to bottom, tick as they land.
       color balance, channel mixer, threshold, posterize, invert, grayscale, blur,
       fill), geometry, 48-bit native and 16-bit PNG I/O; 8-bit-only operations
       reduce the layer undoably with a status note
-- [ ] Color management: ICC profiles (read, embed, assign, convert), managed display
+- [x] Color management: ICC matrix/TRC profiles parsed from PNG (iCCP) and JPEG
+      (APP2) and embedded on save, built-in sRGB / Adobe RGB / ProPhoto, Assign and
+      Convert to Profile (8- and 16-bit), color managed display (composite converted
+      to sRGB for the screen), profile shown in Image Information
 
 ## Dropped (not worth the effort for this port)
 

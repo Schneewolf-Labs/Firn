@@ -11,6 +11,7 @@
 #include "firn/adjust.h"
 #include "firn/effects.h"
 #include "firn/commands.h"
+#include "firn/icc.h"
 #include "firn/io_psp.h"
 #include "firn/json.h"
 #include "firn/document.h"
@@ -113,7 +114,7 @@ struct App {
 
     // Dialog state
     FileDialog file_dialog;
-    enum class PendingFileOp { None, Open, SaveAs, LoadSelection, SaveSelection, LoadPalette, SavePalette, SavePdf, LoadSwatches, SaveSwatches };
+    enum class PendingFileOp { None, Open, SaveAs, LoadSelection, SaveSelection, LoadPalette, SavePalette, SavePdf, LoadSwatches, SaveSwatches, LoadProfile };
     PendingFileOp file_op = PendingFileOp::None;
     bool show_new_dialog = false;
     // Adjustment / effect dialogs with live preview (ui/Adjust.cpp)
@@ -254,6 +255,16 @@ struct App {
     // Rotate dialog
     float rotate_degrees = 15.0f;
     int rotate_cw = 1;
+    // Color management (ui/ImageMenu.cpp)
+    bool color_managed_display = true;
+    firn::Image display_cache;               // composite converted to sRGB for the screen
+    std::vector<uint8_t> display_icc_key;    // profile the cached transform was built for
+    std::unique_ptr<firn::icc::Transform> display_transform;
+    firn::icc::Profile document_profile() const;   // parsed embedded profile (invalid when untagged)
+    bool display_needs_transform() const;
+    void assign_profile(const std::vector<uint8_t>& icc, const std::string& name);
+    void convert_to_profile(const firn::icc::Profile& to, const std::vector<uint8_t>& icc, const std::string& name);
+    void request_load_profile();
     // Print (File > Print...)
     bool show_print_dialog = false;
     int print_paper = 0;                  // 0 Letter, 1 A4, 2 Legal

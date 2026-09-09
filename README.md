@@ -94,6 +94,22 @@ internal clipboard; paste as a new layer (Ctrl+L) or a new image (Ctrl+V).
 
 Dear ImGui (docking branch) is fetched by CMake on first configure.
 
+## 16 bits per channel and color management
+
+Image > Increase Color Depth > 16 Bits per Channel keeps every raster layer
+at 16 bits beside its 8-bit display pixels. Levels, curves,
+brightness/contrast, gamma, HSL, colorize, color balance, channel mixer,
+threshold, posterize, invert, grayscale, Gaussian blur, fills, and all
+geometry run at full precision; other operations and the painting tools
+work at 8 bits and reduce the layer (undoably, with a note in the status
+bar). 48-bit native files and 16-bit PNGs read and write at full depth.
+
+Embedded ICC profiles (PNG iCCP, JPEG APP2) are read, kept, and written
+back. Image > Color Management assigns or converts to sRGB, Adobe RGB,
+ProPhoto RGB or a profile file, and the color managed display shows tagged
+images converted to sRGB (RGB matrix/TRC profiles; CMYK profiles are
+recognized but not converted).
+
 ## Printing
 
 File > Print (Ctrl+P) lays the image out on Letter, A4 or Legal paper

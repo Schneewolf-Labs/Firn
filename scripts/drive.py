@@ -27,6 +27,7 @@ touched, and real mouse events are ignored while driving. Steps
     shot:FILE                      save the framebuffer to FILE (PNG)
     save:PATH  open:PATH            save the current image / open a file (no file dialog)
     adjust:TITLE                   open an Adjust/Effects dialog by its title (then key:Enter applies it)
+    profile:assign|convert|remove:sRGB|AdobeRGB|ProPhoto   color management actions
     state                          print the app state (tool, layers, selection, zoom, origin, history, status)
     quit                           ask the app to exit
 

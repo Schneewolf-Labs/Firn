@@ -85,6 +85,97 @@ bool save_png16(const Image16& img, const std::string& path, std::string* err) {
     return static_cast<bool>(f);
 }
 
+namespace {
+std::vector<uint8_t> read_file(const std::string& path) { std::ifstream f(path, std::ios::binary); return std::vector<uint8_t>((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>()); }
+bool write_file(const std::string& path, const std::vector<uint8_t>& d) { std::ofstream f(path, std::ios::binary); f.write(reinterpret_cast<const char*>(d.data()), static_cast<std::streamsize>(d.size())); return static_cast<bool>(f); }
+uint32_t rd32(const uint8_t* p) { return static_cast<uint32_t>(p[0]) << 24 | static_cast<uint32_t>(p[1]) << 16 | static_cast<uint32_t>(p[2]) << 8 | p[3]; }
+}  // namespace
+
+std::vector<uint8_t> read_icc(const std::string& path) {
+    const std::vector<uint8_t> d = read_file(path);
+    if (d.size() > 8 && d[0] == 0x89 && d[1] == 'P') {
+        size_t p = 8;
+        while (p + 12 <= d.size()) {
+            const uint32_t len = rd32(&d[p]);
+            if (p + 12 + len > d.size()) break;
+            if (std::memcmp(&d[p + 4], "iCCP", 4) == 0) {
+                size_t q = p + 8;
+                while (q < p + 8 + len && d[q]) ++q;   // profile name
+                q += 2;                                // null + compression method
+                if (q < p + 8 + len) {
+                    int outlen = 0;
+                    char* z = stbi_zlib_decode_malloc(reinterpret_cast<const char*>(&d[q]), static_cast<int>(p + 8 + len - q), &outlen);
+                    if (z) { std::vector<uint8_t> out(z, z + outlen); STBI_FREE(z); return out; }
+                }
+                return {};
+            }
+            if (std::memcmp(&d[p + 4], "IDAT", 4) == 0) break;
+            p += 12 + len;
+        }
+        return {};
+    }
+    if (d.size() > 4 && d[0] == 0xFF && d[1] == 0xD8) {
+        // APP2 "ICC_PROFILE\0" segments, sequence-numbered.
+        std::vector<std::pair<int, std::vector<uint8_t>>> parts;
+        size_t p = 2;
+        while (p + 4 <= d.size() && d[p] == 0xFF) {
+            const uint8_t marker = d[p + 1];
+            if (marker == 0xD8 || marker == 0x01 || (marker >= 0xD0 && marker <= 0xD7)) { p += 2; continue; }
+            const size_t len = (static_cast<size_t>(d[p + 2]) << 8) | d[p + 3];
+            if (marker == 0xE2 && len > 16 && p + 2 + len <= d.size() && std::memcmp(&d[p + 4], "ICC_PROFILE", 12) == 0)
+                parts.emplace_back(d[p + 16], std::vector<uint8_t>(d.begin() + static_cast<long>(p + 18), d.begin() + static_cast<long>(p + 2 + len)));
+            if (marker == 0xDA) break;
+            p += 2 + len;
+        }
+        std::sort(parts.begin(), parts.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
+        std::vector<uint8_t> out;
+        for (auto& pr : parts) out.insert(out.end(), pr.second.begin(), pr.second.end());
+        return out;
+    }
+    return {};
+}
+
+bool embed_icc(const std::string& path, const std::vector<uint8_t>& icc, std::string* err) {
+    if (icc.empty()) return true;
+    std::vector<uint8_t> d = read_file(path);
+    if (d.size() > 8 && d[0] == 0x89 && d[1] == 'P') {
+        // Insert an iCCP chunk right after IHDR.
+        const uint32_t ihdr_len = rd32(&d[8]);
+        const size_t at = 8 + 12 + ihdr_len;
+        int zlen = 0;
+        unsigned char* z = stbi_zlib_compress(const_cast<unsigned char*>(icc.data()), static_cast<int>(icc.size()), &zlen, 8);
+        if (!z) { if (err) *err = "deflate failed"; return false; }
+        std::vector<uint8_t> chunk;
+        const char* name = "ICC profile";
+        chunk.insert(chunk.end(), name, name + std::strlen(name) + 1);
+        chunk.push_back(0);
+        chunk.insert(chunk.end(), z, z + zlen);
+        STBIW_FREE(z);
+        std::vector<uint8_t> out(d.begin(), d.begin() + static_cast<long>(at));
+        png_chunk(out, "iCCP", chunk);
+        out.insert(out.end(), d.begin() + static_cast<long>(at), d.end());
+        return write_file(path, out) || (err && (*err = "cannot write " + path, false));
+    }
+    if (d.size() > 4 && d[0] == 0xFF && d[1] == 0xD8) {
+        std::vector<uint8_t> out(d.begin(), d.begin() + 2);
+        const size_t max_chunk = 65533 - 16;
+        const int total = static_cast<int>((icc.size() + max_chunk - 1) / max_chunk);
+        for (int i = 0; i < total; ++i) {
+            const size_t start = static_cast<size_t>(i) * max_chunk, n = std::min(max_chunk, icc.size() - start);
+            const size_t len = 2 + 12 + 2 + n;
+            out.push_back(0xFF); out.push_back(0xE2); out.push_back(static_cast<uint8_t>(len >> 8)); out.push_back(static_cast<uint8_t>(len & 255));
+            const char* tag = "ICC_PROFILE";
+            out.insert(out.end(), tag, tag + 12);
+            out.push_back(static_cast<uint8_t>(i + 1)); out.push_back(static_cast<uint8_t>(total));
+            out.insert(out.end(), icc.begin() + static_cast<long>(start), icc.begin() + static_cast<long>(start + n));
+        }
+        out.insert(out.end(), d.begin() + 2, d.end());
+        return write_file(path, out) || (err && (*err = "cannot write " + path, false));
+    }
+    if (err) *err = "profiles embed in PNG and JPEG files only";
+    return false;
+}
+
 bool save_png(const Image& img, const std::string& path, std::string* err) {
     int ok = stbi_write_png(path.c_str(), img.width(), img.height(), 4, img.data(), img.width() * 4);
     if (!ok && err) *err = "stbi_write_png failed";

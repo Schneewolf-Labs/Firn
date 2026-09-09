@@ -14,6 +14,7 @@
 #include "firn/print.h"
 #include "firn/commands.h"
 #include "firn/document.h"
+#include "firn/icc.h"
 #include "firn/io.h"
 #include "firn/io_psp.h"
 #include "firn/mask.h"
@@ -1845,7 +1846,47 @@ static void test_16bit() {
     CHECK(!io::load16(std::string(FIRN_SOURCE_DIR) + "/README.md"));
 }
 
+static void test_icc() {
+    const icc::Profile s = icc::srgb(), a = icc::adobe_rgb(), pp = icc::prophoto_rgb();
+    CHECK(s.is_srgb() && !a.is_srgb() && !pp.is_srgb());
+    // sRGB curve round trip and the D50 matrix rows sum to the white point.
+    CHECK(std::abs(s.trc[0].inverse(s.trc[0].apply(0.37f)) - 0.37f) < 1e-3f);
+    CHECK(std::abs(s.to_xyz[3] + s.to_xyz[4] + s.to_xyz[5] - 1.0f) < 0.01f);
+    // Encode and parse back.
+    const auto bytes = icc::encode(a, "Adobe RGB (1998)");
+    const icc::Profile back = icc::parse(bytes);
+    CHECK(back.valid && back.matrix_trc && back.description == "Adobe RGB (1998)");
+    for (int i = 0; i < 9; ++i) CHECK(std::abs(back.to_xyz[i] - a.to_xyz[i]) < 1e-3f);
+    CHECK(std::abs(back.trc[1].apply(0.5f) - a.trc[1].apply(0.5f)) < 1e-3f);
+    // Adobe RGB green is outside sRGB: converting clips to a very saturated green; gray stays gray.
+    Image img(2, 1); img.set(0, 0, {0, 255, 0, 255}); img.set(1, 0, {128, 128, 128, 255});
+    icc::Transform t(a, s);
+    CHECK(!t.identity);
+    t.apply(img);
+    CHECK(img.get(0, 0).g == 255 && img.get(0, 0).r < 40 && img.get(1, 0).r == img.get(1, 0).g && std::abs(img.get(1, 0).r - 128) <= 3);
+    icc::Transform id(s, s);
+    Image same(1, 1); same.set(0, 0, {200, 100, 50, 255});
+    id.apply(same);
+    CHECK(same.get(0, 0).r == 200 && same.get(0, 0).g == 100);
+    // Profiles travel through PNG and JPEG files.
+    const std::string png = "/tmp/firn_test_icc.png", jpg = "/tmp/firn_test_icc.jpg";
+    CHECK(io::save_png(img, png) && io::embed_icc(png, bytes));
+    const auto pb = io::read_icc(png);
+    CHECK(pb.size() == bytes.size() && std::equal(pb.begin(), pb.end(), bytes.begin()));
+    auto reloaded = io::load(png);
+    CHECK(reloaded && reloaded->get(0, 0).g == 255);
+    CHECK(io::save(img, jpg) && io::embed_icc(jpg, bytes));
+    const auto jb = io::read_icc(jpg);
+    CHECK(jb.size() == bytes.size() && std::equal(jb.begin(), jb.end(), bytes.begin()));
+    CHECK(io::load(jpg).has_value());
+    std::string err; std::vector<std::string> warnings;
+    auto doc = io::load_document(png, &err, &warnings);
+    CHECK(doc && doc->icc().size() == bytes.size());
+    std::remove(png.c_str()); std::remove(jpg.c_str());
+}
+
 int main() {
+    test_icc();
     test_16bit();
     test_print();
     test_json();

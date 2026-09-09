@@ -159,6 +159,17 @@ docs/    notes on the original: command inventory, module mapping, FORMAT.md
 - **The official format spec** (versions 7 and 8) and the scripting command
   API are linked from `docs/FORMAT.md` (References); consult them before
   reverse-engineering a block from samples.
+- **16 bits per channel**: `Layer::deep` (`Image16`, shared between
+  snapshots, so replace rather than mutate: `Layer::set_deep`) beside the
+  8-bit display pixels. `LayerPixelCommand::apply16` runs a command at 16
+  bits; commands without it drop the layer to 8 bits undoably. Adjust
+  dialogs pass a 16-bit op to `adjust_modal` when they have one; tools
+  paint at 8 bits (`LayerSnapshotCommand::capture_deep`).
+- **Color management** (`core/include/firn/icc.h`): matrix/TRC profiles
+  only. `Document::icc()` holds the embedded bytes (part of the undo
+  state); `App::display_needs_transform` converts the composite to sRGB
+  for the canvas texture; `io::read_icc` / `io::embed_icc` handle PNG and
+  JPEG.
 - **Materials**: `App::material_style(fg)` turns the color plus
   `App::Material` (gradient/pattern) into a `vec::PaintStyle`; the flood
   fill, shape, line and text tools all paint through it.

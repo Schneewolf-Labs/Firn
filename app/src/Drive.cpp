@@ -156,6 +156,7 @@ std::string Driver::state_text(App& app) const {
         o << " history=" << app.history.size() << " cursor=" << app.history.cursor();
         if (app.history.cursor() > 0) o << " last=\"" << app.history.at(app.history.cursor() - 1).name() << "\"";
         o << " selection=" << (app.doc->has_selection() ? 1 : 0);
+        { const firn::icc::Profile prof = app.document_profile(); o << " icc=\"" << (app.doc->icc().empty() ? "" : prof.description) << "\""; }
     }
     o << " popup=" << (ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId) ? 1 : 0);
     std::string status = app.status.substr(0, app.status.find('\n'));
@@ -250,6 +251,9 @@ bool Driver::parse_line(const std::string& line, App& app) {
     } else if (op == "do" && a.size() >= 2) {
         // do <Command> <json params>
         Step s{Step::Do}; s.text = line.substr(3); steps_.push_back(s); wait(1);
+    } else if (op == "profile" && a.size() >= 3) {
+        // profile assign|convert|remove sRGB|AdobeRGB|ProPhoto
+        Step s{Step::Profile}; s.text = a[1] + " " + a[2]; steps_.push_back(s); wait(2);
     } else if (op == "adjust" && a.size() >= 2) {
         Step s{Step::Adjust}; s.text = line.substr(7); steps_.push_back(s); wait(2);
     } else if (op == "state") {
@@ -346,6 +350,16 @@ void Driver::before_frame(App& app, SDL_Window* window) {
                 steps_.clear();
                 ack(okc ? "result " + result : "error " + result);
                 return;
+            }
+            case Step::Profile: {
+                const std::string action = s.text.substr(0, s.text.find(' ')), which = s.text.substr(s.text.find(' ') + 1);
+                const firn::icc::Profile prof = which == "AdobeRGB" ? firn::icc::adobe_rgb() : which == "ProPhoto" ? firn::icc::prophoto_rgb() : firn::icc::srgb();
+                const std::vector<uint8_t> bytes = firn::icc::encode(prof, prof.description);
+                if (action == "assign") app.assign_profile(bytes, "Assign Profile");
+                else if (action == "convert") app.convert_to_profile(prof, bytes, "Convert to Profile");
+                else app.assign_profile({}, "Remove Profile");
+                consumed_frame = true;
+                break;
             }
             case Step::Adjust: if (!app.open_adjust_by_title(s.text.c_str())) { steps_.clear(); ack("error no dialog titled " + s.text); return; } consumed_frame = true; break;
             case Step::Save: if (!app.save_document(s.text)) { steps_.clear(); ack("error " + app.status); return; } consumed_frame = true; break;

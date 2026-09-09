@@ -97,7 +97,11 @@ public:
         int active = -1;
         Mask selection;
         std::vector<AlphaChannel> alpha;
+        std::vector<uint8_t> icc;
     };
+    // Embedded ICC profile (empty = untagged, treated as sRGB).
+    const std::vector<uint8_t>& icc() const { return icc_; }
+    void set_icc(std::vector<uint8_t> bytes) { icc_ = std::move(bytes); ++revision_; }
     State snapshot() const;
     void restore(const State& s);
 
@@ -151,6 +155,7 @@ private:
     uint64_t selection_revision_ = 0;
     raster::Rect dirty_;
     std::vector<AlphaChannel> alpha_;
+    std::vector<uint8_t> icc_;
 };
 
 }  // namespace firn

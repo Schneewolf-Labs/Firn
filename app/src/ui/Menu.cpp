@@ -1,8 +1,10 @@
 #include <algorithm>
+#include <fstream>
 #include <memory>
 
 #include "App.h"
 #include "firn/adjust.h"
+#include "firn/icc.h"
 #include "firn/io.h"
 #include "firn/io_psp.h"
 #include "firn/effects.h"
@@ -133,6 +135,27 @@ void App::draw_menu() {
         }
         if (ImGui::MenuItem("Arithmetic...", nullptr, false, docs.size() >= 2)) show_arith_dialog = true;
         ImGui::Separator();
+        if (ImGui::BeginMenu("Color Management", has_doc)) {
+            const icc::Profile prof = document_profile();
+            ImGui::TextDisabled("Profile: %s", doc->icc().empty() ? "(untagged, treated as sRGB)" : prof.description.empty() ? "(unnamed)" : prof.description.c_str());
+            if (ImGui::MenuItem("Color Managed Display", nullptr, &color_managed_display)) { config.color_managed_display = color_managed_display; canvas_tex_revision = ~0ull; }
+            ImGui::Separator();
+            if (ImGui::BeginMenu("Assign Profile")) {
+                if (ImGui::MenuItem("sRGB")) assign_profile(icc::encode(icc::srgb(), "sRGB IEC61966-2.1"), "Assign Profile (sRGB)");
+                if (ImGui::MenuItem("Adobe RGB (1998)")) assign_profile(icc::encode(icc::adobe_rgb(), "Adobe RGB (1998)"), "Assign Profile (Adobe RGB)");
+                if (ImGui::MenuItem("ProPhoto RGB")) assign_profile(icc::encode(icc::prophoto_rgb(), "ProPhoto RGB"), "Assign Profile (ProPhoto RGB)");
+                if (ImGui::MenuItem("From File...")) request_load_profile();
+                ImGui::EndMenu();
+            }
+            if (ImGui::BeginMenu("Convert to Profile")) {
+                if (ImGui::MenuItem("sRGB")) convert_to_profile(icc::srgb(), icc::encode(icc::srgb(), "sRGB IEC61966-2.1"), "Convert to sRGB");
+                if (ImGui::MenuItem("Adobe RGB (1998)")) convert_to_profile(icc::adobe_rgb(), icc::encode(icc::adobe_rgb(), "Adobe RGB (1998)"), "Convert to Adobe RGB");
+                if (ImGui::MenuItem("ProPhoto RGB")) convert_to_profile(icc::prophoto_rgb(), icc::encode(icc::prophoto_rgb(), "ProPhoto RGB"), "Convert to ProPhoto RGB");
+                ImGui::EndMenu();
+            }
+            if (ImGui::MenuItem("Remove Profile", nullptr, false, !doc->icc().empty())) assign_profile({}, "Remove Profile");
+            ImGui::EndMenu();
+        }
         if (ImGui::MenuItem("Count Colors Used", nullptr, false, has_doc)) image_count_colors();
         if (ImGui::MenuItem("Image Information...", "Shift+I", false, has_doc)) show_info_dialog = true;
         ImGui::EndMenu();
@@ -484,6 +507,13 @@ void App::draw_dialogs() {
         else if (file_op == PendingFileOp::LoadPalette) load_palette(file_dialog.path());
         else if (file_op == PendingFileOp::SavePalette) save_palette(file_dialog.path());
         else if (file_op == PendingFileOp::SavePdf) print_to_pdf(file_dialog.path(), false);
+        else if (file_op == PendingFileOp::LoadProfile) {
+            std::ifstream pf(file_dialog.path(), std::ios::binary);
+            std::vector<uint8_t> bytes((std::istreambuf_iterator<char>(pf)), std::istreambuf_iterator<char>());
+            const icc::Profile prof = icc::parse(bytes);
+            if (!prof.valid) status = "Assign Profile: not an ICC profile";
+            else assign_profile(bytes, "Assign Profile (" + (prof.description.empty() ? std::string("file") : prof.description) + ")");
+        }
         else if (file_op == PendingFileOp::LoadSwatches) { std::string e; auto pal = io::load_palette(file_dialog.path(), &e); if (pal.empty()) status = "Swatches: " + e; else { swatches = pal; save_swatches(); } }
         else if (file_op == PendingFileOp::SaveSwatches) { std::string e; if (!io::save_palette(swatches, file_dialog.path(), &e)) status = "Swatches: " + e; }
         file_op = PendingFileOp::None;
@@ -523,6 +553,7 @@ void App::draw_dialogs() {
         c.new_width = std::clamp(c.new_width, 1, 30000); c.new_height = std::clamp(c.new_height, 1, 30000);
         ImGui::SeparatorText("View");
         ImGui::Checkbox("Rulers", &c.show_rulers); ImGui::SameLine(); ImGui::Checkbox("Grid", &c.show_grid);
+        ImGui::Checkbox("Color managed display (convert tagged images to sRGB for the screen)", &c.color_managed_display);
         ImGui::SetNextItemWidth(160); ImGui::InputInt("Grid spacing", &c.grid_spacing);
         c.grid_spacing = std::clamp(c.grid_spacing, 1, 1000);
         ImGui::SeparatorText("Extra library folders (besides ~/.config/firn/*)");
@@ -579,6 +610,8 @@ void App::draw_dialogs() {
             ImGui::Text("Layers:      %zu raster, %zu group(s), %zu mask(s)", rasters, groups, masks);
             ImGui::Text("Memory:      %.1f MB of layer pixels", mb);
             ImGui::Text("Selection:   %s", doc->has_selection() ? "yes" : "none");
+            ImGui::Text("Depth:       %d bits per channel", doc->bit_depth());
+            { const icc::Profile prof = document_profile(); ImGui::Text("Profile:     %s", doc->icc().empty() ? "(untagged)" : prof.description.empty() ? "(unnamed)" : prof.description.c_str()); }
             ImGui::Text("History:     %zu step(s), %s", history.size(), modified() ? "modified" : "saved");
         }
         if (ImGui::Button("OK") || ImGui::IsKeyPressed(ImGuiKey_Escape, false) || ImGui::IsKeyPressed(ImGuiKey_Enter, false)) ImGui::CloseCurrentPopup();

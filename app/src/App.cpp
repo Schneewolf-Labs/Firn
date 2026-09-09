@@ -30,6 +30,7 @@ void App::apply_config() {
     new_h = config.new_height;
     history.set_limit(config.undo_limit);
     for (DocState& d : docs) d.history.set_limit(config.undo_limit);
+    if (color_managed_display != config.color_managed_display) { color_managed_display = config.color_managed_display; canvas_tex_revision = ~0ull; }
     // Library folders may have changed: rescan on next use.
     tubes_loaded = brush_tips_loaded = textures_loaded = false;
     tubes.clear(); brush_tips.clear(); textures.clear();
@@ -813,18 +814,27 @@ void App::sync_canvas_texture() {
     const bool cache_ok = canvas_tex && composite_cache.width() == doc->width() && composite_cache.height() == doc->height() && canvas_tex_revision != ~0ull;
     if (cache_ok && !dirty.empty() && (dirty.x1 - dirty.x0) * (dirty.y1 - dirty.y0) < doc->width() * doc->height()) {
         doc->composite_into(composite_cache, dirty);
+        const Image* upload = &composite_cache;
+        if (display_needs_transform()) {
+            if (display_cache.width() != composite_cache.width() || display_cache.height() != composite_cache.height()) display_cache = composite_cache;
+            for (int y = dirty.y0; y < dirty.y1; ++y)
+                std::memcpy(display_cache.data() + (static_cast<size_t>(y) * display_cache.width() + dirty.x0) * 4, composite_cache.data() + (static_cast<size_t>(y) * composite_cache.width() + dirty.x0) * 4, static_cast<size_t>(dirty.x1 - dirty.x0) * 4);
+            display_transform->apply_rect(display_cache, dirty.x0, dirty.y0, dirty.x1, dirty.y1);
+            upload = &display_cache;
+        }
         glBindTexture(GL_TEXTURE_2D, canvas_tex);
         glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-        glPixelStorei(GL_UNPACK_ROW_LENGTH, composite_cache.width());
+        glPixelStorei(GL_UNPACK_ROW_LENGTH, upload->width());
         glTexSubImage2D(GL_TEXTURE_2D, 0, dirty.x0, dirty.y0, dirty.x1 - dirty.x0, dirty.y1 - dirty.y0, GL_RGBA, GL_UNSIGNED_BYTE,
-                        composite_cache.data() + (static_cast<size_t>(dirty.y0) * composite_cache.width() + dirty.x0) * 4);
+                        upload->data() + (static_cast<size_t>(dirty.y0) * upload->width() + dirty.x0) * 4);
         glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
         canvas_tex_revision = doc->revision();
         return;
     }
 
     composite_cache = doc->composite();
-    const Image& composite = composite_cache;
+    if (display_needs_transform()) { display_cache = composite_cache; display_transform->apply(display_cache); }
+    const Image& composite = display_needs_transform() ? display_cache : composite_cache;
     if (!canvas_tex) {
         glGenTextures(1, &canvas_tex);
         glBindTexture(GL_TEXTURE_2D, canvas_tex);
@@ -906,4 +916,53 @@ void App::handle_shortcuts() {
     }
     if (ImGui::IsKeyPressed(ImGuiKey_LeftBracket, true)) brush.size = std::max(1.0f, brush.size - std::max(1.0f, brush.size * 0.1f));
     if (ImGui::IsKeyPressed(ImGuiKey_RightBracket, true)) brush.size = std::min(500.0f, brush.size + std::max(1.0f, brush.size * 0.1f));
+}
+
+// --- Color management ------------------------------------------------------
+
+icc::Profile App::document_profile() const {
+    if (!doc || doc->icc().empty()) return icc::Profile{};
+    return icc::parse(doc->icc());
+}
+
+bool App::display_needs_transform() const {
+    if (!color_managed_display || !doc || doc->icc().empty()) return false;
+    App* self = const_cast<App*>(this);
+    if (display_icc_key != doc->icc() || !display_transform) {
+        const icc::Profile p = document_profile();
+        self->display_icc_key = doc->icc();
+        self->display_transform = std::make_unique<icc::Transform>(p, icc::srgb());
+        if (p.is_srgb()) self->display_transform->identity = true;
+    }
+    return !display_transform->identity;
+}
+
+void App::assign_profile(const std::vector<uint8_t>& bytes, const std::string& name) {
+    if (!doc) return;
+    run(std::make_unique<StateEditCommand>(name, [bytes](Document& d) { d.set_icc(bytes); }));
+    canvas_tex_revision = ~0ull;
+}
+
+void App::convert_to_profile(const icc::Profile& to, const std::vector<uint8_t>& bytes, const std::string& name) {
+    if (!doc) return;
+    icc::Profile from = document_profile();
+    if (!from.matrix_trc) from = icc::srgb();
+    if (!to.matrix_trc) { status = name + ": that profile is not an RGB matrix profile"; return; }
+    icc::Transform t(from, to);
+    run(std::make_unique<StateEditCommand>(name, [t, bytes](Document& d) {
+        for (size_t i = 0; i < d.layer_count(); ++i) {
+            Layer& L = d.layer(i);
+            if (!L.is_raster()) continue;
+            if (L.is_deep()) { Image16 deep = *L.deep; t.apply(deep); L.set_deep(std::move(deep)); }
+            else t.apply(L.pixels);
+        }
+        d.set_icc(bytes);
+    }));
+    canvas_tex_revision = ~0ull;
+}
+
+void App::request_load_profile() {
+    if (!doc) return;
+    file_op = PendingFileOp::LoadProfile;
+    file_dialog.open(FileDialog::Mode::Open, "Assign Profile From File", {"icc", "icm"}, "");
 }

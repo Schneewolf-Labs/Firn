@@ -39,6 +39,7 @@ void Config::load() {
         else if (key == "jpeg_quality") jpeg_quality = std::clamp(std::atoi(value.c_str()), 1, 100);
         else if (key == "undo_limit") undo_limit = std::clamp(std::atoi(value.c_str()), 1, 10000);
         else if (key == "checker_size") checker_size = std::clamp(std::atoi(value.c_str()), 2, 64);
+        else if (key == "color_managed_display") color_managed_display = value == "1";
         else if (key == "new_width") new_width = std::clamp(std::atoi(value.c_str()), 1, 30000);
         else if (key == "new_height") new_height = std::clamp(std::atoi(value.c_str()), 1, 30000);
         else if (key == "extra_tube_dir") extra_tube_dir = value;
@@ -55,6 +56,7 @@ void Config::save() const {
     f << "show_rulers=" << (show_rulers ? 1 : 0) << "\nshow_grid=" << (show_grid ? 1 : 0) << "\n";
     f << "grid_spacing=" << grid_spacing << "\n";
     f << "jpeg_quality=" << jpeg_quality << "\nundo_limit=" << undo_limit << "\nchecker_size=" << checker_size << "\n";
+    f << "color_managed_display=" << (color_managed_display ? 1 : 0) << "\n";
     f << "new_width=" << new_width << "\nnew_height=" << new_height << "\n";
     f << "extra_tube_dir=" << extra_tube_dir << "\nextra_brush_dir=" << extra_brush_dir << "\nextra_texture_dir=" << extra_texture_dir << "\n";
 }

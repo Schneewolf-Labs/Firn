@@ -71,7 +71,7 @@ void Document::replace_layers(const std::vector<Layer>& layers, int active) {
 }
 
 Document::State Document::snapshot() const {
-    return {width_, height_, clone_layers(), active_, selection_, alpha_};
+    return {width_, height_, clone_layers(), active_, selection_, alpha_, icc_};
 }
 
 void Document::restore(const State& s) {
@@ -80,6 +80,7 @@ void Document::restore(const State& s) {
     replace_layers(s.layers, s.active);
     set_selection(s.selection);
     alpha_ = s.alpha;
+    icc_ = s.icc;
 }
 
 Image16 Document::composite16() const {
