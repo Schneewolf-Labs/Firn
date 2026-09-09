@@ -1,5 +1,6 @@
 #pragma once
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -24,6 +25,10 @@ std::unique_ptr<Document> load_psp_from_memory(const uint8_t* data, size_t size,
 std::unique_ptr<Document> load_document(const std::string& path, std::string* err, std::vector<std::string>* warnings);
 
 bool is_psp_extension(const std::string& path);
+
+// The full-size composite the original stored in the file, if it has one
+// in channel (non-JPEG) form. Used by tests to check our compositing.
+std::optional<Image> load_psp_stored_composite(const uint8_t* data, size_t size);
 
 // Writes a version 6.0 file (zlib channels) with every layer, its name,
 // position, opacity, blend mode and visibility, plus the composite bank the

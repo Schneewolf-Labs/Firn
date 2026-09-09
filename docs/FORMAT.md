@@ -57,8 +57,22 @@ length.
 
 Layer types: 1 raster, 2 floating selection, 3 vector, 4 adjustment,
 5 group, 6 mask, 7 art media. Only raster layers carry a bitmap chunk and
-channels; the others are followed directly by their extension sub-block.
-Group children appear as ordinary sibling layer blocks after the group.
+channels directly after the info chunk; the others are followed by their
+extension sub-block first.
+
+- **Group (5)**: group extension block (id 25) `{chunk_len, child_count u32}`.
+  The children are the next `child_count` layer blocks in the bank (nested
+  groups count as one child each and bring their own children). A hidden
+  group hides its children; the reader folds group opacity into each child
+  and composites children individually (a group blend mode is reported).
+- **Mask (6)**: mask extension block (id 26) `{chunk_len u32, outside u32,
+  u8}`, then a bitmap chunk `{8, 1, 1}` and one channel block of DIB type 2
+  (user mask), covering the *saved mask rect* relative to the *mask rect*
+  from the layer info (0 = hidden, 255 = shown). The `outside` value (255 in
+  every sample) is taken as the mask value beyond the saved rect; this is
+  inferred, not documented. A visible, enabled mask applies to the layers
+  below it in its group (or to every layer below it at top level); the reader
+  bakes it into those layers' alpha and reports it.
 
 Blend modes 0–16 match `firn::BlendMode` in order (Normal, Darken, Lighten,
 Hue, Saturation, Color, Luminance, Multiply, Screen, Dissolve, Overlay,
@@ -98,6 +112,14 @@ in the same order: a JPEG block for JPEG-compressed entries, otherwise a
 composite image block (id 9). Files whose layers are all vector or adjustment
 still carry a full-size (type 0) composite, which the reader uses as a
 fallback Background layer.
+
+## Fidelity check
+
+`tests/test_psp_corpus.cpp` compares our `Document::composite()` with the
+full-size composite stored in each sample file (only when that composite
+is channel data; JPEG composites are lossy). The mean channel error over a
+white background is required to stay under 2/255. The multi-layer sample
+with Overlay layers comes out at about 0.3.
 
 ## What the writer emits
 

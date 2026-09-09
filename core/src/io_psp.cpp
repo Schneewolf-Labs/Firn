@@ -22,11 +22,11 @@ namespace {
 enum : uint16_t {
     kImageBlock = 0, kCreatorBlock = 1, kColorBlock = 2, kLayerStartBlock = 3, kLayerBlock = 4,
     kChannelBlock = 5, kSelectionBlock = 6, kCompositeImageBlock = 9, kCompositeBankBlock = 16,
-    kCompositeAttrBlock = 17, kJpegBlock = 18,
+    kCompositeAttrBlock = 17, kJpegBlock = 18, kGroupExtBlock = 25, kMaskExtBlock = 26,
 };
 enum : uint16_t { kCompNone = 0, kCompRle = 1, kCompLz77 = 2, kCompJpeg = 3 };
 // Bitmap (DIB) types. Layers use 0/1; thumbnails 5/6; composites 8/9.
-enum : uint16_t { kDibImage = 0, kDibTransMask = 1, kDibThumbnail = 5, kDibThumbnailTrans = 6, kDibComposite = 8, kDibCompositeTrans = 9 };
+enum : uint16_t { kDibImage = 0, kDibTransMask = 1, kDibUserMask = 2, kDibThumbnail = 5, kDibThumbnailTrans = 6, kDibComposite = 8, kDibCompositeTrans = 9 };
 bool is_image_dib(uint16_t t) { return t == kDibImage || t == kDibThumbnail || t == kDibComposite; }
 bool is_trans_dib(uint16_t t) { return t == kDibTransMask || t == kDibThumbnailTrans || t == kDibCompositeTrans; }
 enum : uint8_t { kLayerRaster = 1, kLayerVector = 3, kLayerAdjustment = 4, kLayerGroup = 5, kLayerMask = 6, kLayerArtMedia = 7 };
@@ -160,8 +160,65 @@ BlendMode map_blend(uint8_t v) {
     return BlendMode::Normal;
 }
 
+// Group state while walking the layer bank: children follow their group
+// block; a mask layer applies to the layers below it in the same group (or
+// every layer below it at top level).
+struct GroupCtx {
+    int remaining = 0;          // children still to read
+    bool visible = true;
+    float opacity = 1.0f;
+    size_t first_child = 0;     // document index of the group's first child
+};
+
+struct BankCtx {
+    std::vector<GroupCtx> groups;
+    size_t masked_layers = 0;
+};
+
+// Reads the mask layer's single channel into a document-sized 8-bit mask
+// (outside the mask rect takes `outside`), then multiplies it into the alpha
+// of every layer in [first, doc.layer_count()).
+bool apply_mask_layer(const Reader& r, const Block& lb, size_t info_end, const Header& hdr, const int32_t mask_rect[4],
+                      const int32_t saved_mask[4], Document& doc, size_t first, const std::string& name,
+                      std::vector<std::string>* warnings, std::string& err) {
+    const std::vector<Block> subs = blocks(r, info_end, lb.end);
+    uint8_t outside = 255;
+    size_t bitmap_at = info_end;
+    for (const Block& b : subs) {
+        if (b.id == kMaskExtBlock && r.ok(b.start, 8)) { outside = static_cast<uint8_t>(std::min<uint32_t>(r.u32(b.start + 4), 255)); bitmap_at = b.end; }
+    }
+    if (!r.ok(bitmap_at, 8)) return true;
+    const size_t bchunk = r.u32(bitmap_at);
+    const std::vector<Block> chans = blocks(r, bitmap_at + bchunk, lb.end);
+    const int sw = saved_mask[2] - saved_mask[0], sh = saved_mask[3] - saved_mask[1];
+    const int ox = mask_rect[0] + saved_mask[0], oy = mask_rect[1] + saved_mask[1];
+    std::vector<uint8_t> tile;
+    for (const Block& b : chans) {
+        if (b.id != kChannelBlock || !r.ok(b.start, 16)) continue;
+        const size_t chunk = r.u32(b.start), clen = r.u32(b.start + 4);
+        if (r.u16(b.start + 12) != kDibUserMask) continue;
+        if (!r.ok(b.start + chunk, clen) || sw <= 0 || sh <= 0) continue;
+        if (!decompress(hdr.compression, r.p + b.start + chunk, clen, static_cast<size_t>(sw) * sh, tile, err)) return false;
+        break;
+    }
+    const int W = doc.width(), H = doc.height();
+    for (size_t li = first; li < doc.layer_count(); ++li) {
+        uint8_t* px = doc.layer(li).pixels.data();
+        for (int y = 0; y < H; ++y)
+            for (int x = 0; x < W; ++x) {
+                uint8_t m = outside;
+                const int tx = x - ox, ty = y - oy;
+                if (!tile.empty() && tx >= 0 && ty >= 0 && tx < sw && ty < sh) m = tile[static_cast<size_t>(ty) * sw + tx];
+                uint8_t& a = px[(static_cast<size_t>(y) * W + x) * 4 + 3];
+                a = static_cast<uint8_t>((a * m + 127) / 255);
+            }
+    }
+    if (warnings) warnings->push_back("Applied mask \"" + name + "\" to the " + std::to_string(doc.layer_count() - first) + " layer(s) beneath it");
+    return true;
+}
+
 bool read_layer(const Reader& r, const Block& lb, const Header& hdr, const Palette* pal, Document& doc,
-                std::vector<std::string>* warnings, std::string& err) {
+                BankCtx& ctx, std::vector<std::string>* warnings, std::string& err) {
     if (!r.ok(lb.start, 6)) { err = "short layer block"; return false; }
     const size_t chunk = r.u32(lb.start);
     size_t o = lb.start + 4;
@@ -173,8 +230,35 @@ bool read_layer(const Reader& r, const Block& lb, const Header& hdr, const Palet
     const int32_t rect[4] = {r.i32(o), r.i32(o + 4), r.i32(o + 8), r.i32(o + 12)}; o += 16;
     const int32_t saved[4] = {r.i32(o), r.i32(o + 4), r.i32(o + 8), r.i32(o + 12)}; o += 16;
     const uint8_t opacity = r.u8(o), blend = r.u8(o + 1), visible = r.u8(o + 2);
+    o += 5;  // opacity, blend, visible, protected, link group
+    const int32_t mask_rect[4] = {r.i32(o), r.i32(o + 4), r.i32(o + 8), r.i32(o + 12)}; o += 16;
+    const int32_t saved_mask[4] = {r.i32(o), r.i32(o + 4), r.i32(o + 8), r.i32(o + 12)}; o += 16;
+    const bool mask_disabled = r.ok(o, 2) && r.u8(o + 1) != 0;
+
+    // Group bookkeeping: this layer is a child of the innermost open group.
+    GroupCtx* group = nullptr;
+    while (!ctx.groups.empty() && ctx.groups.back().remaining == 0) ctx.groups.pop_back();
+    if (!ctx.groups.empty()) { group = &ctx.groups.back(); --group->remaining; }
+    const bool group_visible = !group || group->visible;
+    const float group_opacity = group ? group->opacity : 1.0f;
 
     static const char* kTypeNames[] = {"undefined", "raster", "floating selection", "vector", "adjustment", "group", "mask", "art media"};
+    if (type == kLayerGroup) {
+        GroupCtx g;
+        g.visible = group_visible && visible != 0;
+        g.opacity = group_opacity * opacity / 255.0f;
+        g.first_child = doc.layer_count();
+        for (const Block& b : blocks(r, lb.start + chunk, lb.end))
+            if (b.id == kGroupExtBlock && r.ok(b.start, 8)) g.remaining = static_cast<int>(r.u32(b.start + 4));
+        if (blend != 0 && warnings) warnings->push_back("Group \"" + name + "\" uses a blend mode; its layers are composited individually");
+        ctx.groups.push_back(g);
+        return true;
+    }
+    if (type == kLayerMask) {
+        if (!visible || mask_disabled) return true;
+        const size_t first = group ? group->first_child : 0;
+        return apply_mask_layer(r, lb, lb.start + chunk, hdr, mask_rect, saved_mask, doc, first, name, warnings, err);
+    }
     if (type != kLayerRaster) {
         if (warnings) warnings->push_back("Skipped " + std::string(type < 8 ? kTypeNames[type] : "unknown") + " layer \"" + name + "\"");
         return true;
@@ -190,9 +274,9 @@ bool read_layer(const Reader& r, const Block& lb, const Header& hdr, const Palet
     const int sw = saved[2] - saved[0], sh = saved[3] - saved[1];
     const int ox = rect[0] + saved[0], oy = rect[1] + saved[1];
     Layer& L = doc.add_layer(name);
-    L.opacity = opacity / 255.0f;
+    L.opacity = opacity / 255.0f * group_opacity;
     L.blend = map_blend(blend);
-    L.visible = visible != 0;
+    L.visible = visible != 0 && group_visible;
     if (sw <= 0 || sh <= 0) return true;  // empty layer
 
     Image tile;
@@ -220,7 +304,7 @@ bool read_layer(const Reader& r, const Block& lb, const Header& hdr, const Palet
 // attribute in the same order: a JPEG block, or a composite block holding a
 // bitmap chunk followed by channel blocks.
 bool read_composite(const Reader& r, const Block& bank, const Header& hdr, const Palette* pal, Document& doc,
-                    std::string& err) {
+                    std::string& err, bool allow_jpeg = true) {
     if (!r.ok(bank.start, 8)) return false;
     const size_t chunk = r.u32(bank.start);
     std::vector<Block> attrs, datas;
@@ -237,6 +321,7 @@ bool read_composite(const Reader& r, const Block& bank, const Header& hdr, const
         const Block& d = datas[i];
         Image img;
         if (comp == kCompJpeg && d.id == kJpegBlock && r.ok(d.start, 14)) {
+            if (!allow_jpeg) continue;
             const size_t jchunk = r.u32(d.start), jlen = r.u32(d.start + 4);
             if (!r.ok(d.start + jchunk, jlen)) continue;
             int iw = 0, ih = 0, n = 0;
@@ -316,9 +401,10 @@ std::unique_ptr<Document> load_psp_from_memory(const uint8_t* data, size_t size,
         // The bank holds layer blocks directly; older writers prefix a chunk.
         size_t start = layer_bank->start;
         if (r.ok(start, 4) && std::memcmp(r.p + start, "~BK\0", 4) != 0 && r.ok(start, 4)) start += r.u32(start);
+        BankCtx ctx;
         for (const Block& lb : blocks(r, start, layer_bank->end)) {
             if (lb.id != kLayerBlock) continue;
-            if (!read_layer(r, lb, hdr, have_palette ? &pal : nullptr, *doc, warnings, e)) return fail(e);
+            if (!read_layer(r, lb, hdr, have_palette ? &pal : nullptr, *doc, ctx, warnings, e)) return fail(e);
         }
     }
     if (doc->layer_count() == 0) {
@@ -330,6 +416,36 @@ std::unique_ptr<Document> load_psp_from_memory(const uint8_t* data, size_t size,
     }
     doc->set_active_layer(std::clamp(hdr.active_layer, 0, static_cast<int>(doc->layer_count()) - 1));
     return doc;
+}
+
+std::optional<Image> load_psp_stored_composite(const uint8_t* data, size_t size) {
+    const Reader r{data, size};
+    if (size < 36 || std::memcmp(data, kSignature, sizeof(kSignature) - 1) != 0) return std::nullopt;
+    Header hdr;
+    Palette pal;
+    bool have_palette = false;
+    const Block* bank = nullptr;
+    for (const Block& b : blocks(r, 36, size)) {
+        if (b.id == kImageBlock && r.ok(b.start, 42)) {
+            hdr.width = r.i32(b.start + 4); hdr.height = r.i32(b.start + 8);
+            hdr.compression = r.u16(b.start + 21); hdr.depth = r.u16(b.start + 23); hdr.greyscale = r.u8(b.start + 31) != 0;
+        } else if (b.id == kColorBlock && r.ok(b.start, 8)) {
+            const size_t chunk = r.u32(b.start);
+            const uint32_t count = r.u32(b.start + 4);
+            if (r.ok(b.start + chunk, static_cast<size_t>(count) * 4)) {
+                for (uint32_t i = 0; i < count && i < 256; ++i) {
+                    const uint8_t* e = r.p + b.start + chunk + static_cast<size_t>(i) * 4;
+                    pal.entries.push_back({e[2], e[1], e[0], 255});
+                }
+                have_palette = true;
+            }
+        } else if (b.id == kCompositeBankBlock) bank = &b;
+    }
+    if (!bank || hdr.width <= 0) return std::nullopt;
+    Document tmp(hdr.width, hdr.height);
+    std::string err;
+    if (!read_composite(r, *bank, hdr, have_palette ? &pal : nullptr, tmp, err, /*allow_jpeg=*/false) || tmp.layer_count() == 0) return std::nullopt;
+    return tmp.layer(0).pixels;
 }
 
 std::unique_ptr<Document> load_psp(const std::string& path, std::string* err, std::vector<std::string>* warnings) {

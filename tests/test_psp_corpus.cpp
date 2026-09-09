@@ -5,6 +5,8 @@
 #include <cmath>
 #include <cstdio>
 #include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <string>
 #include <vector>
 
@@ -18,7 +20,7 @@ int main(int argc, char** argv) {
         std::puts("psp corpus: WindowsInstall/ not present, skipping");
         return 0;
     }
-    int total = 0, failed = 0, warned = 0;
+    int total = 0, failed = 0, warned = 0, compared = 0, mismatched = 0;
     for (const auto& de : fs::recursive_directory_iterator(root)) {
         if (!de.is_regular_file()) continue;
         std::string ext = de.path().extension().string();
@@ -34,6 +36,32 @@ int main(int argc, char** argv) {
             continue;
         }
         if (!warnings.empty()) ++warned;
+
+        // Fidelity: our composite against the one the original stored (when
+        // it is channel data, not a JPEG). Mean channel error over opaque
+        // pixels should be tiny; report the worst files.
+        {
+            std::ifstream f(de.path(), std::ios::binary);
+            std::vector<uint8_t> bytes((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+            if (auto stored = firn::io::load_psp_stored_composite(bytes.data(), bytes.size())) {
+                const firn::Image ours = doc->composite();
+                if (stored->width() == ours.width() && stored->height() == ours.height()) {
+                    double sum = 0; long n = 0;
+                    for (size_t k = 0; k < ours.size_bytes(); k += 4) {
+                        const uint8_t* a = ours.data() + k; const uint8_t* b = stored->data() + k;
+                        if (a[3] == 0 && b[3] == 0) continue;
+                        // Compare colour over a white background so alpha differences count too.
+                        for (int c = 0; c < 3; ++c) {
+                            const int ac = (a[c] * a[3] + 255 * (255 - a[3])) / 255, bc = (b[c] * b[3] + 255 * (255 - b[3])) / 255;
+                            sum += std::abs(ac - bc); ++n;
+                        }
+                    }
+                    const double mean = n ? sum / n : 0.0;
+                    ++compared;
+                    if (mean > 2.0) { ++mismatched; std::printf("MISMATCH %.2f %s\n", mean, de.path().string().c_str()); }
+                }
+            }
+        }
 
         // Writer/reader consistency: what we write must read back identically.
         std::vector<uint8_t> rewritten = firn::io::save_psp_to_memory(*doc);
@@ -60,6 +88,7 @@ int main(int argc, char** argv) {
             std::printf("FAIL roundtrip %s: %s\n", de.path().string().c_str(), err2.c_str());
         }
     }
-    std::printf("psp corpus: %d files, %d failed, %d with warnings\n", total, failed, warned);
-    return failed ? 1 : 0;
+    std::printf("psp corpus: %d files, %d failed, %d with warnings; composite compared for %d, %d beyond tolerance\n",
+                total, failed, warned, compared, mismatched);
+    return (failed || mismatched) ? 1 : 0;
 }

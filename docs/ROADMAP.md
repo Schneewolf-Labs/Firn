@@ -62,10 +62,11 @@ what to work on next.
 - [x] Multiple open documents (tabs), recent files, remember window and dialog state
 - [x] Rulers, grid
 - [ ] Guides (drag from rulers), snap to grid
-- [ ] Windows build verified (CI workflow added; see Actions)
+- [x] Windows build verified by CI (GitHub Actions, MSVC + vcpkg SDL2)
 
 ## 8. Format completeness
 
-- [ ] Masks attached to groups and layers
+- [x] Masks attached to groups and layers (baked into alpha on load)
+- [x] Group visibility and opacity on load
 - [ ] Selections and alpha channels in files
-- [ ] Layer groups in the palette
+- [ ] Layer groups in the model and palette, editable masks
