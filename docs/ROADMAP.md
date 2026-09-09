@@ -145,7 +145,7 @@ for. Ranked by value per effort; work top to bottom, tick as they land.
 - [x] Tool icons in the Tools palette
 - [x] The full Material Properties dialog (color, gradient, pattern, texture,
       swatches, foreground/background, lock)
-- [ ] Thumbnails in the file dialog
+- [x] Thumbnails in the file dialog (lazy, two per frame, plus a preview pane)
 
 ## Dropped (not worth the effort for this port)
 

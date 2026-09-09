@@ -24,9 +24,16 @@ private:
         bool is_dir = false;
         uintmax_t size = 0;
         std::filesystem::file_time_type modified;
+        // Thumbnail, decoded lazily for visible rows (GL texture id).
+        unsigned int thumb = 0;
+        int thumb_w = 0, thumb_h = 0;      // texture size
+        int image_w = 0, image_h = 0;      // the file's own size
+        bool thumb_tried = false;
     };
     void set_dir(const std::filesystem::path& dir);
     void refresh();
+    void load_thumbnail(Entry& e);
+    void free_thumbnails();
     bool matches_filter(const std::string& name) const;
     bool accept(const std::string& typed);
     // Save mode: the "Save as type" choice, an index into exts_.
@@ -38,6 +45,7 @@ private:
     std::vector<std::string> exts_;
     bool open_requested_ = false;
     int type_ = 0;
+    bool show_thumbs_ = true;
     bool show_all_ = false;
     bool show_hidden_ = false;
     std::filesystem::path dir_;

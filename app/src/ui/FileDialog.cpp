@@ -1,5 +1,11 @@
 #include "ui/FileDialog.h"
 
+#include <SDL_opengl.h>
+
+#include "firn/io.h"
+#include "firn/io_psp.h"
+#include "firn/raster.h"
+
 #include <algorithm>
 #include <cctype>
 #include <chrono>
@@ -98,7 +104,45 @@ void FileDialog::set_dir(const fs::path& dir) {
     refresh();
 }
 
+void FileDialog::free_thumbnails() {
+    for (Entry& e : entries_)
+        if (e.thumb) { GLuint t = e.thumb; glDeleteTextures(1, &t); e.thumb = 0; }
+}
+
+// Decodes one file into a small texture (once per entry; failures are
+// remembered so a bad file is not retried every frame).
+void FileDialog::load_thumbnail(Entry& e) {
+    e.thumb_tried = true;
+    const fs::path path = dir_ / e.name;
+    if (e.size > 64u * 1024 * 1024) return;  // too big to decode for a thumbnail
+    std::optional<firn::Image> img;
+    std::string err;
+    if (firn::io::is_psp_extension(path.string())) {
+        std::vector<std::string> warnings;
+        auto d = firn::io::load_document(path.string(), &err, &warnings);
+        if (d) img = d->composite();
+    } else {
+        img = firn::io::load(path.string(), &err);
+    }
+    if (!img || img->empty()) return;
+    e.image_w = img->width(); e.image_h = img->height();
+    const float scale = std::min(1.0f, std::min(96.0f / img->width(), 96.0f / img->height()));
+    const int tw = std::max(1, static_cast<int>(img->width() * scale)), th = std::max(1, static_cast<int>(img->height() * scale));
+    firn::Image small = scale < 1.0f ? firn::raster::resample(*img, tw, th, firn::raster::Filter::Bilinear) : *img;
+    GLuint t = 0;
+    glGenTextures(1, &t);
+    glBindTexture(GL_TEXTURE_2D, t);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, small.width(), small.height(), 0, GL_RGBA, GL_UNSIGNED_BYTE, small.data());
+    e.thumb = t; e.thumb_w = small.width(); e.thumb_h = small.height();
+}
+
 void FileDialog::refresh() {
+    free_thumbnails();
     entries_.clear();
     error_.clear();
     std::error_code ec;
@@ -214,26 +258,31 @@ bool FileDialog::draw() {
         else error_ = "No such folder";
     }
 
-    // Listing.
-    const float footer = ImGui::GetFrameHeightWithSpacing() * 2 + ImGui::GetTextLineHeightWithSpacing() + 8;
+    // Listing, with a preview pane of the selected image at the right.
+    const float footer = ImGui::GetFrameHeightWithSpacing() * (mode_ == Mode::Save ? 3 : 2) + ImGui::GetTextLineHeightWithSpacing() + 8;
+    const float preview_w = 180.0f;
+    const float row_h = show_thumbs_ ? 40.0f : 0.0f;
+    int decoded = 0;  // thumbnails decoded this frame; a couple keeps the dialog responsive
     if (ImGui::BeginTable("files", 3, ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY | ImGuiTableFlags_BordersInnerV,
-                          ImVec2(0, -footer))) {
+                          ImVec2(-preview_w, -footer))) {
         ImGui::TableSetupScrollFreeze(0, 1);
         ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
         ImGui::TableSetupColumn("Size", ImGuiTableColumnFlags_WidthFixed, 90.0f);
         ImGui::TableSetupColumn("Modified", ImGuiTableColumnFlags_WidthFixed, 130.0f);
         ImGui::TableHeadersRow();
         ImGuiListClipper clipper;
-        clipper.Begin(static_cast<int>(entries_.size()));
+        clipper.Begin(static_cast<int>(entries_.size()), show_thumbs_ ? row_h + 2.0f : 0.0f);
         while (clipper.Step()) {
             for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; ++i) {
-                const Entry& e = entries_[i];
+                Entry& e = entries_[i];
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn();
                 ImGui::PushID(i);
                 const std::string label = e.is_dir ? "[" + e.name + "]" : e.name;
-                if (ImGui::Selectable(label.c_str(), selected_ == i,
-                                      ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowDoubleClick)) {
+                if (show_thumbs_ && !e.is_dir && !e.thumb_tried && decoded < 2 && matches_filter(e.name)) { load_thumbnail(e); ++decoded; }
+                const ImVec2 row0 = ImGui::GetCursorScreenPos();
+                if (ImGui::Selectable(show_thumbs_ ? "##row" : label.c_str(), selected_ == i,
+                                      ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowDoubleClick, ImVec2(0, row_h))) {
                     selected_ = i;
                     if (!e.is_dir) std::snprintf(name_buf_, sizeof(name_buf_), "%s", e.name.c_str());
                     if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
@@ -241,15 +290,56 @@ bool FileDialog::draw() {
                         if (accept(e.name)) accepted = true;
                     }
                 }
+                if (show_thumbs_) {
+                    ImDrawList* dl = ImGui::GetWindowDrawList();
+                    if (e.thumb) {
+                        const float k = std::min(row_h / e.thumb_w, row_h / e.thumb_h);
+                        const float w = e.thumb_w * k, h = e.thumb_h * k;
+                        const ImVec2 p0(row0.x + 2 + (row_h - w) * 0.5f, row0.y + (row_h - h) * 0.5f);
+                        dl->AddRectFilled(p0, ImVec2(p0.x + w, p0.y + h), IM_COL32(90, 90, 90, 255));
+                        dl->AddImage((ImTextureID)(intptr_t)e.thumb, p0, ImVec2(p0.x + w, p0.y + h));
+                    } else if (e.is_dir) {
+                        const ImVec2 f0(row0.x + 8, row0.y + 12), f1(row0.x + row_h - 4, row0.y + row_h - 8);
+                        dl->AddRectFilled(f0, f1, IM_COL32(200, 170, 80, 255), 2.0f);
+                        dl->AddRectFilled(f0, ImVec2(f0.x + (f1.x - f0.x) * 0.45f, f0.y - 4), IM_COL32(200, 170, 80, 255), 2.0f);
+                    }
+                    dl->AddText(ImVec2(row0.x + row_h + 8, row0.y + (row_h - ImGui::GetTextLineHeight()) * 0.5f), ImGui::GetColorU32(ImGuiCol_Text), label.c_str());
+                }
+                const float text_dy = show_thumbs_ ? (row_h - ImGui::GetTextLineHeight()) * 0.5f : 0.0f;
                 ImGui::TableNextColumn();
+                ImGui::SetCursorPosY(ImGui::GetCursorPosY() + text_dy);
                 if (!e.is_dir) ImGui::TextUnformatted(human_size(e.size).c_str());
                 ImGui::TableNextColumn();
+                ImGui::SetCursorPosY(ImGui::GetCursorPosY() + text_dy);
                 ImGui::TextUnformatted(human_time(e.modified).c_str());
                 ImGui::PopID();
             }
         }
         ImGui::EndTable();
     }
+    ImGui::SameLine();
+    // Preview pane.
+    if (ImGui::BeginChild("preview", ImVec2(0, -footer), ImGuiChildFlags_Borders)) {
+        if (selected_ >= 0 && selected_ < static_cast<int>(entries_.size()) && !entries_[selected_].is_dir) {
+            Entry& e = entries_[selected_];
+            if (!e.thumb_tried && matches_filter(e.name)) load_thumbnail(e);
+            if (e.thumb) {
+                const float side = std::max(40.0f, ImGui::GetContentRegionAvail().x - 4.0f);
+                const float k = std::min(side / e.thumb_w, side / e.thumb_h);
+                const float w = e.thumb_w * k, h = e.thumb_h * k;
+                const ImVec2 p0 = ImGui::GetCursorScreenPos();
+                ImGui::GetWindowDrawList()->AddRectFilled(p0, ImVec2(p0.x + w, p0.y + h), IM_COL32(90, 90, 90, 255));
+                ImGui::Image((ImTextureID)(intptr_t)e.thumb, ImVec2(w, h));
+                ImGui::Text("%d x %d", e.image_w, e.image_h);
+            } else {
+                ImGui::TextDisabled("No preview");
+            }
+            ImGui::TextWrapped("%s", e.name.c_str());
+        } else {
+            ImGui::TextDisabled("Preview");
+        }
+    }
+    ImGui::EndChild();
 
     // Filename + filter row.
     ImGui::TextUnformatted(mode_ == Mode::Save ? "Save as:" : "File:");
@@ -263,6 +353,8 @@ bool FileDialog::draw() {
     if (ImGui::Checkbox("All files", &show_all_)) refresh();
     ImGui::SameLine();
     if (ImGui::Checkbox("Hidden", &show_hidden_)) refresh();
+    ImGui::SameLine();
+    ImGui::Checkbox("Thumbnails", &show_thumbs_);
     if (mode_ == Mode::Save && !exts_.empty()) {
         ImGui::TextUnformatted("Save as type:");
         ImGui::SameLine();
