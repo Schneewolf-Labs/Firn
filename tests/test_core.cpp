@@ -14,6 +14,7 @@
 #include "firn/mask.h"
 #include "firn/raster.h"
 #include "firn/text.h"
+#include "firn/vector.h"
 
 #define CHECK(cond)                                                              \
     do {                                                                         \
@@ -1232,7 +1233,150 @@ static void test_history_limit() {
     CHECK(!hist.can_undo() && doc.layer(0).pixels.get(0, 0).r == 0);  // 5 inverts, 3 undone -> 2 applied -> original
 }
 
+static void test_vector_core() {
+    // Rectangle fill and stroke rasterize where expected.
+    vec::Object r = vec::make_rectangle(4, 4, 16, 12);
+    r.fill.kind = vec::PaintStyle::Kind::Solid; r.fill.color = {0, 0, 255, 255};
+    r.stroke.kind = vec::PaintStyle::Kind::Solid; r.stroke.color = {255, 0, 0, 255}; r.stroke_width = 2;
+    r.antialias = false;
+    Image img(24, 20, {0, 0, 0, 0});
+    vec::rasterize({r}, img);
+    CHECK(img.get(10, 8).b == 255 && img.get(10, 8).r == 0);   // inside: fill
+    CHECK(img.get(4, 8).r == 255);                              // on the edge: stroke
+    CHECK(img.get(1, 1).a == 0);
+    float x0, y0, x1, y1;
+    r.bounds(&x0, &y0, &x1, &y1);
+    CHECK(x0 == 4 && y0 == 4 && x1 == 16 && y1 == 12);
+    r.translate(2, 3);
+    r.bounds(&x0, &y0, &x1, &y1);
+    CHECK(x0 == 6 && y0 == 7);
+    // Ellipse flattening stays within its bounds and is smooth (many points).
+    vec::Object e = vec::make_ellipse(20, 20, 10, 5);
+    auto pts = vec::flatten(e.paths[0]);
+    CHECK(pts.size() > 20);
+    for (auto& p : pts) CHECK(p.first >= 9.9f && p.first <= 30.1f && p.second >= 14.9f && p.second <= 25.1f);
+    // Gradient: linear top-to-bottom at angle 0 from black to white; midpoint honored.
+    vec::Gradient g;
+    CHECK(g.at(0).r == 0 && g.at(1).r == 255 && g.at(0.5f).r >= 127 && g.at(0.5f).r <= 128);
+    g.colors[0].mid = 25;
+    CHECK(g.at(0.25f).r >= 127 && g.at(0.25f).r <= 128);
+    g.colors[0].mid = 50;
+    g.opacities[0].opacity = 0;
+    CHECK(g.at(0).a == 0 && g.at(1).a == 255);
+    vec::Object gr = vec::make_rectangle(0, 0, 10, 100);
+    gr.fill.kind = vec::PaintStyle::Kind::Gradient;
+    gr.fill.gradient = vec::Gradient{};
+    gr.fill.gradient.angle = 180;  // first stop at the top
+    gr.antialias = false;
+    Image gi(10, 100, {0, 0, 0, 0});
+    vec::rasterize({gr}, gi);
+    CHECK(gi.get(5, 2).r < 20 && gi.get(5, 97).r > 235 && gi.get(5, 50).r > 110 && gi.get(5, 50).r < 145);
+    // Even-odd: a square with a square hole.
+    vec::Object hole = vec::make_rectangle(0, 0, 20, 20);
+    vec::Object inner = vec::make_rectangle(5, 5, 15, 15);
+    hole.paths.push_back(inner.paths[0]);
+    hole.fill.kind = vec::PaintStyle::Kind::Solid; hole.antialias = false;
+    Image hi(20, 20, {0, 0, 0, 0});
+    vec::rasterize({hole}, hi);
+    CHECK(hi.get(2, 2).a == 255 && hi.get(10, 10).a == 0);
+    // Document: vector layer, edit command, convert to raster.
+    Document doc(24, 20);
+    doc.add_layer("bg").background = true;
+    CommandStack hist;
+    hist.run(doc, std::make_unique<AddVectorLayerCommand>("Vector 1"));
+    CHECK(doc.layer_count() == 2 && doc.layer(1).is_vector() && doc.active_layer() == 1);
+    std::vector<vec::Object> objs{r};
+    hist.run(doc, std::make_unique<VectorEditCommand>(1, "Add Rectangle", objs));
+    CHECK(doc.layer(1).objects.size() == 1 && doc.layer(1).pixels.get(11, 10).b == 255);
+    hist.undo(doc);
+    CHECK(doc.layer(1).objects.empty() && doc.layer(1).pixels.get(11, 10).a == 0);
+    hist.redo(doc);
+    hist.run(doc, std::make_unique<ConvertToRasterCommand>(1));
+    CHECK(doc.layer(1).is_raster() && doc.layer(1).objects.empty() && doc.layer(1).pixels.get(11, 10).b == 255);
+    hist.undo(doc);
+    CHECK(doc.layer(1).is_vector() && doc.layer(1).objects.size() == 1);
+}
+
+static void test_vector_roundtrip() {
+    Document d(40, 30);
+    d.add_layer("bg").background = true;
+    Layer& v = d.add_layer("Vector 1");
+    v.type = LayerType::Vector;
+    vec::Object rect = vec::make_rectangle(2, 2, 20, 12);
+    rect.stroke.kind = vec::PaintStyle::Kind::Solid; rect.stroke.color = {10, 20, 30, 255}; rect.stroke_width = 3;
+    rect.fill.kind = vec::PaintStyle::Kind::Gradient;
+    rect.fill.gradient.colors = {{{255, 0, 0, 255}, 0, 50}, {{0, 0, 255, 255}, 100, 40}};
+    rect.fill.gradient.style = vec::GradientStyle::Radial;
+    rect.fill.gradient.angle = 45; rect.fill.gradient.center_x = 30; rect.fill.gradient.center_y = 60;
+    vec::Object ell = vec::make_ellipse(25, 20, 8, 6);
+    ell.fill.kind = vec::PaintStyle::Kind::Solid; ell.fill.color = {0, 255, 0, 255}; ell.antialias = false;
+    v.objects = {rect, ell};
+    d.rasterize_vector_layer(1);
+    std::vector<uint8_t> file = io::save_psp_to_memory(d);
+    std::string err;
+    std::vector<std::string> warnings;
+    auto back = io::load_psp_from_memory(file.data(), file.size(), &err, &warnings);
+    CHECK(back && warnings.empty() && back->layer_count() == 2 && back->layer(1).is_vector());
+    const auto& objs = back->layer(1).objects;
+    CHECK(objs.size() == 2 && objs[0].name == "Rectangle" && objs[1].name == "Ellipse");
+    CHECK(objs[0].paths.size() == 1 && objs[0].paths[0].nodes.size() == 4 && objs[0].paths[0].closed);
+    CHECK(objs[0].paths[0].nodes[0].x == 2 && objs[0].paths[0].nodes[0].y == 12);
+    CHECK(objs[0].stroke.kind == vec::PaintStyle::Kind::Solid && objs[0].stroke.color.g == 20 && objs[0].stroke_width == 3);
+    CHECK(objs[0].fill.kind == vec::PaintStyle::Kind::Gradient && objs[0].fill.gradient.style == vec::GradientStyle::Radial);
+    CHECK(objs[0].fill.gradient.opacities.size() == 2 && objs[0].fill.gradient.repeats == 0);
+    CHECK(objs[0].fill.gradient.colors.size() == 2 && objs[0].fill.gradient.colors[1].color.b == 255 && objs[0].fill.gradient.colors[1].mid == 40);
+    CHECK(objs[0].fill.gradient.angle == 45 && objs[0].fill.gradient.center_x == 30 && objs[0].fill.gradient.center_y == 60);
+    CHECK(objs[1].fill.color.g == 255 && !objs[1].antialias && objs[1].paths[0].nodes[1].in_y != objs[1].paths[0].nodes[1].y);
+    // The rendered cache matches the original rendering.
+    CHECK(back->layer(1).pixels.get(25, 20).g == 255 && back->layer(1).pixels.get(3, 3).a > 0);
+
+    // Sample libraries, when the backup is present.
+    auto shapes = io::load_preset_shapes(std::string(FIRN_SOURCE_DIR) + "/WindowsInstall/Preset Shapes/Star 1.pspshape");
+    if (!shapes.empty()) CHECK(shapes[0].paths[0].nodes.size() == 8 && shapes[0].stroke.kind == vec::PaintStyle::Kind::Solid);
+    auto grads = io::load_gradients(std::string(FIRN_SOURCE_DIR) + "/WindowsInstall/Gradients/Black-white.PspGradient");
+    if (!grads.empty()) {
+        CHECK(grads[0].name == "Black-white" && grads[0].colors.size() == 3);
+        CHECK(grads[0].colors[0].color.r == 0 && grads[0].colors[2].color.r == 255 && grads[0].colors[2].pos == 100);
+    }
+    auto line = io::load_styled_line(std::string(FIRN_SOURCE_DIR) + "/WindowsInstall/Styled Lines/Dashed Lines/Dashed.PspStyledLine");
+    if (line) {
+        CHECK(line->name == "Dashed" && line->dashes.size() == 2 && line->dashes[0] == 24 && line->dashes[1] == 12);
+        CHECK(line->miter == 2.0f && line->first_cap == 0);
+        // A dashed stroke covers less than a solid one, and caps add to it.
+        vec::Object solid;
+        vec::Path path;
+        vec::Node n0; n0.x = n0.in_x = n0.out_x = 10; n0.y = n0.in_y = n0.out_y = 10; n0.flags[0] = 1;
+        vec::Node n1 = n0; n1.x = n1.in_x = n1.out_x = 90; n1.flags[0] = 0;
+        path.nodes = {n0, n1};
+        path.closed = false;
+        solid.paths.push_back(path);
+        solid.fill.kind = vec::PaintStyle::Kind::None;
+        solid.stroke.kind = vec::PaintStyle::Kind::Solid; solid.stroke.color = {0, 0, 0, 255};
+        solid.stroke_width = 2;
+        vec::Object dashed = solid; dashed.line = *line;
+        vec::Object capped = solid; capped.line.last_cap = 4; capped.line.last_w = 4; capped.line.last_h = 4;
+        auto covered = [](const vec::Object& o) {
+            Image img(100, 20);
+            vec::rasterize({o}, img);
+            long n = 0;
+            for (int y = 0; y < 20; ++y) for (int x = 0; x < 100; ++x) n += img.get(x, y).a;
+            return n;
+        };
+        const long a = covered(solid), b = covered(dashed), c = covered(capped);
+        CHECK(b < a && b > 0);
+        CHECK(c > a);
+        // Styled line files round-trip through the writer.
+        const std::string tmp = "/tmp/firn_test_line.PspStyledLine";
+        CHECK(io::save_styled_line(*line, tmp));
+        auto back = io::load_styled_line(tmp);
+        CHECK(back && back->dashes == line->dashes && back->first_w == line->first_w && back->miter == line->miter);
+        std::remove(tmp.c_str());
+    }
+}
+
 int main() {
+    test_vector_roundtrip();
+    test_vector_core();
     test_history_limit();
     test_brush_texture();
     test_kaleidoscope_sunburst();

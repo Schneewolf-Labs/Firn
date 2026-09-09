@@ -40,7 +40,8 @@ always use the stored length rather than a constant.
 | 16 | Composite bank | chunk `{len, count}` then attribute blocks, then one data block each |
 | 17 | Composite attributes | chunk `{len, width, height, depth u16, compression u16, planes u16, colors u32, type u16}`; type 0 full size, 1 thumbnail |
 | 18 | JPEG | chunk `{len, compressed_len, uncompressed_len, image_type u16}` then a JFIF stream |
-| 10, 25, 26, 12, 13, 14 | extended data, group / mask / adjustment / vector extensions, shapes | skipped |
+| 13 / 14 / 15 / 19 | Vector extension / shape / paint style / line style | see **Vector layers** below |
+| 10, 26, 12 | extended data, adjustment extension | skipped |
 
 ## General image attributes (id 0), chunk length 46
 
@@ -112,13 +113,81 @@ meaning. 48-bit samples are u16; the high byte is kept.
 RLE: read a count byte `n`; if `n > 128` repeat the next byte `n - 128`
 times, else copy `n` literal bytes.
 
+## Vector layers (type 3)
+
+The layer info chunk is followed by a vector extension block (id 13) whose
+chunk is `{8, shape count u32}`, then that many shape blocks (id 14), then
+an empty bitmap chunk `{8, 0, 0}`. Shapes are stored bottom-first: the last
+shape in the block is drawn on top (the palette lists them in reverse).
+
+A shape block is a sequence of chunks and sub-blocks:
+
+1. Info chunk `{len, name (u16 len + bytes), type u16, u32 5, shape id u32,
+   u32 0}`. Type 2 is a path, type 5 a group. A group is followed only by a
+   chunk `{8, member count}`; its members are the next shape blocks.
+2. Attribute chunk, length 60 (payload 56): `u8 stroke on, u8 fill on,
+   u8 antialias, f64 stroke width, {u8, u8, f64, f64} x2, u8, f64 miter
+   limit`. The two records and the lone byte are carried through unchanged
+   (line caps and join, unverified). Defaults in the original's own preset
+   shapes: `01 00 1.0 1.0`, `01 00 1.0 1.0`, `00`, miter 10.
+3. Paint style block (id 15) for the stroke, then one for the fill. The
+   first chunk is `{6, kind u16}`: 0 none, 1 solid, 2 gradient, 3 pattern.
+   Solid: chunk `{12, r, g, b, 0, ffffffff}`. Gradient: chunk `{35, style
+   u16, ffffffff, invert u8, center x u32 %, center y u32 %, angle f64,
+   repeats u32, color stop count u16, opacity stop count u16}` followed by
+   color stops `{12, r, g, b, 0, position u16 %, midpoint u16 %}` and
+   opacity stops `{9, opacity u8 %, position u16 %, midpoint u16 %}`.
+   Style 0 is linear; 1 rectangular, 2 sunburst, 3 radial are assumed from
+   the dialog order. A disabled stroke or fill still has its style block
+   (kind 0) and its attribute flag clear.
+4. Line style block (id 19), chunk length 45: `u32 first cap, f64 width,
+   f64 height, u32 last cap, f64 width, f64 height, u8`. Every sample has
+   caps 0 and sizes 1.0 (or all zeros in preset shapes).
+5. Per path: chunk `{8, node count}` then 55-byte node chunks: `f64 x, y,
+   in x, in y, out x, out y` (handles are absolute image coordinates) and
+   three flag bytes: byte 0 bit 0 marks the first node of a path, byte 1
+   bit 7 closes the path, bits 0x40/0x43/0xc0 in byte 1 encode the node
+   type (corner, smooth, symmetric; only 0x40 is relied on).
+
+Linear gradient parameter, verified against the stored composite of
+`Vector balloon.PspImage` (mean error 0.8/255): with `(dx, dy)` the pixel
+offset from the object bounds' center and `a` the angle in degrees,
+
+    t = (dx sin a - dy cos a) / (|w sin a| + |h cos a|) + 0.5
+
+so angle 0 runs bottom-to-top, 90 left-to-right, 180 top-to-bottom.
+Colors interpolate between stops with the midpoint skewing the blend; the
+opacity stops interpolate the same way. `repeats` folds `t` that many extra
+times; `invert` flips it.
+
+Library files reuse this format: `.PspShape` / `.pspshape` (preset shapes)
+are complete images with one vector layer; `.PspGradient` files are
+Photoshop `.grd` version 3 (big-endian `8BGR`, u16 version, u16 count;
+each gradient: Pascal name padded to an even 1+len bytes, u16 color stop
+count, 20-byte color stops `{location/4096 u32, midpoint u32, model u16,
+4 x u16 components (>> 8), u16}`, u16 opacity stop count, 10-byte opacity
+stops `{location, midpoint, opacity u16}`).
+
+`.PspStyledLine` is a raw little-endian struct, decoded from all 25
+shipped files: optional magic `01 51 45 57`, first cap u32, last cap u32,
+first cap width and height f64, last cap width and height f64, miter
+limit f64, segment count u32 and that many u32 segment lengths
+(alternating dash and gap, in multiples of the stroke width), two u32
+flags, segment start cap `{type u32, width f64, height f64}`, segment end
+cap likewise, and a u32 that is 1 whenever the segment caps are set. Cap
+types seen: 0 none, 1 round, 2 square, 3 narrow arrow, 4 wide arrow, 7
+fleur-de-lis, 12 ball. The shape's line style block (id 19) holds the
+segment-cap part of the same struct. `+Solid` (the default) has no magic
+and cap sizes of 7.21, the same numbers the balloon sample carries in its
+attribute records.
+
 ## Composite bank (id 16)
 
 Attribute blocks (id 17) are listed first, then one data block per attribute
 in the same order: a JPEG block for JPEG-compressed entries, otherwise a
-composite image block (id 9). Files whose layers are all vector or adjustment
+composite image block (id 9). Files whose layers are all adjustment layers
 still carry a full-size (type 0) composite, which the reader uses as a
-fallback Background layer.
+fallback Background layer; vector layers are rendered from their shapes.
 
 ## Fidelity check
 
@@ -144,5 +213,6 @@ all layers intact; `scripts/original-open.sh` automates that check.
 
 ## Not read
 
-The current selection block (id 6), vector and adjustment layer contents,
-color profiles, and the 16-bit path beyond truncation to 8 bits.
+The current selection block (id 6), adjustment layer contents, vector
+text shapes (no sample carries one), color profiles, and the 16-bit path
+beyond truncation to 8 bits.

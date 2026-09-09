@@ -23,7 +23,7 @@ enum : uint16_t {
     kImageBlock = 0, kCreatorBlock = 1, kColorBlock = 2, kLayerStartBlock = 3, kLayerBlock = 4,
     kChannelBlock = 5, kSelectionBlock = 6, kCompositeImageBlock = 9, kCompositeBankBlock = 16,
     kCompositeAttrBlock = 17, kJpegBlock = 18, kGroupExtBlock = 25, kMaskExtBlock = 26, kTubeBlock = 11,
-    kAlphaBankBlock = 7, kAlphaChannelBlock = 8,
+    kAlphaBankBlock = 7, kAlphaChannelBlock = 8, kVectorExtBlock = 13, kShapeBlock = 14, kPaintStyleBlock = 15, kLineStyleBlock = 19,
 };
 enum : uint16_t { kCompNone = 0, kCompRle = 1, kCompLz77 = 2, kCompJpeg = 3 };
 // Bitmap (DIB) types. Layers use 0/1; thumbnails 5/6; composites 8/9.
@@ -31,6 +31,8 @@ enum : uint16_t { kDibImage = 0, kDibTransMask = 1, kDibUserMask = 2, kDibAlphaM
 bool is_image_dib(uint16_t t) { return t == kDibImage || t == kDibThumbnail || t == kDibComposite; }
 bool is_trans_dib(uint16_t t) { return t == kDibTransMask || t == kDibThumbnailTrans || t == kDibCompositeTrans; }
 enum : uint8_t { kLayerRaster = 1, kLayerVector = 3, kLayerAdjustment = 4, kLayerGroup = 5, kLayerMask = 6, kLayerArtMedia = 7 };
+
+
 
 const char kSignature[] = "Paint Shop Pro Image File\n\x1a";
 
@@ -206,6 +208,142 @@ bool read_mask_layer(const Reader& r, const Block& lb, size_t info_end, const He
     return true;
 }
 
+
+// --- Vector shapes -----------------------------------------------------------
+// Layout (docs/FORMAT.md): the vector extension block holds a chunk
+// {8, shape count} followed by shape blocks. A shape block is a sequence of
+// chunks and sub-blocks: info chunk {name, type u16 (2 path, 5 group), a u32,
+// shape id u32, c u32}, attribute chunk (60 bytes: u8 stroke on, u8 fill on,
+// u8 antialias, stroke width f64, two {u8, u8, f64, f64} records, u8, miter
+// f64), paint style block (stroke), paint style block (fill), line style
+// block, then per path {8, node count} and 55-byte nodes.
+
+namespace {
+template <class R> float rd_f64(const R& r, size_t o) { double d; std::memcpy(&d, r.p + o, 8); return static_cast<float>(d); }
+
+bool read_paint_style(const Reader& r, const Block& b, vec::PaintStyle& out) {
+    size_t p = b.start;
+    if (!r.ok(p, 6)) return false;
+    const size_t c0 = r.u32(p);
+    out.kind = static_cast<vec::PaintStyle::Kind>(r.u16(p + 4));
+    p += c0;
+    if (out.kind == vec::PaintStyle::Kind::Solid) {
+        if (r.ok(p, 8) && p + r.u32(p) <= b.end) out.color = {r.u8(p + 4), r.u8(p + 5), r.u8(p + 6), 255};
+    } else if (out.kind == vec::PaintStyle::Kind::Gradient) {
+        vec::Gradient& g = out.gradient;
+        g.colors.clear();
+        g.opacities.clear();
+        if (r.ok(p, 4)) {
+            const size_t cl = r.u32(p);
+            // Payload: style u16, u32 (0xffffffff), invert u8, center x u32, center y
+            // u32, angle f64, repeats u32, color stop count u16, opacity stop count u16.
+            if (cl >= 35 && r.ok(p, cl)) {
+                g.style = static_cast<vec::GradientStyle>(r.u16(p + 4));
+                g.invert = r.u8(p + 10) != 0;
+                g.center_x = static_cast<float>(r.u32(p + 11));
+                g.center_y = static_cast<float>(r.u32(p + 15));
+                g.angle = rd_f64(r, p + 19);
+                g.repeats = static_cast<int>(r.u32(p + 27));
+            }
+            p += cl;
+        }
+        while (r.ok(p, 4) && p + r.u32(p) <= b.end) {
+            const size_t cl = r.u32(p);
+            if (cl == 12) g.colors.push_back({{r.u8(p + 4), r.u8(p + 5), r.u8(p + 6), 255}, static_cast<float>(r.u16(p + 8)), static_cast<float>(r.u16(p + 10))});
+            else if (cl == 9) g.opacities.push_back({static_cast<float>(r.u8(p + 4)), static_cast<float>(r.u16(p + 5)), static_cast<float>(r.u16(p + 7))});
+            else if (cl < 4) break;
+            p += cl;
+        }
+        if (g.colors.empty()) g.colors = {{{0, 0, 0, 255}, 0, 50}, {{255, 255, 255, 255}, 100, 50}};
+        if (g.opacities.empty()) g.opacities = {{100, 0, 50}, {100, 100, 50}};
+    }
+    return true;
+}
+
+bool read_shape(const Reader& r, const Block& sb, vec::Object& o) {
+    size_t p = sb.start;
+    if (!r.ok(p, 6)) return false;
+    const size_t c0 = r.u32(p);
+    const uint16_t nlen = r.u16(p + 4);
+    if (!r.ok(p + 6, nlen + 14u)) return false;
+    o.name.assign(reinterpret_cast<const char*>(r.p + p + 6), nlen);
+    size_t q = p + 6 + nlen;
+    o.file_type = r.u16(q); o.file_a = r.u32(q + 2); o.file_flags = r.u32(q + 6); o.file_c = r.u32(q + 10);
+    p += c0;
+    if (o.file_type == 5) {  // group: only a member count follows
+        o.is_group = true;
+        if (r.ok(p, 8) && r.u32(p) == 8) o.group_count = r.u32(p + 4);
+        return true;
+    }
+    if (!r.ok(p, 4)) return false;
+    const size_t c1 = r.u32(p);
+    bool stroke_on = true, fill_on = true;
+    if (c1 >= 4 && r.ok(p, c1)) {
+        o.attr_raw.assign(r.p + p + 4, r.p + p + c1);
+        if (o.attr_raw.size() >= 56) {
+            stroke_on = o.attr_raw[0] != 0;
+            fill_on = o.attr_raw[1] != 0;
+            o.antialias = o.attr_raw[2] != 0;
+            double d; std::memcpy(&d, o.attr_raw.data() + 3, 8); o.stroke_width = static_cast<float>(d);
+            std::memcpy(&d, o.attr_raw.data() + 48, 8); o.miter = static_cast<float>(d);
+        }
+    }
+    p += c1;
+    int styles_seen = 0;
+    while (p < sb.end) {
+        if (r.ok(p, 4) && std::memcmp(r.p + p, "~BK\0", 4) == 0) {
+            if (!r.ok(p + 4, 6)) break;
+            const uint16_t id = r.u16(p + 4);
+            const size_t len = r.u32(p + 6);
+            const Block inner{id, p + 10, p + 10 + len};
+            if (inner.end > sb.end) break;
+            if (id == kPaintStyleBlock) { read_paint_style(r, inner, styles_seen == 0 ? o.stroke : o.fill); ++styles_seen; }
+            else if (id == kLineStyleBlock && r.ok(inner.start, 4)) {
+                const size_t cl = r.u32(inner.start);
+                if (cl >= 4 && inner.start + cl <= inner.end) {
+                    o.linestyle_raw.assign(r.p + inner.start + 4, r.p + inner.start + cl);
+                    if (o.linestyle_raw.size() >= 40) {
+                        const uint8_t* d = o.linestyle_raw.data();
+                        auto f64at = [&](size_t off) { double v; std::memcpy(&v, d + off, 8); return static_cast<float>(v); };
+                        auto u32at = [&](size_t off) { uint32_t v; std::memcpy(&v, d + off, 4); return v; };
+                        o.line.seg_start_cap = u32at(0); o.line.seg_start_w = f64at(4); o.line.seg_start_h = f64at(12);
+                        o.line.seg_end_cap = u32at(20); o.line.seg_end_w = f64at(24); o.line.seg_end_h = f64at(32);
+                        o.line.seg_caps_on = d[40];
+                    }
+                }
+            }
+            p = inner.end;
+            continue;
+        }
+        if (!r.ok(p, 4)) break;
+        const size_t cl = r.u32(p);
+        if (cl == 8) {  // path with node count
+            const uint32_t n = r.u32(p + 4);
+            p += 8;
+            vec::Path path;
+            for (uint32_t i = 0; i < n && r.ok(p, 55) && r.u32(p) == 55; ++i) {
+                vec::Node nd;
+                nd.x = rd_f64(r, p + 4); nd.y = rd_f64(r, p + 12);
+                nd.in_x = rd_f64(r, p + 20); nd.in_y = rd_f64(r, p + 28);
+                nd.out_x = rd_f64(r, p + 36); nd.out_y = rd_f64(r, p + 44);
+                nd.flags[0] = r.u8(p + 52); nd.flags[1] = r.u8(p + 53); nd.flags[2] = r.u8(p + 54);
+                path.nodes.push_back(nd);
+                p += 55;
+            }
+            path.closed = !path.nodes.empty() && (path.nodes.back().flags[1] & 0x80);
+            o.paths.push_back(std::move(path));
+            continue;
+        }
+        if (cl < 4 || p + cl > sb.end) break;
+        p += cl;
+    }
+    if (!stroke_on) o.stroke.kind = vec::PaintStyle::Kind::None;
+    if (!fill_on) o.fill.kind = vec::PaintStyle::Kind::None;
+    return !o.paths.empty() || o.is_text || o.is_group;
+}
+
+}  // namespace
+
 bool read_layer(const Reader& r, const Block& lb, const Header& hdr, const Palette* pal, Document& doc,
                 BankCtx& ctx, std::vector<std::string>* warnings, std::string& err) {
     if (!r.ok(lb.start, 6)) { err = "short layer block"; return false; }
@@ -256,6 +394,27 @@ bool read_layer(const Reader& r, const Block& lb, const Header& hdr, const Palet
         Layer& T = doc.layer(target);
         T.mask = std::move(m);
         T.mask_enabled = visible != 0 && !mask_disabled;
+        return true;
+    }
+    if (type == kLayerVector) {
+        Layer& L = doc.add_layer(name);
+        L.type = LayerType::Vector;
+        L.depth = depth;
+        L.opacity = opacity / 255.0f;
+        L.blend = map_blend(blend);
+        L.visible = visible != 0;
+        L.pixels = Image(doc.width(), doc.height(), {0, 0, 0, 0});
+        for (const Block& vb : blocks(r, lb.start + chunk, lb.end)) {
+            if (vb.id != kVectorExtBlock || !r.ok(vb.start, 8)) continue;
+            const size_t vchunk = r.u32(vb.start);
+            for (const Block& sb : blocks(r, vb.start + vchunk, vb.end)) {
+                if (sb.id != kShapeBlock) continue;
+                vec::Object o;
+                if (read_shape(r, sb, o)) L.objects.push_back(std::move(o));
+                else if (warnings) warnings->push_back("Skipped an unreadable shape in vector layer \"" + name + "\"");
+            }
+        }
+        doc.rasterize_vector_layer(doc.layer_count() - 1);
         return true;
     }
     if (type != kLayerRaster) {
@@ -483,6 +642,97 @@ std::unique_ptr<Document> load_psp_from_memory(const uint8_t* data, size_t size,
     return doc;
 }
 
+std::vector<vec::Object> load_preset_shapes(const std::string& path, std::string* err) {
+    std::vector<vec::Object> out;
+    auto doc = load_psp(path, err, nullptr);
+    if (!doc) return out;
+    for (size_t i = 0; i < doc->layer_count(); ++i)
+        if (doc->layer(i).is_vector()) for (const vec::Object& o : doc->layer(i).objects) out.push_back(o);
+    return out;
+}
+
+// Photoshop .grd version 3: big-endian; "8BGR", version u16, count u16, then
+// per gradient a Pascal name, color stops (location 0..4096, midpoint, model,
+// four u16 components) and opacity stops (location, midpoint, opacity).
+std::vector<vec::Gradient> load_gradients(const std::string& path, std::string* err) {
+    std::vector<vec::Gradient> out;
+    std::ifstream f(path, std::ios::binary);
+    if (!f) { if (err) *err = "cannot open " + path; return out; }
+    std::vector<uint8_t> d((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+    auto be16 = [&](size_t o) { return static_cast<uint16_t>((d[o] << 8) | d[o + 1]); };
+    auto be32 = [&](size_t o) { return (static_cast<uint32_t>(d[o]) << 24) | (d[o + 1] << 16) | (d[o + 2] << 8) | d[o + 3]; };
+    if (d.size() < 8 || std::memcmp(d.data(), "8BGR", 4) != 0) { if (err) *err = "not a gradient file"; return out; }
+    const int count = be16(6);
+    size_t p = 8;
+    for (int gi = 0; gi < count && p < d.size(); ++gi) {
+        vec::Gradient g;
+        const uint8_t nlen = d[p];
+        if (p + 1 + nlen > d.size()) break;
+        g.name.assign(reinterpret_cast<const char*>(d.data() + p + 1), nlen);
+        p += 1 + nlen;
+        if ((1 + nlen) % 2 == 1) ++p;  // Pascal strings are padded to an even length
+        if (p + 2 > d.size()) break;
+        const int nc = be16(p); p += 2;
+        g.colors.clear();
+        // Color stop (20 bytes): location 0..4096, midpoint, color model, four
+        // u16 components, and a trailing u16 (stop type).
+        for (int i = 0; i < nc && p + 20 <= d.size(); ++i) {
+            const float loc = be32(p) / 4096.0f * 100.0f;
+            const float mid = static_cast<float>(be32(p + 4));
+            const uint16_t model = be16(p + 8);
+            Color c{static_cast<uint8_t>(be16(p + 10) >> 8), static_cast<uint8_t>(be16(p + 12) >> 8), static_cast<uint8_t>(be16(p + 14) >> 8), 255};
+            if (model == 3) c = {static_cast<uint8_t>(be16(p + 10) >> 8), static_cast<uint8_t>(be16(p + 10) >> 8), static_cast<uint8_t>(be16(p + 10) >> 8), 255};  // grayscale
+            g.colors.push_back({c, loc, std::clamp(mid, 1.0f, 99.0f)});
+            p += 20;
+        }
+        if (p + 2 > d.size()) break;
+        const int no = be16(p); p += 2;
+        g.opacities.clear();
+        for (int i = 0; i < no && p + 10 <= d.size(); ++i) {
+            g.opacities.push_back({be16(p + 8) / 255.0f * 100.0f, be32(p) / 4096.0f * 100.0f, static_cast<float>(be32(p + 4))});
+            p += 10;
+        }
+        if (g.colors.empty()) continue;
+        if (g.opacities.empty()) g.opacities = {{100, 0, 50}, {100, 100, 50}};
+        out.push_back(std::move(g));
+    }
+    return out;
+}
+
+// Styled line file (docs/FORMAT.md): optional magic 01 51 45 57, then
+// {first cap u32, last cap u32, first w f64, first h f64, last w f64,
+// last h f64, miter f64, segment count u32, segment lengths u32 each,
+// u32, u32, segment start cap {u32, f64, f64}, segment end cap {u32, f64,
+// f64}, u32 segment caps on}.
+std::optional<vec::LineStyle> load_styled_line(const std::string& path, std::string* err) {
+    std::ifstream f(path, std::ios::binary);
+    if (!f) { if (err) *err = "cannot open " + path; return std::nullopt; }
+    std::vector<uint8_t> d((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+    size_t o = 0;
+    if (d.size() >= 4 && std::memcmp(d.data(), "\x01QEW", 4) == 0) o = 4;
+    if (d.size() < o + 52) { if (err) *err = "not a styled line file"; return std::nullopt; }
+    auto f64at = [&](size_t p) { double v; std::memcpy(&v, d.data() + p, 8); return static_cast<float>(v); };
+    auto u32at = [&](size_t p) { uint32_t v; std::memcpy(&v, d.data() + p, 4); return v; };
+    vec::LineStyle l;
+    l.first_cap = u32at(o); l.last_cap = u32at(o + 4);
+    l.first_w = f64at(o + 8); l.first_h = f64at(o + 16); l.last_w = f64at(o + 24); l.last_h = f64at(o + 32);
+    l.miter = f64at(o + 40);
+    const uint32_t n = u32at(o + 48);
+    size_t p = o + 52;
+    for (uint32_t i = 0; i < n && p + 4 <= d.size(); ++i, p += 4) l.dashes.push_back(static_cast<float>(u32at(p)));
+    if (p + 52 <= d.size()) {
+        l.flag_a = u32at(p); l.flag_b = u32at(p + 4); p += 8;
+        l.seg_start_cap = u32at(p); l.seg_start_w = f64at(p + 4); l.seg_start_h = f64at(p + 12); p += 20;
+        l.seg_end_cap = u32at(p); l.seg_end_w = f64at(p + 4); l.seg_end_h = f64at(p + 12); p += 20;
+        l.seg_caps_on = u32at(p);
+    }
+    std::string base = path;
+    if (const size_t sl = base.find_last_of("/\\"); sl != std::string::npos) base = base.substr(sl + 1);
+    if (const size_t dot = base.rfind('.'); dot != std::string::npos) base = base.substr(0, dot);
+    l.name = base;
+    return l;
+}
+
 std::optional<TubeInfo> load_psp_tube_info(const uint8_t* data, size_t size) {
     const Reader r{data, size};
     if (size < 36 || std::memcmp(data, kSignature, sizeof(kSignature) - 1) != 0) return std::nullopt;
@@ -661,6 +911,111 @@ const uint8_t kLayerInfoTail[43] = {
     0xff, 0xff, 0x00, 0x00, 0xff, 0xff, 0x00, 0x00, 0xff, 0xff, 0x00, 0x00, 0xff, 0xff, 0x00, 0x00, 0xff, 0xff, 0x00, 0x00,
     0xff, 0xff, 0x00};
 
+
+// Vector shape writers (see the reader above for the layout).
+namespace {
+
+
+std::vector<uint8_t> write_paint_style(const vec::PaintStyle& s) {
+    Writer w;
+    w.u32(6); w.u16(static_cast<int>(s.kind));
+    if (s.kind == vec::PaintStyle::Kind::Solid) {
+        w.u32(12); w.u8(s.color.r); w.u8(s.color.g); w.u8(s.color.b); w.u8(0); w.u32(0xffffffffu);
+    } else if (s.kind == vec::PaintStyle::Kind::Gradient) {
+        const vec::Gradient& g = s.gradient;
+        w.u32(35); w.u16(static_cast<int>(g.style)); w.u32(0xffffffffu); w.u8(g.invert ? 1 : 0);
+        w.u32(static_cast<uint32_t>(g.center_x)); w.u32(static_cast<uint32_t>(g.center_y));
+        w.f64(g.angle); w.u32(static_cast<uint32_t>(g.repeats));
+        w.u16(static_cast<int>(g.colors.size())); w.u16(static_cast<int>(g.opacities.size()));
+        for (const vec::GradientStop& st : g.colors) { w.u32(12); w.u8(st.color.r); w.u8(st.color.g); w.u8(st.color.b); w.u8(0); w.u16(static_cast<int>(st.pos)); w.u16(static_cast<int>(st.mid)); }
+        for (const vec::OpacityStop& st : g.opacities) { w.u32(9); w.u8(static_cast<int>(st.opacity)); w.u16(static_cast<int>(st.pos)); w.u16(static_cast<int>(st.mid)); }
+    }
+    Writer b;
+    b.block(kPaintStyleBlock, w.out);
+    return b.out;
+}
+
+// The 41-byte line style payload: {u16 cap, f64 w, f64 h} x2, u8 x5 (segments).
+std::vector<uint8_t> write_line_style(const vec::LineStyle& l, const std::vector<uint8_t>& raw) {
+    Writer w;
+    if (raw.size() == 41) w.bytes(raw);
+    else {
+        w.u32(l.seg_start_cap); w.f64(l.seg_start_w); w.f64(l.seg_start_h);
+        w.u32(l.seg_end_cap); w.f64(l.seg_end_w); w.f64(l.seg_end_h);
+        w.u8(static_cast<uint8_t>(l.seg_caps_on));
+    }
+    Writer c;
+    c.u32(static_cast<uint32_t>(w.out.size() + 4));
+    c.bytes(w.out);
+    Writer b;
+    b.block(kLineStyleBlock, c.out);
+    return b.out;
+}
+
+std::vector<uint8_t> write_shape(const vec::Object& o) {
+    Writer w;
+    const std::string name = o.name.substr(0, 255);
+    w.u32(static_cast<uint32_t>(4 + 2 + name.size() + 14));
+    w.u16(static_cast<int>(name.size()));
+    w.bytes(reinterpret_cast<const uint8_t*>(name.data()), name.size());
+    w.u16(o.is_group ? 5 : o.file_type); w.u32(o.file_a); w.u32(o.file_flags); w.u32(o.file_c);
+    if (o.is_group) {
+        w.u32(8); w.u32(o.group_count);
+        Writer gb;
+        gb.block(kShapeBlock, w.out);
+        return gb.out;
+    }
+    // Attribute chunk: reuse the file's bytes where we have them, patching
+    // the fields we understand (stroke/fill on, antialias, width, miter).
+    std::vector<uint8_t> attr = o.attr_raw;
+    if (attr.size() != 56) {
+        Writer a;
+        a.u8(0); a.u8(0); a.u8(0); a.f64(1.0);
+        a.u8(1); a.u8(0); a.f64(1.0); a.f64(1.0);
+        a.u8(1); a.u8(0); a.f64(1.0); a.f64(1.0);
+        a.u8(0); a.f64(10.0);
+        attr = a.out;
+    }
+    attr[0] = o.stroke.enabled() ? 1 : 0;
+    attr[1] = o.fill.enabled() ? 1 : 0;
+    attr[2] = o.antialias ? 1 : 0;
+    const double wd = o.stroke_width, mt = o.miter;
+    std::memcpy(attr.data() + 3, &wd, 8);
+    std::memcpy(attr.data() + 48, &mt, 8);
+    w.u32(60); w.bytes(attr);
+    w.bytes(write_paint_style(o.stroke));
+    w.bytes(write_paint_style(o.fill));
+    w.bytes(write_line_style(o.line, o.linestyle_raw));
+    for (const vec::Path& p : o.paths) {
+        w.u32(8); w.u32(static_cast<uint32_t>(p.nodes.size()));
+        for (size_t i = 0; i < p.nodes.size(); ++i) {
+            const vec::Node& n = p.nodes[i];
+            w.u32(55);
+            w.f64(n.x); w.f64(n.y); w.f64(n.in_x); w.f64(n.in_y); w.f64(n.out_x); w.f64(n.out_y);
+            uint8_t f0 = n.flags[0], f1 = n.flags[1];
+            if (i == 0) f0 |= 1;
+            if (i + 1 == p.nodes.size()) { if (p.closed) f1 |= 0x80; else f1 &= static_cast<uint8_t>(~0x80); }
+            w.u8(f0); w.u8(f1); w.u8(n.flags[2]);
+        }
+    }
+    Writer b;
+    b.block(kShapeBlock, w.out);
+    return b.out;
+}
+
+std::vector<uint8_t> vector_layer_payload(const Layer& L) {
+    Writer ext;
+    ext.u32(8); ext.u32(static_cast<uint32_t>(L.objects.size()));
+    for (const vec::Object& o : L.objects) ext.bytes(write_shape(o));
+    Writer b;
+    b.block(kVectorExtBlock, ext.out);
+    return b.out;
+}
+
+}  // namespace
+
+
+
 // Layer info chunk shared by raster, group and mask layer blocks.
 std::vector<uint8_t> layer_info(const std::string& raw_name, uint8_t type, const int32_t rect[4], const int32_t saved[4],
                                 float opacity, BlendMode blend, bool visible, const int32_t mask_rect[4], const int32_t saved_mask[4],
@@ -783,6 +1138,24 @@ std::vector<uint8_t> composite_bank(const Image& flat) {
 
 }  // namespace
 
+bool save_styled_line(const vec::LineStyle& l, const std::string& path, std::string* err) {
+    Writer w;
+    w.u8(0x01); w.u8('Q'); w.u8('E'); w.u8('W');
+    w.u32(l.first_cap); w.u32(l.last_cap);
+    w.f64(l.first_w); w.f64(l.first_h); w.f64(l.last_w); w.f64(l.last_h);
+    w.f64(l.miter);
+    w.u32(static_cast<uint32_t>(l.dashes.size()));
+    for (float v : l.dashes) w.u32(static_cast<uint32_t>(std::max(0.0f, v) + 0.5f));
+    w.u32(l.flag_a); w.u32(l.flag_b);
+    w.u32(l.seg_start_cap); w.f64(l.seg_start_w); w.f64(l.seg_start_h);
+    w.u32(l.seg_end_cap); w.f64(l.seg_end_w); w.f64(l.seg_end_h);
+    w.u32(l.seg_caps_on);
+    std::ofstream f(path, std::ios::binary);
+    if (!f) { if (err) *err = "cannot write " + path; return false; }
+    f.write(reinterpret_cast<const char*>(w.out.data()), static_cast<std::streamsize>(w.out.size()));
+    return static_cast<bool>(f);
+}
+
 std::vector<uint8_t> save_psp_to_memory(const Document& doc) {
     Writer w;
     w.bytes(reinterpret_cast<const uint8_t*>(kSignature), sizeof(kSignature) - 1);
@@ -800,7 +1173,7 @@ std::vector<uint8_t> save_psp_to_memory(const Document& doc) {
     // expanded into their own blocks.
     Writer bank;
     uint32_t block_count = 0;
-    bool has_groups = false, has_masks = false;
+    bool has_groups = false, has_masks = false, has_vectors = false;
     {
         size_t i = 0;
         while (i < doc.layer_count()) {
@@ -816,6 +1189,18 @@ std::vector<uint8_t> save_psp_to_memory(const Document& doc) {
                 if (L.has_mask()) ++members;
                 bank.bytes(group_block(L, members));
                 ++block_count; has_groups = true;
+                ++i;
+                continue;
+            }
+            if (L.is_vector()) {
+                Writer payload;
+                payload.bytes(layer_info(L.name, kLayerVector, kZeroRect, kZeroRect, L.opacity, L.blend, L.visible, kZeroRect, kZeroRect, false));
+                payload.bytes(vector_layer_payload(L));
+                payload.u32(8); payload.u16(0); payload.u16(0);
+                Writer vb;
+                vb.block(kLayerBlock, payload.out);
+                bank.bytes(vb.out);
+                ++block_count; has_vectors = true;
                 ++i;
                 continue;
             }
@@ -844,6 +1229,7 @@ std::vector<uint8_t> save_psp_to_memory(const Document& doc) {
             }
         }
     }
+    if (has_vectors) contents |= 0x00000002u; // vector layers
     if (has_groups) contents |= 0x00000008u;  // group layers
     if (has_masks) contents |= 0x00000010u;   // mask layers
     if (!doc.alpha_channels().empty()) contents |= 0x80000000u;  // alpha channels

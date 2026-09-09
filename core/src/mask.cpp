@@ -79,11 +79,15 @@ Mask ellipse(int w, int h, float cx, float cy, float rx, float ry, bool antialia
 // Scanline polygon fill, even-odd rule, with vertical supersampling and
 // exact horizontal span coverage.
 Mask polygon(int w, int h, const std::vector<std::pair<float, float>>& pts, bool antialias) {
+    return polygons(w, h, {pts}, antialias);
+}
+
+Mask polygons(int w, int h, const std::vector<std::vector<std::pair<float, float>>>& polys, bool antialias) {
     Mask m(w, h);
-    const size_t n = pts.size();
-    if (n < 3) return m;
-    float miny = pts[0].second, maxy = pts[0].second;
-    for (const auto& p : pts) { miny = std::min(miny, p.second); maxy = std::max(maxy, p.second); }
+    float miny = 1e9f, maxy = -1e9f;
+    size_t total = 0;
+    for (const auto& pts : polys) for (const auto& p : pts) { miny = std::min(miny, p.second); maxy = std::max(maxy, p.second); ++total; }
+    if (total < 3) return m;
     const int iy0 = std::max(0, static_cast<int>(std::floor(miny))), iy1 = std::min(h, static_cast<int>(std::ceil(maxy)) + 1);
     const int ss = antialias ? 4 : 1;
     std::vector<float> acc(w);
@@ -93,12 +97,16 @@ Mask polygon(int w, int h, const std::vector<std::pair<float, float>>& pts, bool
         for (int s = 0; s < ss; ++s) {
             const float sy = y + (s + 0.5f) / ss;
             xs.clear();
-            for (size_t i = 0; i < n; ++i) {
-                const auto& a = pts[i];
-                const auto& b = pts[(i + 1) % n];
-                if ((a.second <= sy) == (b.second <= sy)) continue;  // no crossing
-                const float t = (sy - a.second) / (b.second - a.second);
-                xs.push_back(a.first + t * (b.first - a.first));
+            for (const auto& pts : polys) {
+                const size_t n = pts.size();
+                if (n < 3) continue;
+                for (size_t i = 0; i < n; ++i) {
+                    const auto& a = pts[i];
+                    const auto& b = pts[(i + 1) % n];
+                    if ((a.second <= sy) == (b.second <= sy)) continue;  // no crossing
+                    const float t = (sy - a.second) / (b.second - a.second);
+                    xs.push_back(a.first + t * (b.first - a.first));
+                }
             }
             std::sort(xs.begin(), xs.end());
             for (size_t i = 0; i + 1 < xs.size(); i += 2) {

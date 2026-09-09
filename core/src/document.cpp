@@ -82,6 +82,14 @@ void Document::restore(const State& s) {
     alpha_ = s.alpha;
 }
 
+void Document::rasterize_vector_layer(size_t i) {
+    Layer& L = layer(i);
+    if (!L.is_vector()) return;
+    L.pixels = Image(width_, height_, {0, 0, 0, 0});
+    vec::rasterize(L.objects, L.pixels);
+    touch();
+}
+
 LayerProps Document::props(size_t i) const {
     const Layer& L = layer(i);
     return {L.name, L.visible, L.opacity, L.blend};

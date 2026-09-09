@@ -43,6 +43,8 @@ enum class Combine { Replace, Add, Subtract, Intersect };
 Mask rectangle(int w, int h, float x0, float y0, float x1, float y1, bool antialias);
 Mask ellipse(int w, int h, float cx, float cy, float rx, float ry, bool antialias);
 Mask polygon(int w, int h, const std::vector<std::pair<float, float>>& pts, bool antialias);
+// Several closed polygons filled together with the even-odd rule (holes).
+Mask polygons(int w, int h, const std::vector<std::vector<std::pair<float, float>>>& polys, bool antialias);
 // Rounded rectangle with corner radius; regular polygon and star centered at
 // (cx, cy) with radii (rx, ry), first vertex pointing up, rotated by degrees.
 Mask rounded_rectangle(int w, int h, float x0, float y0, float x1, float y1, float radius, bool antialias);

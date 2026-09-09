@@ -203,6 +203,52 @@ void UngroupCommand::execute(Document& doc) {
     doc.replace_layers(layers, static_cast<int>(std::min(index_, layers.size() - 1)));
 }
 
+void VectorEditCommand::execute(Document& doc) {
+    Layer& L = doc.layer(layer_);
+    if (!L.is_vector()) return;
+    before_ = L.objects;
+    L.objects = after_;
+    doc.rasterize_vector_layer(layer_);
+}
+
+void VectorEditCommand::undo(Document& doc) {
+    Layer& L = doc.layer(layer_);
+    if (!L.is_vector()) return;
+    L.objects = before_;
+    doc.rasterize_vector_layer(layer_);
+}
+
+void AddVectorLayerCommand::execute(Document& doc) {
+    prev_active_ = doc.active_layer();
+    int depth = 0;
+    size_t at = doc.layer_count();
+    if (prev_active_ >= 0) {
+        const Layer& a = doc.layer(prev_active_);
+        at = a.type == LayerType::Group ? doc.group_end(prev_active_) : prev_active_ + 1;
+        depth = a.depth;
+    }
+    Layer& L = doc.add_layer(name_, static_cast<int>(at));
+    L.type = LayerType::Vector;
+    L.depth = depth;
+    L.pixels = Image(doc.width(), doc.height(), {0, 0, 0, 0});
+    index_ = at;
+}
+
+void AddVectorLayerCommand::undo(Document& doc) {
+    doc.remove_layer(index_);
+    doc.set_active_layer(prev_active_);
+}
+
+void ConvertToRasterCommand::execute(Document& doc) {
+    before_ = doc.snapshot();
+    Layer& L = doc.layer(index_);
+    if (!L.is_vector()) return;
+    doc.rasterize_vector_layer(index_);
+    L.type = LayerType::Raster;
+    L.objects.clear();
+    doc.touch();
+}
+
 void SetMaskCommand::execute(Document& doc) {
     Layer& L = doc.layer(index_);
     before_ = L.mask;

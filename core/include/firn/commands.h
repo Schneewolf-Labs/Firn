@@ -235,6 +235,45 @@ private:
     Document::State before_;
 };
 
+// Any change to a vector layer's objects: snapshots the object list.
+class VectorEditCommand : public Command {
+public:
+    VectorEditCommand(size_t layer, std::string name, std::vector<vec::Object> after)
+        : layer_(layer), name_(std::move(name)), after_(std::move(after)) {}
+    std::string name() const override { return name_; }
+    void execute(Document& doc) override;
+    void undo(Document& doc) override;
+private:
+    size_t layer_;
+    std::string name_;
+    std::vector<vec::Object> before_, after_;
+};
+
+// Adds an empty vector layer above the active layer.
+class AddVectorLayerCommand : public Command {
+public:
+    explicit AddVectorLayerCommand(std::string name) : name_(std::move(name)) {}
+    std::string name() const override { return "New Vector Layer"; }
+    void execute(Document& doc) override;
+    void undo(Document& doc) override;
+private:
+    std::string name_;
+    size_t index_ = 0;
+    int prev_active_ = -1;
+};
+
+// Turns a vector layer into a raster layer holding its rendering.
+class ConvertToRasterCommand : public Command {
+public:
+    explicit ConvertToRasterCommand(size_t index) : index_(index) {}
+    std::string name() const override { return "Convert to Raster Layer"; }
+    void execute(Document& doc) override;
+    void undo(Document& doc) override { doc.restore(before_); }
+private:
+    size_t index_;
+    Document::State before_;
+};
+
 // Sets (or clears, with an empty mask) a layer's mask.
 class SetMaskCommand : public Command {
 public:

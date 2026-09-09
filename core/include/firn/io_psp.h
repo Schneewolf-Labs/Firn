@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "firn/document.h"
+#include "firn/vector.h"
 
 namespace firn::io {
 
@@ -25,6 +26,17 @@ std::unique_ptr<Document> load_psp_from_memory(const uint8_t* data, size_t size,
 std::unique_ptr<Document> load_document(const std::string& path, std::string* err, std::vector<std::string>* warnings);
 
 bool is_psp_extension(const std::string& path);
+
+// Preset shape files (.PspShape) are ordinary images holding vector layers;
+// returns the objects of every vector layer, or empty on failure.
+std::vector<vec::Object> load_preset_shapes(const std::string& path, std::string* err = nullptr);
+
+// Gradient files (.PspGradient) are Photoshop .grd (version 3) files.
+std::vector<vec::Gradient> load_gradients(const std::string& path, std::string* err = nullptr);
+
+// Styled line files (.PspStyledLine): caps and dash segments.
+std::optional<vec::LineStyle> load_styled_line(const std::string& path, std::string* err = nullptr);
+bool save_styled_line(const vec::LineStyle& line, const std::string& path, std::string* err = nullptr);
 
 // Picture tube metadata (block id 11): how a tube image is divided into
 // cells and how the tool should place them.

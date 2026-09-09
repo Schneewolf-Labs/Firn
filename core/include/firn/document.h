@@ -6,10 +6,11 @@
 #include "firn/blend.h"
 #include "firn/image.h"
 #include "firn/mask.h"
+#include "firn/vector.h"
 
 namespace firn {
 
-enum class LayerType : uint8_t { Raster, Group };
+enum class LayerType : uint8_t { Raster, Group, Vector };
 
 struct Layer {
     std::string name;
@@ -29,8 +30,10 @@ struct Layer {
     // Optional document-sized mask (0 hides, 255 shows); empty = none.
     Mask mask;
     bool mask_enabled = true;
-    Image pixels;           // empty for groups
+    Image pixels;           // empty for groups; the rendered cache for vector layers
+    std::vector<vec::Object> objects;  // vector layers only
     bool is_raster() const { return type == LayerType::Raster; }
+    bool is_vector() const { return type == LayerType::Vector; }
     bool has_mask() const { return !mask.empty(); }
 };
 
@@ -98,6 +101,9 @@ public:
 
     LayerProps props(size_t i) const;
     void set_props(size_t i, const LayerProps& p);
+
+    // Re-renders a vector layer's objects into its pixel cache.
+    void rasterize_vector_layer(size_t i);
 
     std::vector<AlphaChannel>& alpha_channels() { return alpha_; }
     const std::vector<AlphaChannel>& alpha_channels() const { return alpha_; }
