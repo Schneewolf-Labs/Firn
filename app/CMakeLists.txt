@@ -6,12 +6,13 @@ set(OpenGL_GL_PREFERENCE LEGACY)
 find_package(OpenGL REQUIRED)
 include(${CMAKE_SOURCE_DIR}/cmake/imgui.cmake)
 
-add_executable(psp9
+add_executable(firn
   src/main.cpp
   src/App.cpp
   src/ui/Canvas.cpp
   src/ui/Palettes.cpp
   src/ui/Menu.cpp
+  src/tools/Tools.cpp
 )
-target_include_directories(psp9 PRIVATE src)
-target_link_libraries(psp9 PRIVATE psp9core imgui SDL2::SDL2 OpenGL::GL)
+target_include_directories(firn PRIVATE src)
+target_link_libraries(firn PRIVATE firncore imgui SDL2::SDL2 OpenGL::GL)

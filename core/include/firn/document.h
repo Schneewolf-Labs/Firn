@@ -3,13 +3,16 @@
 #include <string>
 #include <vector>
 
-#include "psp9/image.h"
+#include "firn/image.h"
 
-namespace psp9 {
+namespace firn {
 
 struct Layer {
     std::string name;
     bool visible = true;
+    // A Background layer has no transparency: the eraser paints the
+    // background colour on it instead of clearing alpha.
+    bool background = false;
     float opacity = 1.0f;  // 0..1
     Image pixels;
 };
@@ -50,4 +53,4 @@ private:
     uint64_t revision_ = 0;
 };
 
-}  // namespace psp9
+}  // namespace firn

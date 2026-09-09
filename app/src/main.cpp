@@ -1,5 +1,6 @@
-// PSP9: SDL2 + OpenGL3 + Dear ImGui (docking) bootstrap.
+// Firn: SDL2 + OpenGL3 + Dear ImGui (docking) bootstrap.
 #include <cstdio>
+#include <cstdlib>
 
 #include <SDL.h>
 #include <SDL_opengl.h>
@@ -10,7 +11,10 @@
 #include "imgui_internal.h"  // DockBuilder
 #include "imgui_impl_sdl2.h"
 
-// PSP9-style default workspace, applied only when no imgui.ini layout exists:
+// Set in one place so the About box, window title, and docs stay in sync.
+static const char* kAppTitle = "Firn";
+
+// Default workspace, applied only when no imgui.ini layout exists:
 //   Tools strip | Tool Options across the top, Image centre | Materials/Overview
 //   over Layers/History on the right.
 static void build_default_layout(ImGuiID dockspace_id) {
@@ -54,9 +58,12 @@ int main(int argc, char** argv) {
     SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
     SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
 
-    auto flags = (SDL_WindowFlags)(SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_MAXIMIZED);
-    SDL_Window* window = SDL_CreateWindow("Paint Shop Pro 9", SDL_WINDOWPOS_CENTERED,
-                                          SDL_WINDOWPOS_CENTERED, 1400, 900, flags);
+    auto flags = (SDL_WindowFlags)(SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI);
+    // Window size is overridable for driving the app from scripts/screenshots.
+    int win_w = 1400, win_h = 900;
+    if (const char* e = std::getenv("FIRN_WINDOW")) std::sscanf(e, "%dx%d", &win_w, &win_h);
+    SDL_Window* window = SDL_CreateWindow(kAppTitle, SDL_WINDOWPOS_CENTERED,
+                                          SDL_WINDOWPOS_CENTERED, win_w, win_h, flags);
     if (!window) {
         std::fprintf(stderr, "SDL_CreateWindow: %s\n", SDL_GetError());
         return 1;

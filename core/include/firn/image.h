@@ -2,7 +2,7 @@
 #include <cstdint>
 #include <vector>
 
-namespace psp9 {
+namespace firn {
 
 struct Color {
     uint8_t r = 0, g = 0, b = 0, a = 255;
@@ -33,4 +33,4 @@ private:
     std::vector<uint8_t> pixels_;  // width*height*4, row-major, top-down
 };
 
-}  // namespace psp9
+}  // namespace firn

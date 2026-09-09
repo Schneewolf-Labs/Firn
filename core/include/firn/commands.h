@@ -3,9 +3,9 @@
 #include <string>
 #include <vector>
 
-#include "psp9/document.h"
+#include "firn/document.h"
 
-namespace psp9 {
+namespace firn {
 
 // Every mutation of a Document goes through a Command so that undo/redo,
 // the history panel, and scripting all see the same thing.
@@ -20,6 +20,9 @@ public:
 class CommandStack {
 public:
     void run(Document& doc, std::unique_ptr<Command> cmd);
+    // Record a command whose effect has already been applied to the document
+    // (interactive tools paint live, then commit). Only undo/redo call into it.
+    void push_applied(std::unique_ptr<Command> cmd);
     bool can_undo() const { return cursor_ > 0; }
     bool can_redo() const { return cursor_ < done_.size(); }
     void undo(Document& doc);
@@ -78,6 +81,64 @@ protected:
     int radius_;
 };
 
+class GreyscaleCommand : public LayerPixelCommand {
+public:
+    using LayerPixelCommand::LayerPixelCommand;
+    std::string name() const override { return "Greyscale"; }
+protected:
+    void apply(Image& img) override;
+};
+
+class BrightnessContrastCommand : public LayerPixelCommand {
+public:
+    BrightnessContrastCommand(size_t layer, int brightness, int contrast)
+        : LayerPixelCommand(layer), brightness_(brightness), contrast_(contrast) {}
+    std::string name() const override { return "Brightness/Contrast"; }
+protected:
+    void apply(Image& img) override;
+    int brightness_, contrast_;
+};
+
+class GaussianBlurCommand : public LayerPixelCommand {
+public:
+    GaussianBlurCommand(size_t layer, float radius) : LayerPixelCommand(layer), radius_(radius) {}
+    std::string name() const override { return "Gaussian Blur"; }
+protected:
+    void apply(Image& img) override;
+    float radius_;
+};
+
+// Records an edit made live by a tool (brush stroke, flood fill). The tool
+// snapshots the layer before it starts and hands both images over on commit.
+class LayerSnapshotCommand : public Command {
+public:
+    LayerSnapshotCommand(size_t layer, std::string name, Image before, Image after)
+        : layer_(layer), name_(std::move(name)), before_(std::move(before)), after_(std::move(after)) {}
+    std::string name() const override { return name_; }
+    void execute(Document& doc) override;
+    void undo(Document& doc) override;
+private:
+    size_t layer_;
+    std::string name_;
+    Image before_, after_;
+};
+
+// Whole-document geometry that keeps the canvas size. These are involutions,
+// so undo just re-applies.
+class FlipCommand : public Command {
+public:
+    std::string name() const override { return "Flip"; }
+    void execute(Document& doc) override;
+    void undo(Document& doc) override { execute(doc); }
+};
+
+class MirrorCommand : public Command {
+public:
+    std::string name() const override { return "Mirror"; }
+    void execute(Document& doc) override;
+    void undo(Document& doc) override { execute(doc); }
+};
+
 class AddLayerCommand : public Command {
 public:
     explicit AddLayerCommand(std::string name) : name_(std::move(name)) {}
@@ -100,4 +161,4 @@ private:
     std::unique_ptr<Layer> removed_;
 };
 
-}  // namespace psp9
+}  // namespace firn

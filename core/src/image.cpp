@@ -1,8 +1,8 @@
-#include "psp9/image.h"
+#include "firn/image.h"
 
 #include <cassert>
 
-namespace psp9 {
+namespace firn {
 
 Image::Image(int width, int height, Color fill)
     : width_(width), height_(height), pixels_(static_cast<size_t>(width) * height * 4) {
@@ -31,4 +31,4 @@ void Image::fill(Color c) {
     }
 }
 
-}  // namespace psp9
+}  // namespace firn

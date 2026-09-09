@@ -124,7 +124,7 @@ to a spec for what the core has to implement. Count = occurrences in scripts.
 
 ## Original module layout (from the install directory)
 
-| PSP9 DLL family | Role | Port location |
+| Original DLL family | Role | Firn location |
 |---|---|---|
 | JascCmd{Artistic,Bevels,Color,Geometry,Layers,Lighting,Photo,Selections,Texture,Vector,...} | Command categories | core/src/commands/ |
 | JascTool{Paint,Select,Text,Warp,Object,Standard} | Interactive canvas tools | app/src/tools/ |
@@ -132,5 +132,5 @@ to a spec for what the core has to implement. Count = occurrences in scripts.
 | JascFileFormats + *.FLT + ig*13d.dll (ImageGear) | Codecs incl. .PspImage | core/src/io/ |
 | JascColorMgr, JascCMYK | Colour management | core (later, LittleCMS) |
 | JascRender | Compositing / display | core/src/document.cpp composite() |
-| JascCommandBase, JascHistoryPalette | Undo stack | core/include/psp9/commands.h |
+| JascCommandBase, JascHistoryPalette | Undo stack | core/include/firn/commands.h |
 | JascCmdPyScript, Python Libraries | Scripting | out of scope for now |

@@ -1,9 +1,9 @@
-#include "psp9/document.h"
+#include "firn/document.h"
 
 #include <algorithm>
 #include <cassert>
 
-namespace psp9 {
+namespace firn {
 
 Document::Document(int width, int height) : width_(width), height_(height) {}
 
@@ -70,4 +70,4 @@ Image Document::composite() const {
     return out;
 }
 
-}  // namespace psp9
+}  // namespace firn

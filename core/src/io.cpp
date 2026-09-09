@@ -1,4 +1,4 @@
-#include "psp9/io.h"
+#include "firn/io.h"
 
 #include <cstring>
 
@@ -9,7 +9,7 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb/stb_image_write.h"
 
-namespace psp9::io {
+namespace firn::io {
 
 std::optional<Image> load(const std::string& path, std::string* err) {
     int w = 0, h = 0, n = 0;
@@ -30,4 +30,4 @@ bool save_png(const Image& img, const std::string& path, std::string* err) {
     return ok != 0;
 }
 
-}  // namespace psp9::io
+}  // namespace firn::io

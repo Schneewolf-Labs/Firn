@@ -1,39 +1,32 @@
+#include <cstdio>
 #include <memory>
 
 #include "App.h"
 #include "imgui.h"
 
-using namespace psp9;
+using namespace firn;
 
-// PSP9's dockable palettes: Layers, History, Materials, Tool Options, Overview.
+// The dockable palettes: Layers, History, Materials, Tool Options, Overview.
 // Tools palette is a vertical strip like the original's Tools toolbar.
 static void draw_tools(App& app) {
     ImGui::Begin("Tools");
-    struct Entry { App::Tool t; const char* label; };
-    static const Entry entries[] = {
-        {App::Tool::Pan, "Pan"},       {App::Tool::Zoom, "Zoom"},     {App::Tool::Select, "Selection"},
-        {App::Tool::Paint, "Paint Brush"}, {App::Tool::Eraser, "Eraser"}, {App::Tool::Fill, "Flood Fill"},
-        {App::Tool::Text, "Text"},
-    };
-    for (const auto& e : entries) {
-        if (ImGui::Selectable(e.label, app.tool == e.t)) app.tool = e.t;
+    for (size_t i = 0; i < app.tools.size(); ++i) {
+        const Tool& t = *app.tools[i];
+        char label[64];
+        if (t.shortcut()) std::snprintf(label, sizeof(label), "%s (%s)", t.name(), t.shortcut());
+        else std::snprintf(label, sizeof(label), "%s", t.name());
+        if (ImGui::Selectable(label, app.tool_index == static_cast<int>(i))) app.select_tool(static_cast<int>(i));
     }
     ImGui::End();
 }
 
 static void draw_tool_options(App& app) {
     ImGui::Begin("Tool Options");
-    switch (app.tool) {
-        case App::Tool::Paint:
-        case App::Tool::Eraser:
-            ImGui::SliderFloat("Size", &app.brush_size, 1.0f, 500.0f, "%.0f", ImGuiSliderFlags_Logarithmic);
-            break;
-        case App::Tool::Zoom:
-            ImGui::TextUnformatted("Wheel to zoom. Fit: View > Fit to Window.");
-            break;
-        default:
-            ImGui::TextDisabled("No options for this tool yet.");
-    }
+    ImGui::TextUnformatted(app.tool().name());
+    ImGui::SameLine();
+    ImGui::Spacing();
+    ImGui::SameLine();
+    app.tool().draw_options(app);
     ImGui::End();
 }
 
@@ -74,6 +67,7 @@ static void draw_layers(App& app) {
         if (ImGui::Checkbox("##vis", &vis)) { L.visible = vis; doc.touch(); }
         ImGui::SameLine();
         if (ImGui::Selectable(L.name.c_str(), app.active_layer() == i)) doc.set_active_layer(i);
+        if (L.background) { ImGui::SameLine(); ImGui::TextDisabled("(background)"); }
         if (app.active_layer() == i) {
             ImGui::Indent();
             ImGui::SetNextItemWidth(-1);

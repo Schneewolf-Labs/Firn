@@ -1,9 +1,11 @@
-#include "psp9/commands.h"
+#include "firn/commands.h"
+
+#include "firn/raster.h"
 
 #include <algorithm>
 #include <cstring>
 
-namespace psp9 {
+namespace firn {
 
 // --- CommandStack ------------------------------------------------------
 
@@ -11,6 +13,12 @@ void CommandStack::run(Document& doc, std::unique_ptr<Command> cmd) {
     // Running a new command discards any redo branch.
     done_.resize(cursor_);
     cmd->execute(doc);
+    done_.push_back(std::move(cmd));
+    cursor_ = done_.size();
+}
+
+void CommandStack::push_applied(std::unique_ptr<Command> cmd) {
+    done_.resize(cursor_);
     done_.push_back(std::move(cmd));
     cursor_ = done_.size();
 }
@@ -101,6 +109,34 @@ void BoxBlurCommand::apply(Image& img) {
     }
 }
 
+void GreyscaleCommand::apply(Image& img) { raster::greyscale(img); }
+
+void BrightnessContrastCommand::apply(Image& img) { raster::brightness_contrast(img, brightness_, contrast_); }
+
+void GaussianBlurCommand::apply(Image& img) { raster::gaussian_blur(img, radius_); }
+
+// --- Snapshot / geometry -----------------------------------------------
+
+void LayerSnapshotCommand::execute(Document& doc) {
+    doc.layer(layer_).pixels = after_;
+    doc.touch();
+}
+
+void LayerSnapshotCommand::undo(Document& doc) {
+    doc.layer(layer_).pixels = before_;
+    doc.touch();
+}
+
+void FlipCommand::execute(Document& doc) {
+    for (size_t i = 0; i < doc.layer_count(); ++i) raster::flip_vertical(doc.layer(i).pixels);
+    doc.touch();
+}
+
+void MirrorCommand::execute(Document& doc) {
+    for (size_t i = 0; i < doc.layer_count(); ++i) raster::mirror_horizontal(doc.layer(i).pixels);
+    doc.touch();
+}
+
 // --- Layer structure ops -----------------------------------------------
 
 void AddLayerCommand::execute(Document& doc) {
@@ -114,4 +150,4 @@ void RemoveLayerCommand::execute(Document& doc) { removed_ = doc.remove_layer(in
 
 void RemoveLayerCommand::undo(Document& doc) { doc.insert_layer(std::move(removed_), index_); }
 
-}  // namespace psp9
+}  // namespace firn
