@@ -15,6 +15,19 @@
 
 namespace firn::io {
 
+std::optional<Image> load_memory(const uint8_t* data, size_t size, std::string* err) {
+    int w = 0, h = 0, n = 0;
+    unsigned char* px = stbi_load_from_memory(data, static_cast<int>(size), &w, &h, &n, 4);
+    if (!px) {
+        if (err) *err = stbi_failure_reason() ? stbi_failure_reason() : "unknown error";
+        return std::nullopt;
+    }
+    Image img(w, h);
+    std::memcpy(img.data(), px, img.size_bytes());
+    stbi_image_free(px);
+    return img;
+}
+
 std::optional<Image> load(const std::string& path, std::string* err) {
     int w = 0, h = 0, n = 0;
     unsigned char* px = stbi_load(path.c_str(), &w, &h, &n, 4);

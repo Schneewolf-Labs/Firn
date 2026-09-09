@@ -1,3 +1,5 @@
+<img src="assets/icon.png" alt="Firn" width="160" align="right">
+
 # Firn
 
 A native Linux (and Windows) raster image editor in C++, using Dear ImGui on

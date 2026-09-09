@@ -12,6 +12,7 @@
 #include "App.h"
 #include "Drive.h"
 #include "Config.h"
+#include "firn/io.h"
 #include "imgui.h"
 #include "imgui_impl_opengl3.h"
 #include "imgui_internal.h"  // DockBuilder
@@ -49,6 +50,21 @@ static void build_default_layout(ImGuiID dockspace_id) {
     ImGui::DockBuilderFinish(dockspace_id);
 }
 
+// The icon is embedded at build time from assets/icon-128.png (see
+// app/CMakeLists.txt); Windows builds also carry it as an exe resource.
+extern const unsigned char kFirnIconPng[];
+extern const size_t kFirnIconPng_size;
+
+static void set_window_icon(SDL_Window* window) {
+    std::string err;
+    auto icon = firn::io::load_memory(kFirnIconPng, kFirnIconPng_size, &err);
+    if (!icon) { std::fprintf(stderr, "window icon: %s\n", err.c_str()); return; }
+    SDL_Surface* s = SDL_CreateRGBSurfaceWithFormatFrom(icon->data(), icon->width(), icon->height(), 32, icon->width() * 4, SDL_PIXELFORMAT_RGBA32);
+    if (!s) return;
+    SDL_SetWindowIcon(window, s);
+    SDL_FreeSurface(s);
+}
+
 int main(int argc, char** argv) {
 #ifdef SDL_MAIN_HANDLED
     SDL_SetMainReady();
@@ -83,6 +99,7 @@ int main(int argc, char** argv) {
         std::fprintf(stderr, "SDL_CreateWindow: %s\n", SDL_GetError());
         return 1;
     }
+    set_window_icon(window);
     SDL_GLContext gl_context = SDL_GL_CreateContext(window);
     SDL_GL_MakeCurrent(window, gl_context);
     SDL_GL_SetSwapInterval(1);

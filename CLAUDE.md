@@ -42,6 +42,7 @@ tools/   firn-convert: CLI that prints a file's layer stack and flattens it to P
 app/     the desktop app. src/ui/ = canvas, menus, palettes, file dialog; src/tools/ = canvas tools.
 tests/   assert-based core tests (no framework), one ctest target.
 scripts/ drive.py drives the running app over its FIRN_DRIVE socket (virtual cursor, screenshots, state).
+assets/  the icon (icon.png full size; icon-128.png is embedded as the window icon at build time, firn.ico/.rc for the Windows exe).
 docs/    notes on the original: command inventory, module mapping, FORMAT.md
          (the native container layout, verified against the sample files).
 ```

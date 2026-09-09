@@ -9,6 +9,8 @@ namespace firn::io {
 
 // PNG/JPEG/BMP/TGA via stb_image. Returns nullopt on failure and sets `err`.
 std::optional<Image> load(const std::string& path, std::string* err = nullptr);
+// The same decoders over an in-memory file (embedded resources).
+std::optional<Image> load_memory(const uint8_t* data, size_t size, std::string* err = nullptr);
 // 16-bit PNG (and other 16-bit files stb reads): nullopt when the file has 8-bit channels.
 std::optional<Image16> load16(const std::string& path, std::string* err = nullptr);
 bool save_png16(const Image16& img, const std::string& path, std::string* err = nullptr);
