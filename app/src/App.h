@@ -198,6 +198,10 @@ struct App {
     // Rotate dialog
     float rotate_degrees = 15.0f;
     int rotate_cw = 1;
+    // Deform family options
+    int straighten_mode = 0;             // 0 auto, 1 vertical, 2 horizontal
+    bool straighten_all_layers = true, straighten_crop = true;
+    bool perspective_all_layers = true, perspective_crop = false;
     // Crop tool rect (image coords), empty when none
     firn::raster::Rect crop_rect;
     // Line / shape tools

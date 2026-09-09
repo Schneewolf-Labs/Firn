@@ -27,7 +27,9 @@ public:
 
 private:
     struct Step {
-        enum Kind { MousePos, MouseDown, MouseUp, KeyDown, KeyUp, Chars, Wheel, Wait, Shot, Tool, Ack, Layer, Quit, Set, Save, Open } kind;
+        enum Kind { MousePos, MouseDown, MouseUp, KeyDown, KeyUp, Chars, Wheel, Wait, Shot, Tool, Ack, Layer, Quit, Set, Save, Open } kind = MousePos;
+        Step() = default;
+        Step(Kind k) : kind(k) {}   // NOLINT: implicit on purpose, steps_.push_back({Step::Ack})
         float x = 0, y = 0;
         int button = 0;
         ImGuiKey key = ImGuiKey_None;

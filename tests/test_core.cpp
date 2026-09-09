@@ -1537,7 +1537,45 @@ static void test_adjustment_layers() {
     }
 }
 
+static void test_warp() {
+    // A homography through four corners maps them exactly; a pure translation warps pixels intact.
+    raster::Quad from, to;
+    const float fx[4] = {0, 10, 10, 0}, fy[4] = {0, 0, 10, 10};
+    const float tx[4] = {5, 25, 30, 2}, ty[4] = {3, 4, 20, 22};
+    for (int i = 0; i < 4; ++i) { from.x[i] = fx[i]; from.y[i] = fy[i]; to.x[i] = tx[i]; to.y[i] = ty[i]; }
+    float H[9];
+    CHECK(raster::homography(from, to, H));
+    for (int i = 0; i < 4; ++i) {
+        float ox, oy;
+        raster::apply_homography(H, fx[i], fy[i], &ox, &oy);
+        CHECK(std::abs(ox - tx[i]) < 1e-3f && std::abs(oy - ty[i]) < 1e-3f);
+    }
+    float inv[9];
+    CHECK(raster::invert3(H, inv));
+    float bx, by;
+    raster::apply_homography(inv, tx[2], ty[2], &bx, &by);
+    CHECK(std::abs(bx - 10) < 1e-3f && std::abs(by - 10) < 1e-3f);
+    Image img(20, 20, {0, 0, 0, 0});
+    for (int y = 2; y < 6; ++y) for (int x = 3; x < 8; ++x) img.set(x, y, {200, 100, 50, 255});
+    const raster::Rect cb = raster::content_bounds(img);
+    CHECK(cb.x0 == 3 && cb.y0 == 2 && cb.x1 == 8 && cb.y1 == 6);
+    const float T[9] = {1, 0, 4, 0, 1, 6, 0, 0, 1};
+    Image moved = raster::warp(img, T, 20, 20);
+    CHECK(moved.get(7, 8).r == 200 && moved.get(7, 8).a == 255 && moved.get(3, 2).a == 0);
+    // The command warps every layer and can crop.
+    Document doc(20, 20);
+    doc.add_layer("a").pixels = img;
+    doc.add_layer("b").pixels = img;
+    CommandStack stack;
+    stack.run(doc, std::make_unique<WarpLayersCommand>("Warp", T, -1, raster::Rect{4, 6, 20, 20}, Color{0, 0, 0, 255}));
+    CHECK(doc.width() == 16 && doc.height() == 14);
+    CHECK(doc.layer(0).pixels.get(3, 2).r == 200 && doc.layer(1).pixels.get(3, 2).r == 200);
+    stack.undo(doc);
+    CHECK(doc.width() == 20 && doc.layer(1).pixels.get(3, 2).r == 200 && doc.layer(1).pixels.get(7, 8).a == 0);
+}
+
 int main() {
+    test_warp();
     test_adjustment_layers();
     test_vector_default_bytes();
     test_vector_queries();

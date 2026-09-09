@@ -102,8 +102,8 @@ for. Ranked by value per effort; work top to bottom, tick as they land.
 - [x] Adjustment layers: Brightness/Contrast, Levels, Curves, HSL, Color
       Balance, Channel Mixer, Invert, Threshold, Posterize; live, editable from
       the palette and Layers > Properties, native read/write per the spec
-- [ ] Deform tool (move/scale/rotate/skew/perspective a layer), Straighten,
-      Perspective Correction
+- [x] Deform tool (move/scale/rotate/skew/perspective a layer), Straighten,
+      Perspective Correction (all layers or one, optional crop)
 - [ ] Image menu odds and ends: Flip, Mirror, Negative Image, Grayscale, Add
       Borders, Count Colors, Decrease/Increase Color Depth with palettes,
       Split/Combine Channels, Arithmetic, Picture Frame

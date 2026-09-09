@@ -1176,6 +1176,7 @@ std::vector<std::unique_ptr<Tool>> make_default_tools() {
     t.push_back(std::make_unique<ZoomTool>());
     t.push_back(std::make_unique<MoveTool>());
     t.push_back(std::make_unique<CropTool>());
+    for (auto& d : make_deform_tools()) t.push_back(std::move(d));
     t.push_back(std::make_unique<SelectionTool>());
     t.push_back(std::make_unique<FreehandTool>());
     t.push_back(std::make_unique<MagicWandTool>());

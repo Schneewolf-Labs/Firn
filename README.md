@@ -52,8 +52,10 @@ selection, **L** freehand selection, **W** magic wand, **E** dropper, **M**
 move, **R** crop, **B** paint brush, **P** airbrush, **X** eraser, **C**
 clone (right-click sets the source), **N** lighten/darken, **U** smudge
 (right button pushes), **Q** color replacer, **F** flood fill, **T** text,
-**V** line, **I** preset shape, **O** object selector, **D** pen. Dodge/Burn,
-Soften, Sharpen, Saturation and Hue brushes have no key. `[` and `]` resize the brush.
+**V** line, **I** preset shape, **O** object selector, **D** pen, **K** deform
+(move, scale, rotate, skew and perspective a layer with handles; Straighten
+and Perspective Correction sit beside it). Dodge/Burn, Soften, Sharpen,
+Saturation and Hue brushes have no key. `[` and `]` resize the brush.
 Left button uses the foreground material, right button the background.
 Space + drag or middle-drag pans with any tool; Escape cancels a stroke.
 

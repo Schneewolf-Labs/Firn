@@ -519,6 +519,46 @@ void CanvasSizeCommand::transform(const Document::State& in, Document::State& ou
     }
 }
 
+void WarpLayersCommand::transform(const Document::State& in, Document::State& out) {
+    const raster::Rect crop = crop_.empty() ? raster::Rect{0, 0, in.width, in.height} : crop_.clipped(in.width, in.height);
+    out.width = crop.x1 - crop.x0;
+    out.height = crop.y1 - crop.y0;
+    // Fold the crop into the homography: destination coordinates shift by the crop origin.
+    float H[9];
+    for (int i = 0; i < 9; ++i) H[i] = H_[i];
+    H[2] -= crop.x0 * H[8]; H[5] -= crop.y0 * H[8];
+    H[0] -= crop.x0 * H[6]; H[1] -= crop.x0 * H[7];
+    H[3] -= crop.y0 * H[6]; H[4] -= crop.y0 * H[7];
+    auto warp_mask = [&](const Mask& src, uint8_t outside) {
+        Image tmp(in.width, in.height);
+        for (size_t i = 0; i < src.size(); ++i) { uint8_t* p = tmp.data() + i * 4; p[0] = p[1] = p[2] = src.data()[i]; p[3] = 255; }
+        Image r = raster::warp(tmp, H, out.width, out.height);
+        Mask m(out.width, out.height);
+        for (size_t i = 0; i < m.size(); ++i) m.data()[i] = r.data()[i * 4 + 3] ? r.data()[i * 4] : outside;
+        return m;
+    };
+    for (size_t li = 0; li < in.layers.size(); ++li) {
+        const Layer& L = in.layers[li];
+        Layer n = L;
+        const bool touch = layer_ < 0 || static_cast<int>(li) == layer_;
+        if (L.is_raster() && !L.pixels.empty()) {
+            if (touch) {
+                n.pixels = raster::warp(L.pixels, H, out.width, out.height);
+                if (L.background) fill_transparent(n.pixels, fill_);
+            } else if (!crop_.empty()) {
+                n.pixels = raster::crop(L.pixels, crop);
+            }
+        } else if (L.is_vector() || L.is_adjustment()) {
+            n.pixels = L.pixels.empty() ? Image() : Image(out.width, out.height, {0, 0, 0, 0});
+        }
+        if (L.has_mask()) n.mask = (touch || layer_ < 0) ? warp_mask(L.mask, 255) : warp_mask(L.mask, 255);
+        out.layers.push_back(std::move(n));
+    }
+    if (!in.selection.empty()) out.selection = warp_mask(in.selection, 0);
+    for (const auto& a : in.alpha) out.alpha.push_back({a.name, warp_mask(a.mask, 0)});
+    out.active = in.active;
+}
+
 void RotateCommand::transform(const Document::State& in, Document::State& out) {
     float d = std::fmod(degrees_, 360.0f);
     if (d < 0) d += 360.0f;

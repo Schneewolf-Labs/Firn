@@ -434,6 +434,23 @@ protected:
 
 // Clockwise degrees. Multiples of 90 are exact; anything else expands the
 // canvas and fills Background layers with `fill`.
+// Warps every raster layer (or one) by a homography, keeping the canvas
+// size, optionally cropping afterwards. Straighten and Perspective
+// Correction use it.
+class WarpLayersCommand : public GeometryCommand {
+public:
+    WarpLayersCommand(std::string name, const float H[9], int layer /* -1 = all */, raster::Rect crop, Color fill)
+        : name_(std::move(name)), layer_(layer), crop_(crop), fill_(fill) { for (int i = 0; i < 9; ++i) H_[i] = H[i]; }
+    std::string name() const override { return name_; }
+protected:
+    void transform(const Document::State& in, Document::State& out) override;
+    std::string name_;
+    float H_[9];
+    int layer_;
+    raster::Rect crop_;
+    Color fill_;
+};
+
 class RotateCommand : public GeometryCommand {
 public:
     RotateCommand(float degrees, Color fill) : degrees_(degrees), fill_(fill) {}

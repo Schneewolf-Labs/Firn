@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <thread>
 #include <cstring>
 
 namespace firn::raster {
@@ -628,6 +629,109 @@ Image rotate(const Image& src, float degrees) {
             d[3] = static_cast<uint8_t>(a + 0.5f);
         }
     return out;
+}
+
+
+// --- Projective warps -----------------------------------------------------
+
+// Direct linear transform for four point pairs: solves the 8 unknowns of H
+// (h33 = 1) by Gaussian elimination.
+bool homography(const Quad& from, const Quad& to, float H[9]) {
+    double A[8][9];
+    for (int i = 0; i < 4; ++i) {
+        const double x = from.x[i], y = from.y[i], u = to.x[i], v = to.y[i];
+        double* r0 = A[i * 2];
+        double* r1 = A[i * 2 + 1];
+        r0[0] = x; r0[1] = y; r0[2] = 1; r0[3] = 0; r0[4] = 0; r0[5] = 0; r0[6] = -u * x; r0[7] = -u * y; r0[8] = u;
+        r1[0] = 0; r1[1] = 0; r1[2] = 0; r1[3] = x; r1[4] = y; r1[5] = 1; r1[6] = -v * x; r1[7] = -v * y; r1[8] = v;
+    }
+    for (int col = 0; col < 8; ++col) {
+        int piv = col;
+        for (int r = col + 1; r < 8; ++r) if (std::abs(A[r][col]) > std::abs(A[piv][col])) piv = r;
+        if (std::abs(A[piv][col]) < 1e-9) return false;
+        if (piv != col) for (int k = 0; k < 9; ++k) std::swap(A[piv][k], A[col][k]);
+        for (int r = 0; r < 8; ++r) {
+            if (r == col) continue;
+            const double f = A[r][col] / A[col][col];
+            for (int k = col; k < 9; ++k) A[r][k] -= f * A[col][k];
+        }
+    }
+    for (int i = 0; i < 8; ++i) H[i] = static_cast<float>(A[i][8] / A[i][i]);
+    H[8] = 1.0f;
+    return true;
+}
+
+bool invert3(const float H[9], float out[9]) {
+    const double a = H[0], b = H[1], c = H[2], d = H[3], e = H[4], f = H[5], g = H[6], h = H[7], i = H[8];
+    const double det = a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g);
+    if (std::abs(det) < 1e-12) return false;
+    const double inv = 1.0 / det;
+    out[0] = static_cast<float>((e * i - f * h) * inv); out[1] = static_cast<float>((c * h - b * i) * inv); out[2] = static_cast<float>((b * f - c * e) * inv);
+    out[3] = static_cast<float>((f * g - d * i) * inv); out[4] = static_cast<float>((a * i - c * g) * inv); out[5] = static_cast<float>((c * d - a * f) * inv);
+    out[6] = static_cast<float>((d * h - e * g) * inv); out[7] = static_cast<float>((b * g - a * h) * inv); out[8] = static_cast<float>((a * e - b * d) * inv);
+    return true;
+}
+
+void apply_homography(const float H[9], float x, float y, float* ox, float* oy) {
+    const float w = H[6] * x + H[7] * y + H[8];
+    const float iw = std::abs(w) > 1e-12f ? 1.0f / w : 0.0f;
+    *ox = (H[0] * x + H[1] * y + H[2]) * iw;
+    *oy = (H[3] * x + H[4] * y + H[5]) * iw;
+}
+
+Image warp(const Image& src, const float H[9], int w, int h) {
+    Image out(w, h, {0, 0, 0, 0});
+    float inv[9];
+    if (!invert3(H, inv)) return out;
+    const int sw = src.width(), sh = src.height();
+    auto sample = [&](float x, float y, float* rgba) {  // premultiplied bilinear
+        const int x0 = static_cast<int>(std::floor(x)), y0 = static_cast<int>(std::floor(y));
+        const float fx = x - x0, fy = y - y0;
+        for (int c = 0; c < 4; ++c) rgba[c] = 0.0f;
+        for (int j = 0; j < 2; ++j)
+            for (int i = 0; i < 2; ++i) {
+                const int px = x0 + i, py = y0 + j;
+                if (px < 0 || py < 0 || px >= sw || py >= sh) continue;
+                const float wt = (i ? fx : 1 - fx) * (j ? fy : 1 - fy);
+                const uint8_t* s = src.data() + (static_cast<size_t>(py) * sw + px) * 4;
+                const float a = s[3] / 255.0f;
+                rgba[0] += s[0] * a * wt; rgba[1] += s[1] * a * wt; rgba[2] += s[2] * a * wt; rgba[3] += s[3] * wt;
+            }
+    };
+    const unsigned hw = std::max(1u, std::thread::hardware_concurrency());
+    const int bands = static_cast<int>(std::min<size_t>(hw, static_cast<size_t>(std::max(1, w * h / 65536))));
+    auto rows = [&](int y0, int y1) {
+        for (int y = y0; y < y1; ++y)
+            for (int x = 0; x < w; ++x) {
+                float sx, sy;
+                apply_homography(inv, x + 0.5f, y + 0.5f, &sx, &sy);
+                sx -= 0.5f; sy -= 0.5f;
+                if (sx < -1 || sy < -1 || sx > sw || sy > sh) continue;
+                float v[4];
+                sample(sx, sy, v);
+                uint8_t* d = out.data() + (static_cast<size_t>(y) * w + x) * 4;
+                const float a = std::clamp(v[3], 0.0f, 255.0f);
+                for (int c = 0; c < 3; ++c) d[c] = a > 0.0f ? static_cast<uint8_t>(std::clamp(v[c] / (a / 255.0f), 0.0f, 255.0f) + 0.5f) : 0;
+                d[3] = static_cast<uint8_t>(a + 0.5f);
+            }
+    };
+    if (bands <= 1) { rows(0, h); return out; }
+    std::vector<std::thread> pool;
+    for (int b = 0; b < bands; ++b) pool.emplace_back(rows, h * b / bands, h * (b + 1) / bands);
+    for (auto& t : pool) t.join();
+    return out;
+}
+
+Rect content_bounds(const Image& img) {
+    const int w = img.width(), h = img.height();
+    int x0 = w, y0 = h, x1 = -1, y1 = -1;
+    for (int y = 0; y < h; ++y) {
+        const uint8_t* p = img.data() + static_cast<size_t>(y) * w * 4 + 3;
+        for (int x = 0; x < w; ++x, p += 4)
+            if (*p) { x0 = std::min(x0, x); x1 = std::max(x1, x); y0 = std::min(y0, y); y1 = std::max(y1, y); }
+    }
+    if (x1 < x0) return {0, 0, w, h};
+    return {x0, y0, x1 + 1, y1 + 1};
 }
 
 }  // namespace firn::raster

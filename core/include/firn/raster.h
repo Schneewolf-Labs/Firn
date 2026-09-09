@@ -149,6 +149,18 @@ Image rotate(const Image& src, float degrees);
 // Size of the canvas rotate() produces for a given source size.
 void rotated_size(int w, int h, float degrees, int* out_w, int* out_h);
 
+// Projective warps for the Deform, Straighten and Perspective tools.
+// A homography H maps source (x, y, 1) to destination; points are
+// (TL, TR, BR, BL) corner lists.
+struct Quad { float x[4] = {0, 0, 0, 0}, y[4] = {0, 0, 0, 0}; };
+bool homography(const Quad& from, const Quad& to, float H[9]);       // false when degenerate
+bool invert3(const float H[9], float out[9]);
+void apply_homography(const float H[9], float x, float y, float* ox, float* oy);
+// Warps `src` by H into a w x h image (premultiplied bilinear, transparent outside).
+Image warp(const Image& src, const float H[9], int w, int h);
+// Bounds of the pixels with alpha > 0; the full image when it is all transparent.
+Rect content_bounds(const Image& img);
+
 // Same resample for 8-bit masks (selection follows the geometry).
 void resample_mask(const uint8_t* src, int sw, int sh, uint8_t* dst, int dw, int dh);
 
