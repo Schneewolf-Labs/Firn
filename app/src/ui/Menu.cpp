@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <memory>
 
 #include "App.h"
@@ -49,6 +50,17 @@ void App::draw_menu() {
     if (ImGui::BeginMenu("Image")) {
         if (ImGui::MenuItem("Flip", nullptr, false, has_doc)) run(std::make_unique<FlipCommand>());
         if (ImGui::MenuItem("Mirror", nullptr, false, has_doc)) run(std::make_unique<MirrorCommand>());
+        if (ImGui::BeginMenu("Rotate", has_doc)) {
+            if (ImGui::MenuItem("Rotate Clockwise 90")) rotate(90.0f);
+            if (ImGui::MenuItem("Rotate Counter-clockwise 90")) rotate(-90.0f);
+            if (ImGui::MenuItem("Rotate 180")) rotate(180.0f);
+            if (ImGui::MenuItem("Free Rotate...")) show_rotate_dialog = true;
+            ImGui::EndMenu();
+        }
+        ImGui::Separator();
+        if (ImGui::MenuItem("Crop to Selection", "Ctrl+Shift+R", false, has_doc && doc->has_selection())) crop_to_selection();
+        if (ImGui::MenuItem("Resize...", nullptr, false, has_doc)) open_resize_dialog();
+        if (ImGui::MenuItem("Canvas Size...", nullptr, false, has_doc)) open_canvas_dialog();
         ImGui::Separator();
         if (ImGui::MenuItem("Greyscale", nullptr, false, has_layer)) run(std::make_unique<GreyscaleCommand>(layer));
         ImGui::EndMenu();
@@ -126,6 +138,95 @@ void App::draw_dialogs() {
     static const char* kSelDialogs[] = {nullptr, "Expand Selection", "Contract Selection", "Feather Selection"};
     if (show_sel_dialog) { ImGui::OpenPopup(kSelDialogs[show_sel_dialog]); show_sel_dialog = 0; }
     if (show_layer_props_dialog) { ImGui::OpenPopup("Layer Properties"); show_layer_props_dialog = false; }
+    if (show_resize_dialog) { ImGui::OpenPopup("Resize"); show_resize_dialog = false; }
+    if (show_canvas_dialog) { ImGui::OpenPopup("Canvas Size"); show_canvas_dialog = false; }
+    if (show_rotate_dialog) { ImGui::OpenPopup("Free Rotate"); show_rotate_dialog = false; }
+
+    if (ImGui::BeginPopupModal("Resize", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        if (ImGui::IsKeyPressed(ImGuiKey_Escape, false)) ImGui::CloseCurrentPopup();
+        const float aspect = doc ? static_cast<float>(doc->width()) / doc->height() : 1.0f;
+        ImGui::RadioButton("Pixels", &resize_by_percent, 0);
+        ImGui::SameLine();
+        ImGui::RadioButton("Percent", &resize_by_percent, 1);
+        if (resize_by_percent) {
+            ImGui::SetNextItemWidth(120);
+            if (ImGui::InputFloat("%", &resize_pct, 1.0f, 10.0f, "%.1f") && doc) {
+                resize_pct = std::max(resize_pct, 0.1f);
+                resize_w = std::max(1, static_cast<int>(doc->width() * resize_pct / 100.0f + 0.5f));
+                resize_h = std::max(1, static_cast<int>(doc->height() * resize_pct / 100.0f + 0.5f));
+            }
+        } else {
+            ImGui::SetNextItemWidth(120);
+            if (ImGui::InputInt("Width", &resize_w)) {
+                resize_w = std::max(1, resize_w);
+                if (resize_lock) resize_h = std::max(1, static_cast<int>(resize_w / aspect + 0.5f));
+            }
+            ImGui::SetNextItemWidth(120);
+            if (ImGui::InputInt("Height", &resize_h)) {
+                resize_h = std::max(1, resize_h);
+                if (resize_lock) resize_w = std::max(1, static_cast<int>(resize_h * aspect + 0.5f));
+            }
+            ImGui::Checkbox("Lock aspect ratio", &resize_lock);
+        }
+        ImGui::SetNextItemWidth(160);
+        ImGui::Combo("Resample", &resize_filter, "Pixel resize\0Bilinear\0Bicubic\0");
+        ImGui::Text("%d x %d  ->  %d x %d", doc ? doc->width() : 0, doc ? doc->height() : 0, resize_w, resize_h);
+        if (ImGui::Button("OK")) {
+            if (doc && (resize_w != doc->width() || resize_h != doc->height())) {
+                tool().cancel(*this);
+                run(std::make_unique<ResizeCommand>(resize_w, resize_h, static_cast<raster::Filter>(resize_filter)));
+                fit_requested = true;
+            }
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel")) ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
+    }
+    if (ImGui::BeginPopupModal("Canvas Size", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        if (ImGui::IsKeyPressed(ImGuiKey_Escape, false)) ImGui::CloseCurrentPopup();
+        ImGui::SetNextItemWidth(120);
+        if (ImGui::InputInt("Width", &canvas_w)) canvas_w = std::max(1, canvas_w);
+        ImGui::SetNextItemWidth(120);
+        if (ImGui::InputInt("Height", &canvas_h)) canvas_h = std::max(1, canvas_h);
+        ImGui::TextUnformatted("Placement");
+        for (int i = 0; i < 9; ++i) {
+            if (i % 3) ImGui::SameLine();
+            ImGui::PushID(i);
+            const bool sel = canvas_anchor == i;
+            if (sel) ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyle().Colors[ImGuiCol_ButtonActive]);
+            if (ImGui::Button(sel ? "o" : " ", ImVec2(28, 28))) canvas_anchor = i;
+            if (sel) ImGui::PopStyleColor();
+            ImGui::PopID();
+        }
+        ImGui::TextDisabled("Background layers are padded with the background colour.");
+        if (ImGui::Button("OK")) {
+            if (doc && (canvas_w != doc->width() || canvas_h != doc->height())) {
+                const int dx = canvas_w - doc->width(), dy = canvas_h - doc->height();
+                const int ox = (canvas_anchor % 3) * dx / 2, oy = (canvas_anchor / 3) * dy / 2;
+                tool().cancel(*this);
+                run(std::make_unique<CanvasSizeCommand>(canvas_w, canvas_h, ox, oy, background_fill()));
+                fit_requested = true;
+            }
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel")) ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
+    }
+    if (ImGui::BeginPopupModal("Free Rotate", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        if (ImGui::IsKeyPressed(ImGuiKey_Escape, false)) ImGui::CloseCurrentPopup();
+        ImGui::RadioButton("Right (clockwise)", &rotate_cw, 1);
+        ImGui::SameLine();
+        ImGui::RadioButton("Left", &rotate_cw, 0);
+        ImGui::SetNextItemWidth(160);
+        ImGui::SliderFloat("Degrees", &rotate_degrees, 0.0f, 359.99f, "%.2f");
+        ImGui::TextDisabled("Uncovered corners take the background colour on Background layers.");
+        if (ImGui::Button("OK")) { rotate(rotate_cw ? rotate_degrees : -rotate_degrees); ImGui::CloseCurrentPopup(); }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel")) ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
+    }
 
     if (ImGui::BeginPopupModal("Layer Properties", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
         if (ImGui::IsKeyPressed(ImGuiKey_Escape, false)) ImGui::CloseCurrentPopup();

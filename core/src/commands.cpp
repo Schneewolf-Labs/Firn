@@ -3,6 +3,7 @@
 #include "firn/raster.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 
 namespace firn {
@@ -256,6 +257,108 @@ void MergeLayersCommand::execute(Document& doc) {
     }
     if (first_visible < 0) return;  // nothing visible, nothing to do
     doc.replace_layers(out, first_visible);
+}
+
+// --- Geometry ----------------------------------------------------------
+
+void GeometryCommand::execute(Document& doc) {
+    before_ = doc.snapshot();
+    Document::State after;
+    after.active = before_.active;
+    transform(before_, after);
+    doc.restore(after);
+}
+
+namespace {
+// Fill fully transparent pixels of a Background layer with the fill colour.
+void fill_transparent(Image& img, Color fill) {
+    uint8_t* p = img.data();
+    for (size_t i = 0; i < img.size_bytes(); i += 4)
+        if (p[i + 3] == 0) { p[i] = fill.r; p[i + 1] = fill.g; p[i + 2] = fill.b; p[i + 3] = 255; }
+}
+}  // namespace
+
+void CropCommand::transform(const Document::State& in, Document::State& out) {
+    const raster::Rect r = rect_.clipped(in.width, in.height);
+    out.width = r.x1 - r.x0;
+    out.height = r.y1 - r.y0;
+    for (const Layer& L : in.layers) {
+        Layer n = L;
+        n.pixels = raster::crop(L.pixels, r);
+        out.layers.push_back(std::move(n));
+    }
+    if (!in.selection.empty()) {
+        Mask m(out.width, out.height);
+        for (int y = 0; y < out.height; ++y)
+            std::memcpy(m.data() + static_cast<size_t>(y) * out.width, in.selection.data() + static_cast<size_t>(y + r.y0) * in.width + r.x0, out.width);
+        out.selection = std::move(m);
+    }
+}
+
+void ResizeCommand::transform(const Document::State& in, Document::State& out) {
+    out.width = w_;
+    out.height = h_;
+    for (const Layer& L : in.layers) {
+        Layer n = L;
+        n.pixels = raster::resample(L.pixels, w_, h_, filter_);
+        out.layers.push_back(std::move(n));
+    }
+    if (!in.selection.empty()) {
+        Mask m(w_, h_);
+        raster::resample_mask(in.selection.data(), in.width, in.height, m.data(), w_, h_);
+        out.selection = std::move(m);
+    }
+}
+
+void CanvasSizeCommand::transform(const Document::State& in, Document::State& out) {
+    out.width = w_;
+    out.height = h_;
+    // Crop with a rect that may extend outside the source: outside is transparent.
+    const raster::Rect r{-ox_, -oy_, -ox_ + w_, -oy_ + h_};
+    for (const Layer& L : in.layers) {
+        Layer n = L;
+        n.pixels = raster::crop(L.pixels, r);
+        if (L.background) fill_transparent(n.pixels, fill_);
+        out.layers.push_back(std::move(n));
+    }
+    if (!in.selection.empty()) {
+        Mask m(w_, h_);
+        const raster::Rect c = r.clipped(in.width, in.height);
+        for (int y = c.y0; y < c.y1; ++y)
+            std::memcpy(m.data() + static_cast<size_t>(y - r.y0) * w_ + (c.x0 - r.x0),
+                        in.selection.data() + static_cast<size_t>(y) * in.width + c.x0, c.x1 - c.x0);
+        out.selection = std::move(m);
+    }
+}
+
+void RotateCommand::transform(const Document::State& in, Document::State& out) {
+    float d = std::fmod(degrees_, 360.0f);
+    if (d < 0) d += 360.0f;
+    const bool quarter = std::fmod(d, 90.0f) == 0.0f;
+    const int q = static_cast<int>(d / 90.0f);
+    if (quarter) {
+        out.width = (q % 2) ? in.height : in.width;
+        out.height = (q % 2) ? in.width : in.height;
+    } else {
+        raster::rotated_size(in.width, in.height, d, &out.width, &out.height);
+    }
+    for (const Layer& L : in.layers) {
+        Layer n = L;
+        n.pixels = quarter ? raster::rotate_quarter(L.pixels, q) : raster::rotate(L.pixels, d);
+        if (!quarter && L.background) fill_transparent(n.pixels, fill_);
+        out.layers.push_back(std::move(n));
+    }
+    if (!in.selection.empty()) {
+        Image tmp(in.width, in.height);
+        for (size_t i = 0; i < in.selection.size(); ++i) {
+            uint8_t* p = tmp.data() + i * 4;
+            p[0] = p[1] = p[2] = in.selection.data()[i]; p[3] = 255;
+        }
+        Image r = quarter ? raster::rotate_quarter(tmp, q) : raster::rotate(tmp, d);
+        Mask m(out.width, out.height);
+        for (size_t i = 0; i < m.size(); ++i) m.data()[i] = static_cast<uint8_t>(r.data()[i * 4] * r.data()[i * 4 + 3] / 255);
+        out.selection = std::move(m);
+    }
 }
 
 void RemoveLayerCommand::execute(Document& doc) { removed_ = doc.remove_layer(index_); }

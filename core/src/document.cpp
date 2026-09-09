@@ -68,6 +68,17 @@ void Document::replace_layers(const std::vector<Layer>& layers, int active) {
     touch();
 }
 
+Document::State Document::snapshot() const {
+    return {width_, height_, clone_layers(), active_, selection_};
+}
+
+void Document::restore(const State& s) {
+    width_ = s.width;
+    height_ = s.height;
+    replace_layers(s.layers, s.active);
+    set_selection(s.selection);
+}
+
 LayerProps Document::props(size_t i) const {
     const Layer& L = layer(i);
     return {L.name, L.visible, L.opacity, L.blend};

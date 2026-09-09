@@ -83,3 +83,30 @@ void flip_vertical(Image& img);
 void mirror_horizontal(Image& img);
 
 }  // namespace firn::raster
+
+// --- Geometry -----------------------------------------------------------
+namespace firn::raster {
+
+enum class Filter { Nearest, Bilinear, Bicubic };
+
+// Resamples to (w, h). Works in premultiplied alpha; when shrinking, the
+// filter support widens so every source pixel contributes (area average).
+Image resample(const Image& src, int w, int h, Filter filter);
+
+// Copies the rect (clipped to the image; outside is transparent).
+Image crop(const Image& src, Rect r);
+
+// Exact rotations. Positive quarter turns are clockwise.
+Image rotate_quarter(const Image& src, int quarter_turns);
+
+// Rotates by `degrees` clockwise about the centre, expanding the canvas to
+// fit; uncovered area is transparent. Bilinear, premultiplied.
+Image rotate(const Image& src, float degrees);
+
+// Size of the canvas rotate() produces for a given source size.
+void rotated_size(int w, int h, float degrees, int* out_w, int* out_h);
+
+// Same resample for 8-bit masks (selection follows the geometry).
+void resample_mask(const uint8_t* src, int sw, int sh, uint8_t* dst, int dw, int dh);
+
+}  // namespace firn::raster

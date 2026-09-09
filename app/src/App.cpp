@@ -263,6 +263,49 @@ void App::open_layer_properties() {
     show_layer_props_dialog = true;
 }
 
+// --- Geometry ------------------------------------------------------------
+
+Color App::background_fill() const {
+    auto c = [](float f) { return static_cast<uint8_t>(f * 255.0f + 0.5f); };
+    return {c(bg_color[0]), c(bg_color[1]), c(bg_color[2]), 255};
+}
+
+void App::crop_to(raster::Rect r) {
+    if (!doc) return;
+    r = r.clipped(doc->width(), doc->height());
+    if (r.empty()) return;
+    tool().cancel(*this);
+    crop_rect = {};
+    run(std::make_unique<CropCommand>(r));
+    fit_requested = true;
+}
+
+void App::crop_to_selection() {
+    if (doc && doc->has_selection()) crop_to(doc->selection().bounds());
+}
+
+void App::rotate(float degrees_cw) {
+    if (!doc) return;
+    tool().cancel(*this);
+    run(std::make_unique<RotateCommand>(degrees_cw, background_fill()));
+    fit_requested = true;
+}
+
+void App::open_resize_dialog() {
+    if (!doc) return;
+    resize_w = doc->width();
+    resize_h = doc->height();
+    resize_pct = 100.0f;
+    show_resize_dialog = true;
+}
+
+void App::open_canvas_dialog() {
+    if (!doc) return;
+    canvas_w = doc->width();
+    canvas_h = doc->height();
+    show_canvas_dialog = true;
+}
+
 // Rebuild the marching-ants edge list when the selection changes. An edge is
 // recorded wherever a selected pixel (>=128) borders an unselected one.
 void App::sync_ants() {
@@ -324,6 +367,7 @@ void App::handle_shortcuts() {
     if (ctrl && ImGui::IsKeyPressed(ImGuiKey_X, false)) cut();
     if (ctrl && ImGui::IsKeyPressed(ImGuiKey_V, false)) paste_as_new_image();
     if (ctrl && ImGui::IsKeyPressed(ImGuiKey_L, false)) paste_as_new_layer();
+    if (ctrl && io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_R, false)) crop_to_selection();
     if (ctrl) return;
     if (ImGui::IsKeyPressed(ImGuiKey_Delete, false)) clear_selection();
 

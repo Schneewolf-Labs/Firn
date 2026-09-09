@@ -48,7 +48,7 @@ does the same from the command line.
 
 Single-key shortcuts as in the original: **A** pan, **Z** zoom, **S**
 selection, **L** freehand selection, **W** magic wand, **E** dropper, **B**
-paint brush, **X** eraser, **F** flood fill. `[` and `]` resize the brush.
+paint brush, **X** eraser, **F** flood fill, **R** crop. `[` and `]` resize the brush.
 Left button uses the foreground material, right button the background.
 Space + drag or middle-drag pans with any tool; Escape cancels a stroke.
 

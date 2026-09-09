@@ -250,6 +250,64 @@ private:
     int before_active_ = -1;
 };
 
+// Base for commands that change the canvas size: snapshots the whole
+// document for undo and rebuilds every layer (and the selection) through
+// transform().
+class GeometryCommand : public Command {
+public:
+    void execute(Document& doc) override;
+    void undo(Document& doc) override { doc.restore(before_); }
+protected:
+    // Produces the new state from the old one. Layers in `out` must all be
+    // out.width x out.height.
+    virtual void transform(const Document::State& in, Document::State& out) = 0;
+    Document::State before_;
+};
+
+class CropCommand : public GeometryCommand {
+public:
+    explicit CropCommand(raster::Rect r) : rect_(r) {}
+    std::string name() const override { return "Crop"; }
+protected:
+    void transform(const Document::State& in, Document::State& out) override;
+    raster::Rect rect_;
+};
+
+class ResizeCommand : public GeometryCommand {
+public:
+    ResizeCommand(int w, int h, raster::Filter f) : w_(w), h_(h), filter_(f) {}
+    std::string name() const override { return "Resize"; }
+protected:
+    void transform(const Document::State& in, Document::State& out) override;
+    int w_, h_;
+    raster::Filter filter_;
+};
+
+// New canvas of (w, h); the old content is placed at (offset_x, offset_y).
+// Background layers are padded with `fill`, others with transparency.
+class CanvasSizeCommand : public GeometryCommand {
+public:
+    CanvasSizeCommand(int w, int h, int offset_x, int offset_y, Color fill)
+        : w_(w), h_(h), ox_(offset_x), oy_(offset_y), fill_(fill) {}
+    std::string name() const override { return "Canvas Size"; }
+protected:
+    void transform(const Document::State& in, Document::State& out) override;
+    int w_, h_, ox_, oy_;
+    Color fill_;
+};
+
+// Clockwise degrees. Multiples of 90 are exact; anything else expands the
+// canvas and fills Background layers with `fill`.
+class RotateCommand : public GeometryCommand {
+public:
+    RotateCommand(float degrees, Color fill) : degrees_(degrees), fill_(fill) {}
+    std::string name() const override { return "Rotate"; }
+protected:
+    void transform(const Document::State& in, Document::State& out) override;
+    float degrees_;
+    Color fill_;
+};
+
 class RemoveLayerCommand : public Command {
 public:
     explicit RemoveLayerCommand(size_t index) : index_(index) {}

@@ -323,6 +323,66 @@ public:
     }
 };
 
+// --- Crop --------------------------------------------------------------
+
+class CropTool : public Tool {
+public:
+    const char* name() const override { return "Crop"; }
+    const char* shortcut() const override { return "R"; }
+    void on_press(App& app, const ToolInput& in, ImGuiMouseButton) override {
+        if (!app.doc) return;
+        x0_ = in.img_x; y0_ = in.img_y;
+        dragging_ = true;
+        update(app, in);
+    }
+    void on_drag(App& app, const ToolInput& in, ImGuiMouseButton) override { if (dragging_) update(app, in); }
+    void on_release(App& app, const ToolInput& in, ImGuiMouseButton) override {
+        if (!dragging_) return;
+        update(app, in);
+        dragging_ = false;
+        if (app.crop_rect.x1 - app.crop_rect.x0 < 1 || app.crop_rect.y1 - app.crop_rect.y0 < 1) app.crop_rect = {};
+    }
+    void cancel(App& app) override { dragging_ = false; app.crop_rect = {}; }
+    void draw_overlay(App& app, const ToolInput& in) override {
+        const raster::Rect& r = app.crop_rect;
+        if (r.empty()) return;
+        const ImVec2 a(in.origin.x + r.x0 * in.zoom, in.origin.y + r.y0 * in.zoom);
+        const ImVec2 b(in.origin.x + r.x1 * in.zoom, in.origin.y + r.y1 * in.zoom);
+        // Darken everything outside the crop rect.
+        const ImVec2 big0(in.origin.x - 100000.0f, in.origin.y - 100000.0f), big1(in.origin.x + 100000.0f, in.origin.y + 100000.0f);
+        const ImU32 shade = IM_COL32(0, 0, 0, 110);
+        in.dl->AddRectFilled(big0, ImVec2(big1.x, a.y), shade);
+        in.dl->AddRectFilled(ImVec2(big0.x, b.y), big1, shade);
+        in.dl->AddRectFilled(ImVec2(big0.x, a.y), ImVec2(a.x, b.y), shade);
+        in.dl->AddRectFilled(ImVec2(b.x, a.y), ImVec2(big1.x, b.y), shade);
+        in.dl->AddRect(a, b, IM_COL32(255, 255, 255, 255));
+        in.dl->AddRect(ImVec2(a.x - 1, a.y - 1), ImVec2(b.x + 1, b.y + 1), IM_COL32(0, 0, 0, 255));
+        // Enter applies while the tool is active.
+        if (ImGui::IsKeyPressed(ImGuiKey_Enter, false) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter, false)) app.crop_to(app.crop_rect);
+    }
+    void draw_options(App& app) override {
+        const raster::Rect& r = app.crop_rect;
+        if (r.empty()) ImGui::TextUnformatted("Drag a rectangle, then press Enter or Apply.");
+        else ImGui::Text("%d, %d  %d x %d", r.x0, r.y0, r.x1 - r.x0, r.y1 - r.y0);
+        ImGui::SameLine();
+        if (ImGui::SmallButton("Apply") && !r.empty()) app.crop_to(r);
+        ImGui::SameLine();
+        if (ImGui::SmallButton("Selection") && app.doc && app.doc->has_selection()) app.crop_rect = app.doc->selection().bounds();
+        ImGui::SameLine();
+        if (ImGui::SmallButton("Clear")) app.crop_rect = {};
+    }
+
+private:
+    void update(App& app, const ToolInput& in) {
+        const float x1 = in.img_x, y1 = in.img_y;
+        raster::Rect r{static_cast<int>(std::floor(std::min(x0_, x1))), static_cast<int>(std::floor(std::min(y0_, y1))),
+                       static_cast<int>(std::ceil(std::max(x0_, x1))), static_cast<int>(std::ceil(std::max(y0_, y1)))};
+        app.crop_rect = r.clipped(app.doc->width(), app.doc->height());
+    }
+    bool dragging_ = false;
+    float x0_ = 0, y0_ = 0;
+};
+
 }  // namespace
 
 std::vector<std::unique_ptr<Tool>> make_default_tools() {
@@ -336,5 +396,6 @@ std::vector<std::unique_ptr<Tool>> make_default_tools() {
     t.push_back(std::make_unique<BrushTool>(false));
     t.push_back(std::make_unique<BrushTool>(true));
     t.push_back(std::make_unique<FloodFillTool>());
+    t.push_back(std::make_unique<CropTool>());
     return t;
 }

@@ -55,6 +55,17 @@ public:
     std::vector<Layer> clone_layers() const;
     void replace_layers(const std::vector<Layer>& layers, int active);
 
+    // Everything at once, for commands that change the canvas size. Layers
+    // must already be (width x height).
+    struct State {
+        int width = 0, height = 0;
+        std::vector<Layer> layers;
+        int active = -1;
+        Mask selection;
+    };
+    State snapshot() const;
+    void restore(const State& s);
+
     // Flatten visible layers with their blend modes into one image.
     Image composite() const;
     // Flatten layers [from, to] (inclusive, bottom to top) honouring visibility.

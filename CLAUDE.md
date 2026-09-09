@@ -70,6 +70,11 @@ docs/    notes on the original: command inventory, module mapping, FORMAT.md
   `raster::apply_through_mask`; tools pass `&doc->selection()` as the clip to
   `raster::Stroke` / `raster::flood_fill`. New pixel commands get this for
   free; new tools must opt in.
+- **Canvas-size changes** derive from `GeometryCommand`: implement
+  `transform(in, out)` producing every layer at the new size plus the
+  selection; undo restores a full `Document::State` snapshot.
+- `docs/ROADMAP.md` is the value-ranked work list. Tick items off as they
+  land and take the top unchecked item next.
 - Index 0 is the bottom of the layer stack. Palettes list top first.
 - New tools go in `app/src/tools/Tools.cpp` and register in
   `make_default_tools()`; give them a single-letter `shortcut()` matching the

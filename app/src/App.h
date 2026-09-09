@@ -68,6 +68,22 @@ struct App {
     bool show_bc_dialog = false;
     int show_sel_dialog = 0;            // 1 expand, 2 contract, 3 feather
     bool show_layer_props_dialog = false;
+    bool show_resize_dialog = false;
+    bool show_canvas_dialog = false;
+    bool show_rotate_dialog = false;
+    // Resize dialog
+    int resize_w = 0, resize_h = 0;
+    float resize_pct = 100.0f;
+    bool resize_lock = true;
+    int resize_by_percent = 0;
+    int resize_filter = 2;              // raster::Filter
+    // Canvas size dialog
+    int canvas_w = 0, canvas_h = 0, canvas_anchor = 4;  // 3x3 anchor, 4 = centre
+    // Rotate dialog
+    float rotate_degrees = 15.0f;
+    int rotate_cw = 1;
+    // Crop tool rect (image coords), empty when none
+    firn::raster::Rect crop_rect;
     firn::LayerProps layer_props_edit;  // dialog working copy
     firn::LayerProps layer_props_before; // props at the start of a live slider drag
     bool show_imgui_demo = false;
@@ -116,6 +132,14 @@ struct App {
     void layer_promote_background();
     void layer_set_props(const firn::LayerProps& before, const firn::LayerProps& after);
     void open_layer_properties();
+
+    // Geometry
+    firn::Color background_fill() const;  // bg material as an opaque colour
+    void crop_to_selection();
+    void crop_to(firn::raster::Rect r);
+    void rotate(float degrees_cw);
+    void open_resize_dialog();
+    void open_canvas_dialog();
 
     // Per-frame UI (ui/*.cpp)
     void draw_menu();

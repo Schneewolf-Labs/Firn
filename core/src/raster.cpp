@@ -296,3 +296,199 @@ void mirror_horizontal(Image& img) {
 }
 
 }  // namespace firn::raster
+
+// --- Geometry -----------------------------------------------------------
+namespace firn::raster {
+namespace {
+
+float catmull_rom(float x) {
+    x = std::abs(x);
+    if (x < 1.0f) return 1.5f * x * x * x - 2.5f * x * x + 1.0f;
+    if (x < 2.0f) return -0.5f * x * x * x + 2.5f * x * x - 4.0f * x + 2.0f;
+    return 0.0f;
+}
+float triangle(float x) { x = std::abs(x); return x < 1.0f ? 1.0f - x : 0.0f; }
+
+// Precomputed per-output-pixel taps for a 1-D pass.
+struct Taps {
+    std::vector<int> start;       // first source index per output index
+    std::vector<int> count;       // number of taps
+    std::vector<float> weights;   // count taps per output, normalised
+    int max_count = 0;
+};
+
+Taps make_taps(int src_n, int dst_n, Filter filter) {
+    Taps t;
+    const float scale = static_cast<float>(src_n) / dst_n;
+    const float blur = std::max(1.0f, scale);  // widen support when shrinking
+    const float support = (filter == Filter::Bicubic ? 2.0f : filter == Filter::Bilinear ? 1.0f : 0.5f) * blur;
+    t.start.resize(dst_n); t.count.resize(dst_n);
+    std::vector<float> w;
+    for (int i = 0; i < dst_n; ++i) {
+        const float centre = (i + 0.5f) * scale;
+        int lo = static_cast<int>(std::floor(centre - support)), hi = static_cast<int>(std::ceil(centre + support));
+        lo = std::max(lo, 0); hi = std::min(hi, src_n - 1);
+        if (hi < lo) { lo = hi = std::clamp(static_cast<int>(centre), 0, src_n - 1); }
+        float sum = 0.0f;
+        w.clear();
+        for (int j = lo; j <= hi; ++j) {
+            const float x = ((j + 0.5f) - centre) / blur;
+            float k;
+            if (filter == Filter::Bicubic) k = catmull_rom(x);
+            else if (filter == Filter::Bilinear) k = triangle(x);
+            else k = std::abs(x) < 0.5f ? 1.0f : 0.0f;
+            w.push_back(k);
+            sum += k;
+        }
+        if (sum == 0.0f) {  // nearest: pick the closest tap
+            int best = std::clamp(static_cast<int>(centre), lo, hi);
+            std::fill(w.begin(), w.end(), 0.0f);
+            w[best - lo] = 1.0f;
+            sum = 1.0f;
+        }
+        t.start[i] = lo; t.count[i] = hi - lo + 1;
+        t.max_count = std::max(t.max_count, t.count[i]);
+        for (float v : w) t.weights.push_back(v / sum);
+    }
+    return t;
+}
+
+}  // namespace
+
+Image resample(const Image& src, int w, int h, Filter filter) {
+    const int sw = src.width(), sh = src.height();
+    if (w <= 0 || h <= 0 || sw == 0 || sh == 0) return Image(std::max(w, 0), std::max(h, 0));
+    // Premultiply into float.
+    std::vector<float> pre(static_cast<size_t>(sw) * sh * 4);
+    for (size_t i = 0; i < static_cast<size_t>(sw) * sh; ++i) {
+        const uint8_t* s = src.data() + i * 4;
+        const float a = s[3] / 255.0f;
+        pre[i * 4 + 0] = s[0] * a; pre[i * 4 + 1] = s[1] * a; pre[i * 4 + 2] = s[2] * a; pre[i * 4 + 3] = s[3];
+    }
+    // Horizontal pass: sw x sh -> w x sh
+    const Taps tx = make_taps(sw, w, filter);
+    std::vector<float> mid(static_cast<size_t>(w) * sh * 4, 0.0f);
+    for (int y = 0; y < sh; ++y) {
+        const float* row = &pre[static_cast<size_t>(y) * sw * 4];
+        size_t wi = 0;
+        for (int x = 0; x < w; ++x) {
+            float acc[4] = {0, 0, 0, 0};
+            for (int k = 0; k < tx.count[x]; ++k, ++wi) {
+                const float* s = row + (tx.start[x] + k) * 4;
+                const float wt = tx.weights[wi];
+                for (int c = 0; c < 4; ++c) acc[c] += s[c] * wt;
+            }
+            float* d = &mid[(static_cast<size_t>(y) * w + x) * 4];
+            for (int c = 0; c < 4; ++c) d[c] = acc[c];
+        }
+    }
+    // Vertical pass: w x sh -> w x h
+    const Taps ty = make_taps(sh, h, filter);
+    Image out(w, h);
+    size_t wi = 0;
+    for (int y = 0; y < h; ++y) {
+        const size_t wi0 = wi;
+        for (int x = 0; x < w; ++x) {
+            wi = wi0;
+            float acc[4] = {0, 0, 0, 0};
+            for (int k = 0; k < ty.count[y]; ++k, ++wi) {
+                const float* s = &mid[(static_cast<size_t>(ty.start[y] + k) * w + x) * 4];
+                const float wt = ty.weights[wi];
+                for (int c = 0; c < 4; ++c) acc[c] += s[c] * wt;
+            }
+            uint8_t* d = out.data() + (static_cast<size_t>(y) * w + x) * 4;
+            const float a = std::clamp(acc[3], 0.0f, 255.0f);
+            for (int c = 0; c < 3; ++c) d[c] = a > 0.0f ? static_cast<uint8_t>(std::clamp(acc[c] / (a / 255.0f), 0.0f, 255.0f) + 0.5f) : 0;
+            d[3] = static_cast<uint8_t>(a + 0.5f);
+        }
+    }
+    return out;
+}
+
+void resample_mask(const uint8_t* src, int sw, int sh, uint8_t* dst, int dw, int dh) {
+    // Go through an Image so the same filter code applies (grey in RGB, opaque alpha).
+    Image tmp(sw, sh);
+    for (size_t i = 0; i < static_cast<size_t>(sw) * sh; ++i) {
+        uint8_t* p = tmp.data() + i * 4;
+        p[0] = p[1] = p[2] = src[i]; p[3] = 255;
+    }
+    Image r = resample(tmp, dw, dh, Filter::Bilinear);
+    for (size_t i = 0; i < static_cast<size_t>(dw) * dh; ++i) dst[i] = r.data()[i * 4];
+}
+
+Image crop(const Image& src, Rect r) {
+    const int w = r.x1 - r.x0, h = r.y1 - r.y0;
+    if (w <= 0 || h <= 0) return Image();
+    Image out(w, h, {0, 0, 0, 0});
+    const Rect c = r.clipped(src.width(), src.height());
+    for (int y = c.y0; y < c.y1; ++y)
+        std::memcpy(out.data() + (static_cast<size_t>(y - r.y0) * w + (c.x0 - r.x0)) * 4,
+                    src.data() + (static_cast<size_t>(y) * src.width() + c.x0) * 4, static_cast<size_t>(c.x1 - c.x0) * 4);
+    return out;
+}
+
+Image rotate_quarter(const Image& src, int quarter_turns) {
+    const int q = ((quarter_turns % 4) + 4) % 4;
+    const int sw = src.width(), sh = src.height();
+    if (q == 0) return src;
+    if (q == 2) {
+        Image out = src;
+        flip_vertical(out);
+        mirror_horizontal(out);
+        return out;
+    }
+    Image out(sh, sw);
+    for (int y = 0; y < sh; ++y)
+        for (int x = 0; x < sw; ++x) {
+            const int dx = q == 1 ? sh - 1 - y : y;
+            const int dy = q == 1 ? x : sw - 1 - x;
+            std::memcpy(out.data() + (static_cast<size_t>(dy) * sh + dx) * 4, src.data() + (static_cast<size_t>(y) * sw + x) * 4, 4);
+        }
+    return out;
+}
+
+void rotated_size(int w, int h, float degrees, int* out_w, int* out_h) {
+    const float rad = degrees * 3.14159265358979f / 180.0f;
+    const float c = std::abs(std::cos(rad)), s = std::abs(std::sin(rad));
+    *out_w = std::max(1, static_cast<int>(std::ceil(w * c + h * s - 1e-3f)));
+    *out_h = std::max(1, static_cast<int>(std::ceil(w * s + h * c - 1e-3f)));
+}
+
+Image rotate(const Image& src, float degrees) {
+    const int sw = src.width(), sh = src.height();
+    int w, h;
+    rotated_size(sw, sh, degrees, &w, &h);
+    const float rad = degrees * 3.14159265358979f / 180.0f;
+    const float cs = std::cos(rad), sn = std::sin(rad);
+    const float cx = sw * 0.5f, cy = sh * 0.5f, ox = w * 0.5f, oy = h * 0.5f;
+    Image out(w, h, {0, 0, 0, 0});
+    auto sample = [&](float x, float y, float* rgba) {  // premultiplied bilinear
+        const int x0 = static_cast<int>(std::floor(x)), y0 = static_cast<int>(std::floor(y));
+        const float fx = x - x0, fy = y - y0;
+        for (int c = 0; c < 4; ++c) rgba[c] = 0.0f;
+        for (int j = 0; j < 2; ++j)
+            for (int i = 0; i < 2; ++i) {
+                const int px = x0 + i, py = y0 + j;
+                if (px < 0 || py < 0 || px >= sw || py >= sh) continue;
+                const float wt = (i ? fx : 1 - fx) * (j ? fy : 1 - fy);
+                const uint8_t* s = src.data() + (static_cast<size_t>(py) * sw + px) * 4;
+                const float a = s[3] / 255.0f;
+                rgba[0] += s[0] * a * wt; rgba[1] += s[1] * a * wt; rgba[2] += s[2] * a * wt; rgba[3] += s[3] * wt;
+            }
+    };
+    for (int y = 0; y < h; ++y)
+        for (int x = 0; x < w; ++x) {
+            // Inverse map: rotate the destination point counter-clockwise back to source space.
+            const float dx = (x + 0.5f) - ox, dy = (y + 0.5f) - oy;
+            const float sx = cx + dx * cs + dy * sn - 0.5f, sy = cy - dx * sn + dy * cs - 0.5f;
+            float v[4];
+            sample(sx, sy, v);
+            uint8_t* d = out.data() + (static_cast<size_t>(y) * w + x) * 4;
+            const float a = std::clamp(v[3], 0.0f, 255.0f);
+            for (int c = 0; c < 3; ++c) d[c] = a > 0.0f ? static_cast<uint8_t>(std::clamp(v[c] / (a / 255.0f), 0.0f, 255.0f) + 0.5f) : 0;
+            d[3] = static_cast<uint8_t>(a + 0.5f);
+        }
+    return out;
+}
+
+}  // namespace firn::raster

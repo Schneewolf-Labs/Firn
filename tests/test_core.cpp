@@ -477,7 +477,101 @@ static void test_psp_reader() {
     CHECK(io::is_psp_extension("a.PspImage") && io::is_psp_extension("b.psptube") && !io::is_psp_extension("c.png"));
 }
 
+static void test_geometry() {
+    // Resample: solid stays solid in every filter; 2x nearest duplicates pixels.
+    Image solid(5, 3, {10, 200, 30, 255});
+    for (auto f : {raster::Filter::Nearest, raster::Filter::Bilinear, raster::Filter::Bicubic}) {
+        Image r = raster::resample(solid, 9, 7, f);
+        CHECK(r.width() == 9 && r.height() == 7);
+        Color c = r.get(4, 3);
+        CHECK(c.r == 10 && c.g == 200 && c.b == 30 && c.a == 255);
+        Image d = raster::resample(solid, 2, 1, f);
+        CHECK(d.get(1, 0).g == 200);
+    }
+    Image two(2, 1);
+    two.set(0, 0, {0, 0, 0, 255});
+    two.set(1, 0, {255, 255, 255, 255});
+    Image n = raster::resample(two, 4, 1, raster::Filter::Nearest);
+    CHECK(n.get(1, 0).r == 0 && n.get(2, 0).r == 255);
+    Image b = raster::resample(two, 4, 1, raster::Filter::Bilinear);
+    CHECK(b.get(1, 0).r > 0 && b.get(1, 0).r < 128 && b.get(2, 0).r > 128 && b.get(2, 0).r < 255);
+    // Shrinking averages: black+white -> grey.
+    Image avg = raster::resample(two, 1, 1, raster::Filter::Bilinear);
+    CHECK(avg.get(0, 0).r >= 127 && avg.get(0, 0).r <= 128);
+    // Transparent neighbours don't bleed colour.
+    Image edge(2, 1);
+    edge.set(0, 0, {255, 0, 0, 255});
+    edge.set(1, 0, {0, 0, 0, 0});
+    Image e = raster::resample(edge, 1, 1, raster::Filter::Bilinear);
+    CHECK(e.get(0, 0).r == 255 && e.get(0, 0).a >= 127 && e.get(0, 0).a <= 128);
+
+    // Crop, including a rect partly outside.
+    Image img(4, 4);
+    img.set(1, 1, {7, 0, 0, 255});
+    Image c = raster::crop(img, {1, 1, 3, 3});
+    CHECK(c.width() == 2 && c.get(0, 0).r == 7);
+    Image c2 = raster::crop(img, {-1, -1, 2, 2});
+    CHECK(c2.width() == 3 && c2.get(0, 0).a == 0 && c2.get(2, 2).r == 7);
+
+    // Quarter rotations.
+    Image r(3, 2);
+    r.set(0, 0, {1, 0, 0, 255});  // top-left
+    r.set(2, 1, {2, 0, 0, 255});  // bottom-right
+    Image cw = raster::rotate_quarter(r, 1);
+    CHECK(cw.width() == 2 && cw.height() == 3 && cw.get(1, 0).r == 1 && cw.get(0, 2).r == 2);
+    Image ccw = raster::rotate_quarter(r, -1);
+    CHECK(ccw.get(0, 2).r == 1 && ccw.get(1, 0).r == 2);
+    Image half = raster::rotate_quarter(r, 2);
+    CHECK(half.get(2, 1).r == 1 && half.get(0, 0).r == 2);
+    // Free rotation by 90 lands on the same result within rounding.
+    Image free = raster::rotate(r, 90.0f);
+    CHECK(free.width() == 2 && free.height() == 3 && free.get(1, 0).r == 1 && free.get(0, 2).r == 2);
+    int rw, rh;
+    raster::rotated_size(100, 50, 45.0f, &rw, &rh);
+    CHECK(rw == 107 && rh == 107);
+
+    // Commands with undo, on a two-layer document with a selection.
+    Document doc(4, 4);
+    Layer& bg = doc.add_layer("Background");
+    bg.background = true;
+    bg.pixels.fill({255, 255, 255, 255});
+    Layer& top = doc.add_layer("Top");
+    top.pixels.set(3, 3, {9, 9, 9, 255});
+    doc.set_selection(mask::rectangle(4, 4, 2, 2, 4, 4, false));
+    CommandStack hist;
+    hist.run(doc, std::make_unique<CropCommand>(raster::Rect{2, 2, 4, 4}));
+    CHECK(doc.width() == 2 && doc.layer_count() == 2 && doc.layer(1).pixels.get(1, 1).r == 9);
+    CHECK(doc.selection().at(0, 0) == 255);
+    hist.undo(doc);
+    CHECK(doc.width() == 4 && doc.layer(1).pixels.get(3, 3).r == 9 && doc.selection().at(0, 0) == 0);
+
+    hist.run(doc, std::make_unique<ResizeCommand>(8, 8, raster::Filter::Nearest));
+    CHECK(doc.width() == 8 && doc.layer(1).pixels.get(7, 7).r == 9 && doc.layer(1).pixels.get(5, 5).a == 0);
+    CHECK(doc.selection().at(7, 7) == 255 && doc.selection().at(1, 1) == 0);
+    hist.undo(doc);
+    CHECK(doc.width() == 4);
+
+    hist.run(doc, std::make_unique<CanvasSizeCommand>(6, 6, 1, 1, Color{0, 0, 255, 255}));
+    CHECK(doc.width() == 6);
+    CHECK(doc.layer(0).pixels.get(0, 0).b == 255 && doc.layer(0).pixels.get(0, 0).a == 255);  // background padded blue
+    CHECK(doc.layer(0).pixels.get(1, 1).r == 255);
+    CHECK(doc.layer(1).pixels.get(0, 0).a == 0 && doc.layer(1).pixels.get(4, 4).r == 9);       // top padded transparent
+    CHECK(doc.selection().at(3, 3) == 255 && doc.selection().at(0, 0) == 0);
+    hist.undo(doc);
+
+    hist.run(doc, std::make_unique<RotateCommand>(90.0f, Color{0, 0, 0, 255}));
+    CHECK(doc.width() == 4 && doc.layer(1).pixels.get(0, 3).r == 9);
+    hist.undo(doc);
+    hist.run(doc, std::make_unique<RotateCommand>(45.0f, Color{0, 255, 0, 255}));
+    CHECK(doc.width() == 6 && doc.height() == 6);
+    CHECK(doc.layer(0).pixels.get(0, 0).g == 255 && doc.layer(0).pixels.get(0, 0).a == 255);  // corner filled
+    CHECK(doc.layer(1).pixels.get(0, 0).a == 0);
+    hist.undo(doc);
+    CHECK(doc.width() == 4 && doc.layer(1).pixels.get(3, 3).r == 9 && doc.layer(0).background);
+}
+
 int main() {
+    test_geometry();
     test_psp_reader();
     test_blend_modes();
     test_layer_structure_commands();
