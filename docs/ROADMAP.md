@@ -46,7 +46,7 @@ what to work on next.
 - [x] Inner Bevel, Cutout, Buttonize, Sepia, Wave, Pinch/Punch, Twirl
 - [x] Outer Bevel, Chrome, Halftone, Ripple, Spherize, Lens Distortion
 - [x] Kaleidoscope, Sunburst
-- [ ] Page Curl, Pattern, Lights, Fur, Weave
+- [x] Page Curl, Pattern, Lights, Fur, Weave (with the rest of the Effects menu)
 
 ## 5. Retouch and paint tools
 
@@ -117,13 +117,15 @@ for. Ranked by value per effort; work top to bottom, tick as they land.
 - [x] Effects long tail: every entry of the original's Effects menu now has a
       live-preview dialog (distortion, geometric, reflection, image, artistic,
       illumination, texture, art media, User Defined Filter)
-- [ ] Materials palette parity: swatches, recent colors, "all tools" lock
+- [x] Materials palette parity: swatches (JASC-PAL, saved in ~/.config/firn),
+      recent colors, Black/White reset, "all tools" lock
 - [x] Scripting: App.Do commands over the driver socket (about 120 of the
       original's commands with its parameter names), scripts/firn-script.py runs
       .PspScript files unmodified with the original's JascUtils helpers,
       terminal prompts for GetString/GetNumber; Thumbnail_150, CenterLayer and
       SimpleCaption from the original run end to end
-- [ ] Plain printing
+- [x] Plain printing: File > Print (Ctrl+P) writes a one-page PDF (paper, orientation,
+      margins, fit or scale) and hands it to the system spooler, or saves the PDF
 - [ ] 16-bit channels and color management
 
 ## Dropped (not worth the effort for this port)

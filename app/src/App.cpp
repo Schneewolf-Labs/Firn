@@ -870,6 +870,7 @@ void App::handle_shortcuts() {
     if (ctrl && ImGui::IsKeyPressed(ImGuiKey_Y, false)) redo();
     if (ctrl && ImGui::IsKeyPressed(ImGuiKey_N, false)) show_new_dialog = true;
     if (ctrl && ImGui::IsKeyPressed(ImGuiKey_O, false)) request_open();
+    if (ctrl && ImGui::IsKeyPressed(ImGuiKey_P, false) && doc) show_print_dialog = true;
     if (ctrl && ImGui::IsKeyPressed(ImGuiKey_W, false)) close_document(current_doc);
     if (ctrl && io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_S, false)) request_save_as();
     else if (ctrl && ImGui::IsKeyPressed(ImGuiKey_S, false)) save();

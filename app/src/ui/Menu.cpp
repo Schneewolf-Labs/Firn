@@ -3,6 +3,7 @@
 
 #include "App.h"
 #include "firn/adjust.h"
+#include "firn/io.h"
 #include "firn/io_psp.h"
 #include "firn/effects.h"
 #include "firn/photo.h"
@@ -33,7 +34,9 @@ void App::draw_menu() {
                 const std::string& r = config.recent_files[i];
                 if (ImGui::MenuItem(r.c_str())) { open_document(r); break; }
             }
-            ImGui::EndMenu();
+            ImGui::Separator();
+        if (ImGui::MenuItem("Print...", "Ctrl+P", false, has_doc)) show_print_dialog = true;
+        ImGui::EndMenu();
         }
         if (ImGui::MenuItem("Close", "Ctrl+W", false, has_doc)) close_document(current_doc);
         if (ImGui::MenuItem("Close All", nullptr, false, has_doc)) { for (int i = static_cast<int>(docs.size()) - 1; i >= 0; --i) if (!document_modified(i)) close_document(i); if (!docs.empty()) close_document(0); }
@@ -477,10 +480,30 @@ void App::draw_dialogs() {
         else if (file_op == PendingFileOp::SaveSelection) save_selection(file_dialog.path());
         else if (file_op == PendingFileOp::LoadPalette) load_palette(file_dialog.path());
         else if (file_op == PendingFileOp::SavePalette) save_palette(file_dialog.path());
+        else if (file_op == PendingFileOp::SavePdf) print_to_pdf(file_dialog.path(), false);
+        else if (file_op == PendingFileOp::LoadSwatches) { std::string e; auto pal = io::load_palette(file_dialog.path(), &e); if (pal.empty()) status = "Swatches: " + e; else { swatches = pal; save_swatches(); } }
+        else if (file_op == PendingFileOp::SaveSwatches) { std::string e; if (!io::save_palette(swatches, file_dialog.path(), &e)) status = "Swatches: " + e; }
         file_op = PendingFileOp::None;
     }
 
     if (show_new_dialog) { ImGui::OpenPopup("New Image"); show_new_dialog = false; }
+    if (show_print_dialog) { ImGui::OpenPopup("Print"); show_print_dialog = false; }
+    if (ImGui::BeginPopupModal("Print", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::SetNextItemWidth(140); ImGui::Combo("Paper", &print_paper, "Letter\0A4\0Legal\0");
+        ImGui::Checkbox("Landscape", &print_landscape); ImGui::SameLine(); ImGui::Checkbox("Center on page", &print_center);
+        ImGui::SetNextItemWidth(140); ImGui::SliderFloat("Margins (in)", &print_margin, 0.0f, 2.0f, "%.2f");
+        ImGui::Checkbox("Fit to page", &print_fit);
+        if (!print_fit) { ImGui::SetNextItemWidth(140); ImGui::SliderFloat("Scale %", &print_scale, 5.0f, 400.0f, "%.0f"); ImGui::SetNextItemWidth(140); ImGui::InputInt("Image DPI", &print_dpi); print_dpi = std::clamp(print_dpi, 10, 2400); }
+        char printer[128]; std::snprintf(printer, sizeof(printer), "%s", print_printer.c_str());
+        ImGui::SetNextItemWidth(200); if (ImGui::InputText("Printer (blank = default)", printer, sizeof(printer))) print_printer = printer;
+        ImGui::Separator();
+        if (ImGui::Button("Print", ImVec2(100, 0))) { print_to_pdf(Config::directory() + "/print.pdf", true); ImGui::CloseCurrentPopup(); }
+        ImGui::SameLine();
+        if (ImGui::Button("Save as PDF...", ImVec2(120, 0))) { request_print_pdf(); ImGui::CloseCurrentPopup(); }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel", ImVec2(80, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape, false)) ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
+    }
     if (show_jpeg_dialog) { ImGui::OpenPopup("JPEG Options"); show_jpeg_dialog = false; }
     if (show_info_dialog) { ImGui::OpenPopup("Image Information"); show_info_dialog = false; }
     if (show_alpha_save_dialog) { ImGui::OpenPopup("Save Selection To Alpha Channel"); show_alpha_save_dialog = false; }

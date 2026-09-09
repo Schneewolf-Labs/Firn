@@ -248,3 +248,68 @@ void App::draw_image_dialogs() {
         ImGui::EndPopup();
     }
 }
+
+// --- Printing ------------------------------------------------------------------
+
+#include "firn/print.h"
+
+void App::request_print_pdf() {
+    if (!doc) return;
+    file_op = PendingFileOp::SavePdf;
+    std::string suggested = doc_title.substr(0, doc_title.find_last_of('.')) + ".pdf";
+    file_dialog.open(FileDialog::Mode::Save, "Print to PDF", {"pdf"}, suggested);
+}
+
+void App::print_to_pdf(const std::string& path, bool send) {
+    if (!doc) return;
+    print::PageSetup ps;
+    if (print_paper == 1) { ps.page_w_in = 8.27f; ps.page_h_in = 11.69f; }
+    else if (print_paper == 2) { ps.page_w_in = 8.5f; ps.page_h_in = 14.0f; }
+    ps.landscape = print_landscape; ps.center = print_center; ps.margin_in = print_margin;
+    ps.scale_percent = print_fit ? 0.0f : print_scale; ps.dpi = print_dpi; ps.title = doc_title; ps.jpeg_quality = jpeg_quality;
+    std::string err;
+    if (!print::write_pdf(doc->composite(), ps, path, &err)) { status = "Print: " + err; return; }
+    status = "Wrote " + path;
+    if (send) {
+        if (print::send_to_printer(path, print_printer, &err)) status = "Sent " + path + " to the printer";
+        else status = "Print: " + err + " (the PDF is at " + path + ")";
+    }
+}
+
+// --- Swatches -------------------------------------------------------------------
+
+void App::ensure_swatches() {
+    if (swatches_loaded) return;
+    swatches_loaded = true;
+    std::string err;
+    swatches = io::load_palette(Config::directory() + "/swatches.PspPalette", &err);
+    if (swatches.empty()) {
+        // A starter set: the classic 16 plus grays.
+        const uint8_t base[][3] = {{0, 0, 0}, {128, 128, 128}, {192, 192, 192}, {255, 255, 255}, {128, 0, 0}, {255, 0, 0}, {128, 128, 0}, {255, 255, 0},
+                                   {0, 128, 0}, {0, 255, 0}, {0, 128, 128}, {0, 255, 255}, {0, 0, 128}, {0, 0, 255}, {128, 0, 128}, {255, 0, 255}};
+        for (const auto& c : base) swatches.push_back({c[0], c[1], c[2], 255});
+    }
+}
+
+void App::save_swatches() {
+    std::string err;
+    if (!io::save_palette(swatches, Config::directory() + "/swatches.PspPalette", &err)) status = "Swatches: " + err;
+}
+
+void App::note_recent_color(const float* rgba) {
+    const Color c{static_cast<uint8_t>(rgba[0] * 255 + 0.5f), static_cast<uint8_t>(rgba[1] * 255 + 0.5f), static_cast<uint8_t>(rgba[2] * 255 + 0.5f), 255};
+    for (size_t i = 0; i < recent_colors.size(); ++i)
+        if (recent_colors[i].r == c.r && recent_colors[i].g == c.g && recent_colors[i].b == c.b) { recent_colors.erase(recent_colors.begin() + static_cast<long>(i)); break; }
+    recent_colors.insert(recent_colors.begin(), c);
+    if (recent_colors.size() > 12) recent_colors.resize(12);
+}
+
+void App::request_load_swatches() {
+    file_op = PendingFileOp::LoadSwatches;
+    file_dialog.open(FileDialog::Mode::Open, "Load Swatches", {"psppalette", "pal"}, "");
+}
+
+void App::request_save_swatches() {
+    file_op = PendingFileOp::SaveSwatches;
+    file_dialog.open(FileDialog::Mode::Save, "Save Swatches", {"psppalette", "pal"}, "swatches.PspPalette");
+}

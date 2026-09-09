@@ -112,7 +112,7 @@ struct App {
 
     // Dialog state
     FileDialog file_dialog;
-    enum class PendingFileOp { None, Open, SaveAs, LoadSelection, SaveSelection, LoadPalette, SavePalette };
+    enum class PendingFileOp { None, Open, SaveAs, LoadSelection, SaveSelection, LoadPalette, SavePalette, SavePdf, LoadSwatches, SaveSwatches };
     PendingFileOp file_op = PendingFileOp::None;
     bool show_new_dialog = false;
     // Adjustment / effect dialogs with live preview (ui/Adjust.cpp)
@@ -252,6 +252,24 @@ struct App {
     // Rotate dialog
     float rotate_degrees = 15.0f;
     int rotate_cw = 1;
+    // Print (File > Print...)
+    bool show_print_dialog = false;
+    int print_paper = 0;                  // 0 Letter, 1 A4, 2 Legal
+    bool print_landscape = false, print_center = true, print_fit = true;
+    float print_margin = 0.5f, print_scale = 100.0f;
+    int print_dpi = 300;
+    std::string print_printer;
+    void request_print_pdf();
+    void print_to_pdf(const std::string& path, bool send);
+    // Swatches and recent colors (Materials palette)
+    std::vector<firn::Color> swatches, recent_colors;
+    bool materials_all_tools = true;
+    bool swatches_loaded = false;
+    void ensure_swatches();
+    void save_swatches();
+    void note_recent_color(const float* rgba);
+    void request_load_swatches();
+    void request_save_swatches();
     // Image menu (ui/ImageMenu.cpp)
     bool show_borders_dialog = false, show_frame_dialog = false, show_depth_dialog = false, show_combine_dialog = false, show_arith_dialog = false;
     int border_l = 10, border_r = 10, border_t = 10, border_b = 10; bool border_symmetric = true;

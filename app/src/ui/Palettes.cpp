@@ -49,6 +49,47 @@ static void draw_materials(App& app) {
         for (int i = 0; i < 4; ++i) std::swap(app.fg_color[i], app.bg_color[i]);
         std::swap(app.fg_material, app.bg_material);
     }
+    ImGui::SameLine();
+    if (ImGui::Button("Black/White")) { app.fg_color[0] = app.fg_color[1] = app.fg_color[2] = 0; app.bg_color[0] = app.bg_color[1] = app.bg_color[2] = 1; app.fg_material.kind = app.bg_material.kind = 0; }
+    ImGui::SameLine();
+    ImGui::Checkbox("All tools", &app.materials_all_tools);
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Kept for the original's layout; every tool shares these materials here.");
+    // Swatches: left click sets the foreground, right click the background;
+    // + adds the foreground, right click on a swatch with Ctrl removes it.
+    app.ensure_swatches();
+    ImGui::SeparatorText("Swatches");
+    auto swatch_row = [&](std::vector<Color>& list, const char* id, bool removable) {
+        const float sz = 16.0f;
+        const int per_row = std::max(1, static_cast<int>(ImGui::GetContentRegionAvail().x / (sz + 4)));
+        for (size_t i = 0; i < list.size(); ++i) {
+            ImGui::PushID(id); ImGui::PushID(static_cast<int>(i));
+            const Color& c = list[i];
+            ImVec4 col(c.r / 255.0f, c.g / 255.0f, c.b / 255.0f, 1.0f);
+            if (ImGui::ColorButton("##sw", col, ImGuiColorEditFlags_NoTooltip | ImGuiColorEditFlags_NoAlpha, ImVec2(sz, sz))) {
+                app.fg_color[0] = col.x; app.fg_color[1] = col.y; app.fg_color[2] = col.z; app.fg_material.kind = 0;
+            }
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("%d, %d, %d", c.r, c.g, c.b);
+                if (ImGui::IsMouseClicked(ImGuiMouseButton_Right)) {
+                    if (removable && ImGui::GetIO().KeyCtrl) { list.erase(list.begin() + static_cast<long>(i)); app.save_swatches(); ImGui::PopID(); ImGui::PopID(); break; }
+                    app.bg_color[0] = col.x; app.bg_color[1] = col.y; app.bg_color[2] = col.z; app.bg_material.kind = 0;
+                }
+            }
+            ImGui::PopID(); ImGui::PopID();
+            if (static_cast<int>(i % per_row) != per_row - 1 && i + 1 < list.size()) ImGui::SameLine();
+        }
+    };
+    swatch_row(app.swatches, "sw", true);
+    if (ImGui::SmallButton("+")) { app.swatches.push_back({static_cast<uint8_t>(app.fg_color[0] * 255 + 0.5f), static_cast<uint8_t>(app.fg_color[1] * 255 + 0.5f), static_cast<uint8_t>(app.fg_color[2] * 255 + 0.5f), 255}); app.save_swatches(); }
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Add the foreground color (Ctrl+right-click a swatch removes it)");
+    ImGui::SameLine();
+    if (ImGui::SmallButton("Load...")) app.request_load_swatches();
+    ImGui::SameLine();
+    if (ImGui::SmallButton("Save...")) app.request_save_swatches();
+    if (!app.recent_colors.empty()) {
+        ImGui::SeparatorText("Recent");
+        swatch_row(app.recent_colors, "rc", false);
+    }
     ImGui::Separator();
     if (app.doc && app.active_layer() >= 0) {
         if (ImGui::Button("Fill layer with foreground")) {

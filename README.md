@@ -94,6 +94,13 @@ internal clipboard; paste as a new layer (Ctrl+L) or a new image (Ctrl+V).
 
 Dear ImGui (docking branch) is fetched by CMake on first configure.
 
+## Printing
+
+File > Print (Ctrl+P) lays the image out on Letter, A4 or Legal paper
+(orientation, margins, fit to page or a scale at a chosen DPI), writes a
+one-page PDF and sends it to the default or a named printer through the
+system spooler (`lp`); "Save as PDF" keeps the file instead.
+
 ## Scripting
 
 Firn runs the original's Python scripts. Start the app with its driver

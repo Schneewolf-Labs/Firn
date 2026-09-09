@@ -138,7 +138,7 @@ void App::draw_canvas() {
     if (active_button < 0 && hovered && !guide_busy) {
         if (tool_takes_left && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) active_button = ImGuiMouseButton_Left;
         else if (ImGui::IsMouseClicked(ImGuiMouseButton_Right)) active_button = ImGuiMouseButton_Right;
-        if (active_button >= 0) tool().on_press(*this, in, static_cast<ImGuiMouseButton>(active_button));
+        if (active_button >= 0) { note_recent_color(active_button == ImGuiMouseButton_Left ? fg_color : bg_color); tool().on_press(*this, in, static_cast<ImGuiMouseButton>(active_button)); }
     } else if (active_button >= 0) {
         const auto b = static_cast<ImGuiMouseButton>(active_button);
         if (ImGui::IsMouseDown(b)) {

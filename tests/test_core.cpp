@@ -11,6 +11,7 @@
 #include "firn/adjust.h"
 #include "firn/effects.h"
 #include "firn/json.h"
+#include "firn/print.h"
 #include "firn/commands.h"
 #include "firn/document.h"
 #include "firn/io.h"
@@ -1775,7 +1776,21 @@ static void test_json() {
     CHECK(o.size() == 1 && o.get("w").as_number() == 4);
 }
 
+static void test_print() {
+    Image img(40, 30, {200, 100, 50, 255});
+    print::PageSetup ps;
+    ps.title = "test (page)";
+    const std::string tmp = "/tmp/firn_test_print.pdf";
+    CHECK(print::write_pdf(img, ps, tmp));
+    std::ifstream f(tmp, std::ios::binary);
+    std::string data((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+    std::remove(tmp.c_str());
+    CHECK(data.rfind("%PDF-1.4", 0) == 0 && data.find("/DCTDecode") != std::string::npos && data.find("%%EOF") != std::string::npos);
+    CHECK(data.find("/Width 40 /Height 30") != std::string::npos && data.find("\xFF\xD8") != std::string::npos);
+}
+
 int main() {
+    test_print();
     test_json();
     test_art_effects();
     test_geo_effects();

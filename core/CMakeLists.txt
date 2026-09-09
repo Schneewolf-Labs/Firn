@@ -14,6 +14,7 @@ add_library(firncore STATIC
   src/effects_geo.cpp
   src/effects_art.cpp
   src/json.cpp
+  src/print.cpp
   src/io.cpp
   src/io_psp.cpp
 )
