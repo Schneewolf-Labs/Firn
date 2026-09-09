@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include <functional>
 #include <vector>
 
 #include "firn/image.h"
@@ -25,9 +26,13 @@ struct Brush {
     float hardness = 0.5f;   // 0 = fully soft falloff, 1 = hard edge (1px AA)
     float opacity = 1.0f;    // 0..1, applied per stroke, not per stamp
     float step = 0.25f;      // stamp spacing as a fraction of size
+    bool accumulate = false; // airbrush: coverage builds up per stamp by `flow`
+    float flow = 0.1f;
 };
 
-enum class StrokeMode { Paint, Erase };
+// Paint: colour. Erase: clear alpha. Clone: pixels from a source image at an
+// offset. Filter: a per-pixel function of the existing pixel (retouch tools).
+enum class StrokeMode { Paint, Erase, Clone, Filter };
 
 // A brush stroke in progress. Same semantics as the original: opacity is per stroke, so
 // overlapping stamps do not build up. Coverage accumulates as max() into a
@@ -40,6 +45,13 @@ public:
     // Add a point (image coordinates, sub-pixel ok). Stamps are placed along
     // the segment from the previous point at the brush spacing.
     void add_point(float x, float y);
+    // One stamp regardless of spacing (airbrush ticks while the mouse rests).
+    void stamp_at(float x, float y) { stamp(x, y); }
+
+    // Clone source: `src` must outlive the stroke; a destination pixel (x, y)
+    // takes src(x + ox, y + oy).
+    void set_clone_source(const Image* src, int ox, int oy) { clone_ = src; clone_ox_ = ox; clone_oy_ = oy; }
+    void set_filter(std::function<Color(Color)> f) { filter_ = std::move(f); }
 
     // Write everything touched since the last render into `dst`, which must
     // be a copy of `base` (or the previous render target). Returns the rect
@@ -55,6 +67,9 @@ private:
     Color color_;
     StrokeMode mode_;
     const Mask* clip_;
+    const Image* clone_ = nullptr;
+    int clone_ox_ = 0, clone_oy_ = 0;
+    std::function<Color(Color)> filter_;
     std::vector<float> mask_;
     Rect pending_;
     bool has_last_ = false;
@@ -96,6 +111,8 @@ Image resample(const Image& src, int w, int h, Filter filter);
 
 // Copies the rect (clipped to the image; outside is transparent).
 Image crop(const Image& src, Rect r);
+// Same size, content moved by (dx, dy); uncovered area is transparent.
+Image shifted(const Image& src, int dx, int dy);
 
 // Exact rotations. Positive quarter turns are clockwise.
 Image rotate_quarter(const Image& src, int quarter_turns);

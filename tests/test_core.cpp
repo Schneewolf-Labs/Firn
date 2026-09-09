@@ -752,7 +752,48 @@ static void test_effects() {
     CHECK(ds.get(7, 7).a == 0);
 }
 
+static void test_stroke_modes() {
+    // Clone: copies from an offset in the source.
+    Image src(8, 1, {0, 0, 0, 255});
+    src.set(5, 0, {255, 0, 0, 255});
+    Image base(8, 1, {0, 0, 0, 255});
+    raster::Brush b; b.size = 1.5f; b.hardness = 1.0f;
+    raster::Stroke st(base, b, {}, raster::StrokeMode::Clone);
+    st.set_clone_source(&src, 4, 0);  // dest 1 <- src 5
+    Image out = base;
+    st.add_point(1.5f, 0.5f);
+    st.render(out);
+    CHECK(out.get(1, 0).r == 255 && out.get(2, 0).r == 0);
+    // Filter: half-coverage blends halfway towards the filtered colour.
+    Image fb(3, 1, {100, 100, 100, 255});
+    raster::Brush wide; wide.size = 100; wide.hardness = 1; wide.opacity = 0.5f;
+    raster::Stroke sf(fb, wide, {}, raster::StrokeMode::Filter);
+    sf.set_filter([](Color c) { return Color{200, c.g, c.b, c.a}; });
+    Image fo = fb;
+    sf.add_point(1, 0);
+    sf.render(fo);
+    CHECK(fo.get(1, 0).r == 150 && fo.get(1, 0).g == 100);
+    // Airbrush accumulates with repeated stamps but caps at 1.
+    Image ab(3, 1, {0, 0, 0, 255});
+    raster::Brush air; air.size = 100; air.hardness = 1; air.accumulate = true; air.flow = 0.25f;
+    raster::Stroke sa(ab, air, {255, 255, 255, 255}, raster::StrokeMode::Paint);
+    Image ao = ab;
+    sa.stamp_at(1, 0); sa.render(ao);
+    CHECK(ao.get(1, 0).r >= 63 && ao.get(1, 0).r <= 65);
+    sa.stamp_at(1, 0); sa.render(ao);
+    CHECK(ao.get(1, 0).r >= 127 && ao.get(1, 0).r <= 128);
+    for (int i = 0; i < 10; ++i) sa.stamp_at(1, 0);
+    sa.render(ao);
+    CHECK(ao.get(1, 0).r == 255);
+    // Shift.
+    Image sh(3, 1, {0, 0, 0, 0});
+    sh.set(0, 0, {9, 9, 9, 255});
+    Image moved = raster::shifted(sh, 2, 0);
+    CHECK(moved.get(2, 0).r == 9 && moved.get(0, 0).a == 0);
+}
+
 int main() {
+    test_stroke_modes();
     test_effects();
     test_adjust_module();
     test_psp_writer_roundtrip();

@@ -61,7 +61,7 @@ void Stroke::stamp(float cx, float cy) {
             else cov = std::clamp((r - d) / (r - inner), 0.0f, 1.0f);
             if (cov <= 0.0f) continue;
             float& m = mask_[static_cast<size_t>(y) * w + x];
-            m = std::max(m, cov);
+            m = brush_.accumulate ? std::min(1.0f, m + cov * brush_.flow) : std::max(m, cov);
         }
     }
     pending_ = pending_.united(box);
@@ -109,6 +109,18 @@ Rect Stroke::render(Image& dst) {
             if (mode_ == StrokeMode::Erase) {
                 std::memcpy(d, b, 3);
                 d[3] = static_cast<uint8_t>(b[3] * (1.0f - m) + 0.5f);
+            } else if (mode_ == StrokeMode::Clone) {
+                std::memcpy(d, b, 4);
+                const int sx = x + clone_ox_, sy = y + clone_oy_;
+                if (clone_ && sx >= 0 && sy >= 0 && sx < clone_->width() && sy < clone_->height())
+                    blend_over(dst, x, y, clone_->get(sx, sy), m);
+            } else if (mode_ == StrokeMode::Filter) {
+                const Color before{b[0], b[1], b[2], b[3]};
+                const Color after = filter_ ? filter_(before) : before;
+                d[0] = static_cast<uint8_t>(b[0] + (after.r - b[0]) * m + 0.5f);
+                d[1] = static_cast<uint8_t>(b[1] + (after.g - b[1]) * m + 0.5f);
+                d[2] = static_cast<uint8_t>(b[2] + (after.b - b[2]) * m + 0.5f);
+                d[3] = static_cast<uint8_t>(b[3] + (after.a - b[3]) * m + 0.5f);
             } else {
                 std::memcpy(d, b, 4);
                 blend_over(dst, x, y, color_, m);
@@ -455,6 +467,10 @@ void resample_mask(const uint8_t* src, int sw, int sh, uint8_t* dst, int dw, int
     }
     Image r = resample(tmp, dw, dh, Filter::Bilinear);
     for (size_t i = 0; i < static_cast<size_t>(dw) * dh; ++i) dst[i] = r.data()[i * 4];
+}
+
+Image shifted(const Image& src, int dx, int dy) {
+    return crop(src, {-dx, -dy, src.width() - dx, src.height() - dy});
 }
 
 Image crop(const Image& src, Rect r) {

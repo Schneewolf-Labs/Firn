@@ -48,8 +48,10 @@ and TGA flattened. Files Firn writes open in the original program.
 ## Tools
 
 Single-key shortcuts as in the original: **A** pan, **Z** zoom, **S**
-selection, **L** freehand selection, **W** magic wand, **E** dropper, **B**
-paint brush, **X** eraser, **F** flood fill, **R** crop. `[` and `]` resize the brush.
+selection, **L** freehand selection, **W** magic wand, **E** dropper, **M**
+move, **R** crop, **B** paint brush, **P** airbrush, **X** eraser, **C**
+clone (right-click sets the source), **N** lighten/darken, **Q** color
+replacer, **F** flood fill. Saturation and Hue brushes have no key. `[` and `]` resize the brush.
 Left button uses the foreground material, right button the background.
 Space + drag or middle-drag pans with any tool; Escape cancels a stroke.
 

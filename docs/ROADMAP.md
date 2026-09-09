@@ -46,8 +46,9 @@ what to work on next.
 
 ## 5. Retouch and paint tools
 
-- [ ] Move tool (layer offset), Clone brush
-- [ ] Airbrush, Lighten/Darken, Saturation, Smudge, Color Replacer
+- [x] Move tool (layer offset), Clone brush
+- [x] Airbrush, Lighten/Darken, Saturation, Hue, Color Replacer
+- [ ] Smudge / Push, Dodge / Burn, Soften / Sharpen brushes
 - [ ] Brush shapes and stamp textures
 
 ## 6. Text and shapes

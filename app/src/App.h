@@ -39,6 +39,9 @@ struct App {
     int tool_index = 0;
     int active_button = -1;             // mouse button of the gesture in progress, or -1
     firn::raster::Brush brush;
+    int retouch_amount = 20;            // % per stroke for lighten/darken, saturation, hue
+    bool clone_aligned = true, clone_sample_merged = false;
+    int replacer_tolerance = 30;
     int fill_tolerance = 20;
     float fill_opacity = 1.0f;
     // Selection tool options (shared by Selection / Freehand / Magic Wand)

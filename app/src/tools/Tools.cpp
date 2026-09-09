@@ -1,8 +1,10 @@
 #include <algorithm>
 #include <cmath>
+#include <functional>
 #include <memory>
 
 #include "App.h"
+#include "firn/adjust.h"
 #include "firn/commands.h"
 #include "firn/mask.h"
 #include "firn/raster.h"
@@ -67,34 +69,123 @@ private:
     }
 };
 
-// --- Paint Brush / Eraser ----------------------------------------------
+// --- Brush family ------------------------------------------------------
+// One class covers every tool that paints a stroke: what differs is the
+// stroke mode and which colour / filter / source feeds it.
 
 class BrushTool : public Tool {
 public:
-    explicit BrushTool(bool eraser) : eraser_(eraser) {}
-    const char* name() const override { return eraser_ ? "Eraser" : "Paint Brush"; }
-    const char* shortcut() const override { return eraser_ ? "X" : "B"; }
+    enum class Kind { Paint, Eraser, Airbrush, Clone, LightenDarken, Saturation, Hue, ColorReplacer };
+    explicit BrushTool(Kind k) : kind_(k) {}
+
+    const char* name() const override {
+        switch (kind_) {
+            case Kind::Paint: return "Paint Brush";
+            case Kind::Eraser: return "Eraser";
+            case Kind::Airbrush: return "Airbrush";
+            case Kind::Clone: return "Clone Brush";
+            case Kind::LightenDarken: return "Lighten/Darken";
+            case Kind::Saturation: return "Saturation Up/Down";
+            case Kind::Hue: return "Hue Up/Down";
+            default: return "Color Replacer";
+        }
+    }
+    const char* shortcut() const override {
+        switch (kind_) {
+            case Kind::Paint: return "B";
+            case Kind::Eraser: return "X";
+            case Kind::Airbrush: return "P";
+            case Kind::Clone: return "C";
+            case Kind::LightenDarken: return "N";
+            case Kind::ColorReplacer: return "Q";
+            default: return nullptr;
+        }
+    }
 
     void on_press(App& app, const ToolInput& in, ImGuiMouseButton b) override {
         if (!app.doc || app.active_layer() < 0) return;
+        // Clone: right-click sets the source point.
+        if (kind_ == Kind::Clone && b == ImGuiMouseButton_Right) {
+            src_x_ = in.img_x; src_y_ = in.img_y; has_src_ = true; first_stroke_ = true;
+            return;
+        }
         Layer& L = app.doc->layer(app.active_layer());
         raster::Brush brush = app.brush;
-        // Left paints foreground, right paints background. The eraser
-        // on a Background layer paints the background colour instead.
+        brush.accumulate = kind_ == Kind::Airbrush;
         Color color = to_color(b == ImGuiMouseButton_Left ? app.fg_color : app.bg_color);
         raster::StrokeMode mode = raster::StrokeMode::Paint;
-        if (eraser_) {
-            if (L.background) color = to_color(b == ImGuiMouseButton_Left ? app.bg_color : app.fg_color);
-            else mode = raster::StrokeMode::Erase;
+        std::function<Color(Color)> filter;
+        const float amount = app.retouch_amount / 100.0f;
+        const bool primary = b == ImGuiMouseButton_Left;
+
+        switch (kind_) {
+            case Kind::Eraser:
+                if (L.background) color = to_color(primary ? app.bg_color : app.fg_color);
+                else mode = raster::StrokeMode::Erase;
+                break;
+            case Kind::Clone:
+                if (!has_src_) { app.status = "Clone Brush: right-click to set the source point first."; return; }
+                mode = raster::StrokeMode::Clone;
+                if (!app.clone_aligned || first_stroke_) {
+                    off_x_ = static_cast<int>(std::floor(src_x_ - in.img_x));
+                    off_y_ = static_cast<int>(std::floor(src_y_ - in.img_y));
+                    first_stroke_ = false;
+                }
+                clone_src_ = app.clone_sample_merged ? app.doc->composite() : L.pixels;
+                break;
+            case Kind::LightenDarken:
+                mode = raster::StrokeMode::Filter;
+                filter = [amount, primary](Color c) {
+                    adjust::HSL h = adjust::rgb_to_hsl(c.r, c.g, c.b);
+                    h.l = primary ? h.l + (1 - h.l) * amount : h.l * (1 - amount);
+                    adjust::hsl_to_rgb(h, &c.r, &c.g, &c.b);
+                    return c;
+                };
+                break;
+            case Kind::Saturation:
+                mode = raster::StrokeMode::Filter;
+                filter = [amount, primary](Color c) {
+                    adjust::HSL h = adjust::rgb_to_hsl(c.r, c.g, c.b);
+                    h.s = primary ? h.s + (1 - h.s) * amount : h.s * (1 - amount);
+                    adjust::hsl_to_rgb(h, &c.r, &c.g, &c.b);
+                    return c;
+                };
+                break;
+            case Kind::Hue:
+                mode = raster::StrokeMode::Filter;
+                filter = [amount, primary](Color c) {
+                    adjust::HSL h = adjust::rgb_to_hsl(c.r, c.g, c.b);
+                    h.h += (primary ? 1 : -1) * amount * 180.0f;
+                    adjust::hsl_to_rgb(h, &c.r, &c.g, &c.b);
+                    return c;
+                };
+                break;
+            case Kind::ColorReplacer: {
+                // Replaces the background colour with the foreground (right button: the reverse).
+                mode = raster::StrokeMode::Filter;
+                const Color from = to_color(primary ? app.bg_color : app.fg_color);
+                const Color to = to_color(primary ? app.fg_color : app.bg_color);
+                const int tol = app.replacer_tolerance;
+                filter = [from, to, tol](Color c) {
+                    const int d = std::max({std::abs(c.r - from.r), std::abs(c.g - from.g), std::abs(c.b - from.b)});
+                    return d <= tol ? Color{to.r, to.g, to.b, c.a} : c;
+                };
+                break;
+            }
+            default: break;
         }
         layer_ = app.active_layer();
         stroke_ = std::make_unique<raster::Stroke>(L.pixels, brush, color, mode, &app.doc->selection());
+        if (mode == raster::StrokeMode::Clone) stroke_->set_clone_source(&clone_src_, off_x_, off_y_);
+        if (filter) stroke_->set_filter(std::move(filter));
+        last_x_ = in.img_x; last_y_ = in.img_y;
         stroke_->add_point(in.img_x, in.img_y);
         flush(app);
     }
     void on_drag(App& app, const ToolInput& in, ImGuiMouseButton) override {
         if (!stroke_) return;
         stroke_->add_point(in.img_x, in.img_y);
+        last_x_ = in.img_x; last_y_ = in.img_y;
         flush(app);
     }
     void on_release(App& app, const ToolInput&, ImGuiMouseButton) override {
@@ -112,25 +203,70 @@ public:
     }
 
     void draw_overlay(App& app, const ToolInput& in) override {
+        // Airbrush keeps spraying while the button is held, even at rest.
+        if (kind_ == Kind::Airbrush && stroke_ && app.doc) {
+            stroke_->stamp_at(last_x_, last_y_);
+            flush(app);
+        }
         const float r = app.brush.size * 0.5f * in.zoom;
         in.dl->AddCircle(in.screen, r, IM_COL32(0, 0, 0, 200), 0, 1.0f);
         in.dl->AddCircle(in.screen, r + 1.0f, IM_COL32(255, 255, 255, 160), 0, 1.0f);
+        if (kind_ == Kind::Clone && has_src_) {
+            const float sx = stroke_ ? in.img_x + off_x_ : src_x_, sy = stroke_ ? in.img_y + off_y_ : src_y_;
+            const ImVec2 c(in.origin.x + sx * in.zoom, in.origin.y + sy * in.zoom);
+            in.dl->AddLine(ImVec2(c.x - 6, c.y), ImVec2(c.x + 6, c.y), IM_COL32(255, 255, 255, 255));
+            in.dl->AddLine(ImVec2(c.x, c.y - 6), ImVec2(c.x, c.y + 6), IM_COL32(255, 255, 255, 255));
+            in.dl->AddCircle(c, r, IM_COL32(255, 255, 255, 120), 0, 1.0f);
+        }
     }
     void draw_options(App& app) override {
-        ImGui::SetNextItemWidth(160);
+        ImGui::SetNextItemWidth(140);
         ImGui::SliderFloat("Size", &app.brush.size, 1.0f, 500.0f, "%.0f", ImGuiSliderFlags_Logarithmic);
         ImGui::SameLine();
-        ImGui::SetNextItemWidth(120);
+        ImGui::SetNextItemWidth(100);
         float hard = app.brush.hardness * 100.0f;
         if (ImGui::SliderFloat("Hardness", &hard, 0.0f, 100.0f, "%.0f")) app.brush.hardness = hard / 100.0f;
         ImGui::SameLine();
-        ImGui::SetNextItemWidth(120);
+        ImGui::SetNextItemWidth(100);
         float op = app.brush.opacity * 100.0f;
         if (ImGui::SliderFloat("Opacity", &op, 1.0f, 100.0f, "%.0f")) app.brush.opacity = op / 100.0f;
         ImGui::SameLine();
-        ImGui::SetNextItemWidth(120);
+        ImGui::SetNextItemWidth(100);
         float step = app.brush.step * 100.0f;
         if (ImGui::SliderFloat("Step", &step, 1.0f, 200.0f, "%.0f")) app.brush.step = step / 100.0f;
+        switch (kind_) {
+            case Kind::Airbrush: {
+                ImGui::SameLine();
+                ImGui::SetNextItemWidth(100);
+                float flow = app.brush.flow * 100.0f;
+                if (ImGui::SliderFloat("Rate", &flow, 1.0f, 100.0f, "%.0f")) app.brush.flow = flow / 100.0f;
+                break;
+            }
+            case Kind::Clone:
+                ImGui::SameLine();
+                ImGui::Checkbox("Aligned", &app.clone_aligned);
+                ImGui::SameLine();
+                ImGui::Checkbox("Sample merged", &app.clone_sample_merged);
+                ImGui::SameLine();
+                ImGui::TextDisabled(has_src_ ? "Right-click to move the source." : "Right-click to set the source.");
+                break;
+            case Kind::LightenDarken: case Kind::Saturation: case Kind::Hue:
+                ImGui::SameLine();
+                ImGui::SetNextItemWidth(100);
+                ImGui::SliderInt("Amount", &app.retouch_amount, 1, 100, "%d%%");
+                ImGui::SameLine();
+                ImGui::TextDisabled(kind_ == Kind::LightenDarken ? "Left lightens, right darkens." :
+                                    kind_ == Kind::Saturation ? "Left saturates, right desaturates." : "Left shifts hue up, right down.");
+                break;
+            case Kind::ColorReplacer:
+                ImGui::SameLine();
+                ImGui::SetNextItemWidth(100);
+                ImGui::SliderInt("Tolerance", &app.replacer_tolerance, 0, 200);
+                ImGui::SameLine();
+                ImGui::TextDisabled("Paints foreground over background colour.");
+                break;
+            default: break;
+        }
     }
 
 private:
@@ -138,9 +274,91 @@ private:
         Layer& L = app.doc->layer(layer_);
         if (!stroke_->render(L.pixels).empty()) app.doc->touch();
     }
-    bool eraser_;
+    Kind kind_;
     size_t layer_ = 0;
     std::unique_ptr<raster::Stroke> stroke_;
+    float last_x_ = 0, last_y_ = 0;
+    // Clone state
+    bool has_src_ = false, first_stroke_ = true;
+    float src_x_ = 0, src_y_ = 0;
+    int off_x_ = 0, off_y_ = 0;
+    Image clone_src_;
+};
+
+// --- Move --------------------------------------------------------------
+// Left drag moves the active layer's pixels; right drag moves the selection
+// marquee, as the original's Mover does.
+
+class MoveTool : public Tool {
+public:
+    const char* name() const override { return "Move"; }
+    const char* shortcut() const override { return "M"; }
+    void on_press(App& app, const ToolInput& in, ImGuiMouseButton b) override {
+        if (!app.doc || app.active_layer() < 0) return;
+        button_ = b;
+        x0_ = in.img_x; y0_ = in.img_y;
+        layer_ = app.active_layer();
+        if (b == ImGuiMouseButton_Left) before_ = app.doc->layer(layer_).pixels;
+        else sel_before_ = app.doc->selection();
+        active_ = true;
+    }
+    void on_drag(App& app, const ToolInput& in, ImGuiMouseButton) override {
+        if (!active_) return;
+        dx_ = static_cast<int>(std::lround(in.img_x - x0_));
+        dy_ = static_cast<int>(std::lround(in.img_y - y0_));
+        if (button_ == ImGuiMouseButton_Left) {
+            Layer& L = app.doc->layer(layer_);
+            L.pixels = raster::shifted(before_, dx_, dy_);
+            if (L.background) {
+                const Color fill = app.background_fill();
+                uint8_t* p = L.pixels.data();
+                for (size_t i = 0; i < L.pixels.size_bytes(); i += 4)
+                    if (p[i + 3] == 0) { p[i] = fill.r; p[i + 1] = fill.g; p[i + 2] = fill.b; p[i + 3] = 255; }
+            }
+            app.doc->touch();
+        } else if (!sel_before_.empty()) {
+            Mask m(sel_before_.width(), sel_before_.height());
+            for (int y = 0; y < m.height(); ++y)
+                for (int x = 0; x < m.width(); ++x) {
+                    const int sx = x - dx_, sy = y - dy_;
+                    if (sx >= 0 && sy >= 0 && sx < m.width() && sy < m.height()) m.at(x, y) = sel_before_.at(sx, sy);
+                }
+            app.doc->set_selection(std::move(m));
+        }
+    }
+    void on_release(App& app, const ToolInput&, ImGuiMouseButton) override {
+        if (!active_) return;
+        active_ = false;
+        if (dx_ == 0 && dy_ == 0) return;
+        if (button_ == ImGuiMouseButton_Left)
+            app.commit(std::make_unique<LayerSnapshotCommand>(layer_, "Move", before_, app.doc->layer(layer_).pixels));
+        else if (!sel_before_.empty()) {
+            Mask moved = app.doc->selection();
+            app.doc->set_selection(sel_before_);
+            app.set_selection("Move Selection", std::move(moved));
+        }
+        dx_ = dy_ = 0;
+    }
+    void cancel(App& app) override {
+        if (active_ && app.doc && layer_ < app.doc->layer_count()) {
+            if (button_ == ImGuiMouseButton_Left) { app.doc->layer(layer_).pixels = before_; app.doc->touch(); }
+            else app.doc->set_selection(sel_before_);
+        }
+        active_ = false;
+        dx_ = dy_ = 0;
+    }
+    void draw_options(App&) override {
+        ImGui::TextUnformatted("Left drag moves the layer, right drag moves the selection marquee.");
+    }
+
+private:
+    bool active_ = false;
+    ImGuiMouseButton button_ = ImGuiMouseButton_Left;
+    float x0_ = 0, y0_ = 0;
+    int dx_ = 0, dy_ = 0;
+    size_t layer_ = 0;
+    Image before_;
+    Mask sel_before_;
 };
 
 // --- Flood Fill --------------------------------------------------------
@@ -393,9 +611,16 @@ std::vector<std::unique_ptr<Tool>> make_default_tools() {
     t.push_back(std::make_unique<FreehandTool>());
     t.push_back(std::make_unique<MagicWandTool>());
     t.push_back(std::make_unique<DropperTool>());
-    t.push_back(std::make_unique<BrushTool>(false));
-    t.push_back(std::make_unique<BrushTool>(true));
-    t.push_back(std::make_unique<FloodFillTool>());
+    t.push_back(std::make_unique<MoveTool>());
     t.push_back(std::make_unique<CropTool>());
+    t.push_back(std::make_unique<BrushTool>(BrushTool::Kind::Paint));
+    t.push_back(std::make_unique<BrushTool>(BrushTool::Kind::Airbrush));
+    t.push_back(std::make_unique<BrushTool>(BrushTool::Kind::Eraser));
+    t.push_back(std::make_unique<BrushTool>(BrushTool::Kind::Clone));
+    t.push_back(std::make_unique<BrushTool>(BrushTool::Kind::LightenDarken));
+    t.push_back(std::make_unique<BrushTool>(BrushTool::Kind::Saturation));
+    t.push_back(std::make_unique<BrushTool>(BrushTool::Kind::Hue));
+    t.push_back(std::make_unique<BrushTool>(BrushTool::Kind::ColorReplacer));
+    t.push_back(std::make_unique<FloodFillTool>());
     return t;
 }
