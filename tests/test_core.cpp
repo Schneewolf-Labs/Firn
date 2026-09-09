@@ -644,6 +644,19 @@ static void test_psp_writer_roundtrip() {
     CHECK(gb->layer(2).pixels.get(1, 1).a == 200);
     CHECK(gb->layer(4).is_raster() && gb->layer(4).depth == 0 && gb->layer(4).has_mask() && gb->layer(4).mask.at(3, 1) == 7 && !gb->layer(4).mask_enabled);
     CHECK(gb->layer(4).name == "Masked top" && gb->layer(4).pixels.get(0, 0).r == 1);
+
+    // Alpha channels (saved selections) round-trip with their names.
+    Document a(6, 3);
+    a.add_layer("bg").background = true;
+    Mask sel = mask::rectangle(6, 3, 1, 0, 4, 2, false);
+    a.alpha_channels().push_back({"Selection #1", sel});
+    a.alpha_channels().push_back({"Second", mask::rectangle(6, 3, 0, 0, 6, 1, false)});
+    std::vector<uint8_t> af = io::save_psp_to_memory(a);
+    auto ab = io::load_psp_from_memory(af.data(), af.size(), &err, nullptr);
+    CHECK(ab && ab->alpha_channels().size() == 2);
+    CHECK(ab->alpha_channels()[0].name == "Selection #1" && ab->alpha_channels()[1].name == "Second");
+    CHECK(ab->alpha_channels()[0].mask.at(1, 0) == 255 && ab->alpha_channels()[0].mask.at(0, 0) == 0 && ab->alpha_channels()[0].mask.at(4, 1) == 0);
+    CHECK(ab->alpha_channels()[1].mask.at(5, 0) == 255 && ab->alpha_channels()[1].mask.at(5, 1) == 0);
 }
 
 static void test_adjust_module() {

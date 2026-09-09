@@ -23,10 +23,11 @@ enum : uint16_t {
     kImageBlock = 0, kCreatorBlock = 1, kColorBlock = 2, kLayerStartBlock = 3, kLayerBlock = 4,
     kChannelBlock = 5, kSelectionBlock = 6, kCompositeImageBlock = 9, kCompositeBankBlock = 16,
     kCompositeAttrBlock = 17, kJpegBlock = 18, kGroupExtBlock = 25, kMaskExtBlock = 26, kTubeBlock = 11,
+    kAlphaBankBlock = 7, kAlphaChannelBlock = 8,
 };
 enum : uint16_t { kCompNone = 0, kCompRle = 1, kCompLz77 = 2, kCompJpeg = 3 };
 // Bitmap (DIB) types. Layers use 0/1; thumbnails 5/6; composites 8/9.
-enum : uint16_t { kDibImage = 0, kDibTransMask = 1, kDibUserMask = 2, kDibThumbnail = 5, kDibThumbnailTrans = 6, kDibComposite = 8, kDibCompositeTrans = 9 };
+enum : uint16_t { kDibImage = 0, kDibTransMask = 1, kDibUserMask = 2, kDibAlphaMask = 4, kDibThumbnail = 5, kDibThumbnailTrans = 6, kDibComposite = 8, kDibCompositeTrans = 9 };
 bool is_image_dib(uint16_t t) { return t == kDibImage || t == kDibThumbnail || t == kDibComposite; }
 bool is_trans_dib(uint16_t t) { return t == kDibTransMask || t == kDibThumbnailTrans || t == kDibCompositeTrans; }
 enum : uint8_t { kLayerRaster = 1, kLayerVector = 3, kLayerAdjustment = 4, kLayerGroup = 5, kLayerMask = 6, kLayerArtMedia = 7 };
@@ -363,6 +364,7 @@ std::unique_ptr<Document> load_psp_from_memory(const uint8_t* data, size_t size,
     const std::vector<Block> top = blocks(r, 36, size);
     const Block* layer_bank = nullptr;
     const Block* composite_bank = nullptr;
+    const Block* alpha_bank = nullptr;
     bool have_header = false;
     for (const Block& b : top) {
         if (b.id == kImageBlock && r.ok(b.start, 42)) {
@@ -387,6 +389,8 @@ std::unique_ptr<Document> load_psp_from_memory(const uint8_t* data, size_t size,
             layer_bank = &b;
         } else if (b.id == kCompositeBankBlock) {
             composite_bank = &b;
+        } else if (b.id == kAlphaBankBlock) {
+            alpha_bank = &b;
         }
     }
     if (!have_header) return fail("missing image attributes block");
@@ -436,6 +440,43 @@ std::unique_ptr<Document> load_psp_from_memory(const uint8_t* data, size_t size,
             if (warnings) warnings->push_back("No raster layers; loaded the flattened composite instead");
         } else {
             return fail(e.empty() ? "no readable layers" : e);
+        }
+    }
+    // Alpha bank: saved selections. Chunk {6, count u16}; each channel block
+    // has a chunk {name, rect, saved rect}, a bitmap chunk and one channel of
+    // DIB type 4 over the saved rect (relative to the rect).
+    if (alpha_bank && r.ok(alpha_bank->start, 6)) {
+        const size_t chunk = r.u32(alpha_bank->start);
+        for (const Block& ab : blocks(r, alpha_bank->start + chunk, alpha_bank->end)) {
+            if (ab.id != kAlphaChannelBlock || !r.ok(ab.start, 6)) continue;
+            const size_t achunk = r.u32(ab.start);
+            const uint16_t nlen = r.u16(ab.start + 4);
+            if (!r.ok(ab.start + 6, nlen + 32u)) continue;
+            Document::AlphaChannel ch;
+            ch.name.assign(reinterpret_cast<const char*>(r.p + ab.start + 6), nlen);
+            size_t o = ab.start + 6 + nlen;
+            const int32_t rect[4] = {r.i32(o), r.i32(o + 4), r.i32(o + 8), r.i32(o + 12)};
+            const int32_t saved[4] = {r.i32(o + 16), r.i32(o + 20), r.i32(o + 24), r.i32(o + 28)};
+            const size_t bo = ab.start + achunk;
+            if (!r.ok(bo, 8)) continue;
+            const size_t bchunk = r.u32(bo);
+            const int sw = saved[2] - saved[0], sh = saved[3] - saved[1];
+            const int ox = rect[0] + saved[0], oy = rect[1] + saved[1];
+            ch.mask = Mask(hdr.width, hdr.height, 0);
+            for (const Block& cb : blocks(r, bo + bchunk, ab.end)) {
+                if (cb.id != kChannelBlock || !r.ok(cb.start, 16) || r.u16(cb.start + 12) != kDibAlphaMask) continue;
+                const size_t cchunk = r.u32(cb.start), clen = r.u32(cb.start + 4);
+                std::vector<uint8_t> tile;
+                if (sw <= 0 || sh <= 0 || !r.ok(cb.start + cchunk, clen)) break;
+                if (!decompress(hdr.compression, r.p + cb.start + cchunk, clen, static_cast<size_t>(sw) * sh, tile, e)) break;
+                for (int y = 0; y < sh; ++y)
+                    for (int x = 0; x < sw; ++x) {
+                        const int dx = ox + x, dy = oy + y;
+                        if (dx >= 0 && dy >= 0 && dx < hdr.width && dy < hdr.height) ch.mask.at(dx, dy) = tile[static_cast<size_t>(y) * sw + x];
+                    }
+                break;
+            }
+            doc->alpha_channels().push_back(std::move(ch));
         }
     }
     doc->set_active_layer(std::clamp(hdr.active_layer, 0, static_cast<int>(doc->layer_count()) - 1));
@@ -805,6 +846,7 @@ std::vector<uint8_t> save_psp_to_memory(const Document& doc) {
     }
     if (has_groups) contents |= 0x00000008u;  // group layers
     if (has_masks) contents |= 0x00000010u;   // mask layers
+    if (!doc.alpha_channels().empty()) contents |= 0x80000000u;  // alpha channels
 
     Writer img;
     img.u32(46); img.i32(doc.width()); img.i32(doc.height()); img.f64(72.0); img.u8(1);
@@ -827,6 +869,26 @@ std::vector<uint8_t> save_psp_to_memory(const Document& doc) {
     w.bytes(composite_bank(flat));
 
     w.block(kLayerStartBlock, bank.out);
+
+    if (!doc.alpha_channels().empty()) {
+        Writer abank;
+        abank.u32(6); abank.u16(static_cast<int>(doc.alpha_channels().size()));
+        for (const Document::AlphaChannel& ch : doc.alpha_channels()) {
+            Writer payload;
+            const std::string name = ch.name.substr(0, 255);
+            const uint32_t chunk_len = 4 + 2 + static_cast<uint32_t>(name.size()) + 32;
+            payload.u32(chunk_len);
+            payload.u16(static_cast<int>(name.size()));
+            payload.bytes(reinterpret_cast<const uint8_t*>(name.data()), name.size());
+            payload.i32(0); payload.i32(0); payload.i32(doc.width()); payload.i32(doc.height());
+            payload.i32(0); payload.i32(0); payload.i32(doc.width()); payload.i32(doc.height());
+            payload.u32(8); payload.u16(1); payload.u16(1);
+            std::vector<uint8_t> plane(ch.mask.data(), ch.mask.data() + ch.mask.size());
+            payload.bytes(channel_block(kDibAlphaMask, 0, plane, (static_cast<size_t>(doc.width()) + 3) / 4 * 4 * doc.height()));
+            abank.block(kAlphaChannelBlock, payload.out);
+        }
+        w.block(kAlphaBankBlock, abank.out);
+    }
     return w.out;
 }
 

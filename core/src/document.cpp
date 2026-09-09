@@ -71,7 +71,7 @@ void Document::replace_layers(const std::vector<Layer>& layers, int active) {
 }
 
 Document::State Document::snapshot() const {
-    return {width_, height_, clone_layers(), active_, selection_};
+    return {width_, height_, clone_layers(), active_, selection_, alpha_};
 }
 
 void Document::restore(const State& s) {
@@ -79,6 +79,7 @@ void Document::restore(const State& s) {
     height_ = s.height;
     replace_layers(s.layers, s.active);
     set_selection(s.selection);
+    alpha_ = s.alpha;
 }
 
 LayerProps Document::props(size_t i) const {

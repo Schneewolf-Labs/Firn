@@ -252,16 +252,9 @@ void App::draw_canvas() {
         }
     }
 
-    // Status line at the bottom of the canvas window.
-    if (hovered) {
-        const int ix = static_cast<int>(std::floor(in.img_x));
-        const int iy = static_cast<int>(std::floor(in.img_y));
-        char buf[128];
-        if (in.inside)
-            std::snprintf(buf, sizeof(buf), "(%d, %d)  %d%%", ix, iy, static_cast<int>(zoom * 100));
-        else
-            std::snprintf(buf, sizeof(buf), "%d%%", static_cast<int>(zoom * 100));
-        dl->AddText(ImVec2(view_pos.x + 6, view_pos.y + view_size.y - 20), IM_COL32(255, 255, 255, 220), buf);
-    }
+    // Cursor facts for the status bar.
+    cursor_inside = hovered && in.inside;
+    cursor_x = static_cast<int>(std::floor(in.img_x));
+    cursor_y = static_cast<int>(std::floor(in.img_y));
     ImGui::End();
 }

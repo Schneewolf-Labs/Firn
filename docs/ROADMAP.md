@@ -82,13 +82,14 @@ what to work on next.
 ## 10. Polish
 
 - [x] Keyboard zoom (+ / -, Ctrl+0 fit, Ctrl+Alt+0 actual), Image Information dialog, JPEG quality prompt
-- [ ] Preferences dialog, toolbar with common actions, status bar
+- [x] Toolbar with common actions and materials; status bar with message, cursor, zoom and image facts
+- [ ] Preferences dialog
 
 ## 8. Format completeness
 
 - [x] Masks attached to groups and layers, kept editable (enable, invert, delete, from selection/image)
 - [x] Layer groups in the model, palette (indent, collapse) and file round trip
 - [x] Selections: load from / save to disk (.PspSelection or any image)
-- [ ] Alpha channels in files
+- [x] Alpha channels (saved selections) read, written, loaded and saved from the Selections menu
 - [x] Painting directly on masks (Edit button / Layers > Mask > Edit Mask)
 - [x] Mask overlay view (red tint over hidden areas while editing)

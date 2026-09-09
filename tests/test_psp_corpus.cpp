@@ -67,7 +67,8 @@ int main(int argc, char** argv) {
         std::vector<uint8_t> rewritten = firn::io::save_psp_to_memory(*doc);
         std::string err2;
         auto again = firn::io::load_psp_from_memory(rewritten.data(), rewritten.size(), &err2, nullptr);
-        bool same = again && again->width() == doc->width() && again->height() == doc->height() && again->layer_count() == doc->layer_count();
+        bool same = again && again->width() == doc->width() && again->height() == doc->height() && again->layer_count() == doc->layer_count() &&
+                    again->alpha_channels().size() == doc->alpha_channels().size();
         for (size_t i = 0; same && i < doc->layer_count(); ++i) {
             const firn::Layer& a = doc->layer(i);
             const firn::Layer& b = again->layer(i);

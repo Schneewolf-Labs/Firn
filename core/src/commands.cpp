@@ -360,6 +360,8 @@ void GeometryCommand::execute(Document& doc) {
     Document::State after;
     after.active = before_.active;
     transform(before_, after);
+    // Saved selections only survive size-preserving changes.
+    if (after.width == before_.width && after.height == before_.height) after.alpha = before_.alpha;
     doc.restore(after);
 }
 

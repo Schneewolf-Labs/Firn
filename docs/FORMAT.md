@@ -33,6 +33,7 @@ always use the stored length rather than a constant.
 | 4 | Layer | info chunk + bitmap chunk + channel sub-blocks |
 | 5 | Channel | chunk `{len, compressed_len, uncompressed_len, dib_type u16, channel_type u16}` then data |
 | 6 | Selection | not read yet |
+| 7 / 8 | Alpha bank / alpha channel | bank chunk `{6, count u16}`; each channel block: chunk `{len, name (u16 len + bytes), rect, saved rect}`, bitmap chunk `{8, 1, 1}`, one channel of DIB type 4 over the saved rect (relative to the rect). These are the original's saved selections; read into `Document::alpha_channels()` and written back |
 | 27 | Brush | chunk `{len=12, u32 1, u32 step}`; the image itself (8-bit gray) is the tip: dark = coverage, white = nothing |
 | 11 | Picture tube | chunk `{len=30, u16 0, step u32, columns u32, rows u32, total cells u32, placement u32, selection u32}`; placement 1 random / 2 continuous, selection 1 random / 2 incremental / 3 angular / 4 pressure / 5 velocity; cells are the image divided into columns x rows |
 | 9 | Composite image | bitmap chunk `{len, bitmap_count u16, channel_count u16}` + channel blocks |
@@ -143,6 +144,5 @@ all layers intact; `scripts/original-open.sh` automates that check.
 
 ## Not read
 
-Selections (id 6) and alpha channel banks (7/8), masks attached to groups or
-layers (26), vector and adjustment layer contents, color profiles, and the
-16-bit path beyond truncation to 8 bits.
+The current selection block (id 6), vector and adjustment layer contents,
+color profiles, and the 16-bit path beyond truncation to 8 bits.

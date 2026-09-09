@@ -208,6 +208,21 @@ void App::draw_menu() {
         if (ImGui::MenuItem("Invert", "Ctrl+Shift+I", false, has_doc)) select_invert();
         ImGui::Separator();
         if (ImGui::BeginMenu("Load/Save Selection", has_doc)) {
+            if (ImGui::BeginMenu("Load Selection From Alpha Channel", !doc->alpha_channels().empty())) {
+                for (size_t i = 0; i < doc->alpha_channels().size(); ++i) {
+                    ImGui::PushID(static_cast<int>(i));
+                    if (ImGui::MenuItem(doc->alpha_channels()[i].name.c_str())) set_selection("Load Selection From Alpha Channel", doc->alpha_channels()[i].mask);
+                    ImGui::PopID();
+                }
+                ImGui::Separator();
+                if (ImGui::MenuItem("Delete All Alpha Channels")) doc->alpha_channels().clear();
+                ImGui::EndMenu();
+            }
+            if (ImGui::MenuItem("Save Selection To Alpha Channel...", nullptr, false, doc->has_selection())) {
+                std::snprintf(alpha_name_buf, sizeof(alpha_name_buf), "Selection #%zu", doc->alpha_channels().size() + 1);
+                show_alpha_save_dialog = true;
+            }
+            ImGui::Separator();
             if (ImGui::MenuItem("Load Selection From Disk...")) request_load_selection();
             if (ImGui::MenuItem("Save Selection To Disk...", nullptr, false, has_doc && doc->has_selection())) request_save_selection();
             ImGui::EndMenu();
@@ -291,6 +306,21 @@ void App::draw_dialogs() {
     if (show_new_dialog) { ImGui::OpenPopup("New Image"); show_new_dialog = false; }
     if (show_jpeg_dialog) { ImGui::OpenPopup("JPEG Options"); show_jpeg_dialog = false; }
     if (show_info_dialog) { ImGui::OpenPopup("Image Information"); show_info_dialog = false; }
+    if (show_alpha_save_dialog) { ImGui::OpenPopup("Save Selection To Alpha Channel"); show_alpha_save_dialog = false; }
+
+    if (ImGui::BeginPopupModal("Save Selection To Alpha Channel", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        if (ImGui::IsWindowAppearing()) ImGui::SetKeyboardFocusHere();
+        const bool entered = ImGui::InputText("Name", alpha_name_buf, sizeof(alpha_name_buf), ImGuiInputTextFlags_EnterReturnsTrue);
+        ImGui::TextDisabled("Saved with the image in the native format.");
+        if ((ImGui::Button("OK") || entered) && doc && doc->has_selection()) {
+            doc->alpha_channels().push_back({alpha_name_buf, doc->selection()});
+            status = std::string("Saved selection as alpha channel \"") + alpha_name_buf + "\"";
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel") || ImGui::IsKeyPressed(ImGuiKey_Escape, false)) ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
+    }
 
     if (ImGui::BeginPopupModal("Image Information", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
         if (doc) {

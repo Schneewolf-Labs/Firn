@@ -18,6 +18,7 @@ add_executable(firn
   src/ui/FileDialog.cpp
   src/ui/Adjust.cpp
   src/ui/TextDialog.cpp
+  src/ui/Toolbar.cpp
   src/tools/Tools.cpp
 )
 target_include_directories(firn PRIVATE src)

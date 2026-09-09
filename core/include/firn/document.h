@@ -47,6 +47,10 @@ struct LayerProps {
 // mutate it only through Commands (see commands.h).
 class Document {
 public:
+    // Saved selections ("alpha channels" in the original): named masks that
+    // travel with the file.
+    struct AlphaChannel { std::string name; Mask mask; };
+
     Document(int width, int height);
 
     int width() const { return width_; }
@@ -80,6 +84,7 @@ public:
         std::vector<Layer> layers;
         int active = -1;
         Mask selection;
+        std::vector<AlphaChannel> alpha;
     };
     State snapshot() const;
     void restore(const State& s);
@@ -93,6 +98,9 @@ public:
 
     LayerProps props(size_t i) const;
     void set_props(size_t i, const LayerProps& p);
+
+    std::vector<AlphaChannel>& alpha_channels() { return alpha_; }
+    const std::vector<AlphaChannel>& alpha_channels() const { return alpha_; }
 
     // Selection: an empty mask means none. Commands and tools clip to it.
     const Mask& selection() const { return selection_; }
@@ -121,6 +129,7 @@ private:
     Mask selection_;
     uint64_t selection_revision_ = 0;
     raster::Rect dirty_;
+    std::vector<AlphaChannel> alpha_;
 };
 
 }  // namespace firn

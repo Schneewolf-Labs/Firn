@@ -29,7 +29,7 @@ static void build_default_layout(ImGuiID dockspace_id) {
     const ImGuiViewport* vp = ImGui::GetMainViewport();
     ImGui::DockBuilderRemoveNode(dockspace_id);
     ImGui::DockBuilderAddNode(dockspace_id, ImGuiDockNodeFlags_DockSpace);
-    ImGui::DockBuilderSetNodeSize(dockspace_id, vp->WorkSize);
+    ImGui::DockBuilderSetNodeSize(dockspace_id, ImVec2(vp->WorkSize.x, vp->WorkSize.y - App::toolbar_height - App::status_height));
 
     ImGuiID center = dockspace_id;
     ImGuiID left = ImGui::DockBuilderSplitNode(center, ImGuiDir_Left, 0.12f, nullptr, &center);
@@ -125,7 +125,23 @@ int main(int argc, char** argv) {
         app.handle_shortcuts();
         app.sync_canvas_texture();
 
-        const ImGuiID dockspace_id = ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport());
+        // Toolbar above and status bar below the dock space.
+        app.draw_toolbar();
+        app.draw_status_bar();
+        ImGuiViewport* vp = ImGui::GetMainViewport();
+        const ImVec2 dock_pos(vp->WorkPos.x, vp->WorkPos.y + App::toolbar_height);
+        const ImVec2 dock_size(vp->WorkSize.x, vp->WorkSize.y - App::toolbar_height - App::status_height);
+        ImGui::SetNextWindowPos(dock_pos);
+        ImGui::SetNextWindowSize(dock_size);
+        ImGui::SetNextWindowViewport(vp->ID);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
+        ImGui::Begin("##dockhost", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus | ImGuiWindowFlags_NoSavedSettings);
+        ImGui::PopStyleVar(3);
+        const ImGuiID dockspace_id = ImGui::GetID("MainDockSpace");
+        ImGui::DockSpace(dockspace_id, ImVec2(0, 0), ImGuiDockNodeFlags_PassthruCentralNode);
+        ImGui::End();
         if (first_frame) {
             first_frame = false;
             build_default_layout(dockspace_id);

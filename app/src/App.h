@@ -288,6 +288,8 @@ struct App {
     void clear_selection();
     void paste_as_new_layer();
     void paste_as_new_image();
+    bool show_alpha_save_dialog = false;
+    char alpha_name_buf[128] = "Selection #1";
     void request_load_selection();
     void request_save_selection();
     void load_selection(const std::string& path);   // any image: luminance x alpha becomes the mask
@@ -330,6 +332,12 @@ struct App {
 
     // Per-frame UI (ui/*.cpp)
     void draw_menu();
+    void draw_toolbar();
+    void draw_status_bar();
+    static constexpr float toolbar_height = 30.0f;
+    static constexpr float status_height = 22.0f;
+    int cursor_x = 0, cursor_y = 0;     // image coordinates under the pointer, for the status bar
+    bool cursor_inside = false;
     void draw_canvas();
     void draw_palettes();
     void draw_dialogs();
