@@ -125,8 +125,10 @@ struct App {
         firn::Image before;
         std::array<int, 256> histogram{};
         bool dirty = true;
-        bool live = true;               // small layer: re-apply on every change
+        bool live = true;               // small layer: exact re-apply on every change
+        bool approximate = false;       // the layer holds a region/proxy preview, not the exact result
     } preview;
+    firn::raster::Rect visible_image_rect;  // part of the image inside the canvas view, updated by draw_canvas
     void preview_begin(const char* name);
     void preview_update(const std::function<void(firn::Image&)>& op, bool force = false);
     void preview_commit();

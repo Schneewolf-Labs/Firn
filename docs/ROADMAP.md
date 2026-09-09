@@ -75,7 +75,7 @@ what to work on next.
 
 - [x] Dirty-rect compositing and sub-texture uploads while painting
 - [x] Integer fast path for Normal blending; row-parallel compositing (12 MP x 3 layers: ~50 ms full, ~1 ms per brush flush)
-- [ ] Preview on a downscaled proxy for very large layers
+- [x] Live previews on large layers: visible region while dragging, downscaled proxy when the whole image is in view, exact result on release
 
 ## 8. Format completeness
 

@@ -87,6 +87,10 @@ void App::draw_canvas() {
     const ImVec2 p0(canvas_center.x + pan_x - dw * 0.5f, canvas_center.y + pan_y - dh * 0.5f);
     const ImVec2 p1(p0.x + dw, p0.y + dh);
 
+    visible_image_rect = firn::raster::Rect{static_cast<int>(std::floor((view_pos.x - p0.x) / zoom)), static_cast<int>(std::floor((view_pos.y - p0.y) / zoom)),
+                                      static_cast<int>(std::ceil((view_pos.x + view_size.x - p0.x) / zoom)), static_cast<int>(std::ceil((view_pos.y + view_size.y - p0.y) / zoom))}
+                             .clipped(doc->width(), doc->height());
+
     // Tool dispatch. One gesture = one button held from press to release.
     ToolInput in;
     in.screen = io.MousePos;

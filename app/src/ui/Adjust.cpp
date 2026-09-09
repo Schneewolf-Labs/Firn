@@ -3,6 +3,7 @@
 // layer (clipped to the selection), and OK records one history entry.
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 
 #include "App.h"
 #include "firn/adjust.h"
@@ -26,15 +27,49 @@ void App::preview_begin(const char* name) {
 }
 
 void App::preview_update(const std::function<void(Image&)>& op, bool force) {
-    if (!preview.active || !doc || !preview.dirty) return;
-    // Large layers only re-render once the slider is released.
-    if (!force && !preview.live && ImGui::IsAnyItemActive()) return;
+    if (!preview.active || !doc) return;
+    const bool dragging = !force && ImGui::IsAnyItemActive();
+    // Once the slider is released, replace an approximate preview with the exact result.
+    if (!preview.dirty && !(preview.approximate && !dragging)) return;
+
+    if (preview.live || !dragging) {
+        Image work = preview.before;
+        op(work);
+        raster::apply_through_mask(work, preview.before, doc->selection());
+        doc->layer(preview.layer).pixels = std::move(work);
+        doc->touch();
+        preview.dirty = false;
+        preview.approximate = false;
+        return;
+    }
+
+    // Large layer while dragging: process only what is on screen (plus a
+    // margin for kernels), or a downscaled proxy when most of the image is
+    // visible. Exact output follows on release.
+    const int W = preview.before.width(), H = preview.before.height();
+    const int margin = 64;
+    raster::Rect r = visible_image_rect.empty() ? raster::Rect{0, 0, W, H} : visible_image_rect;
+    r = raster::Rect{r.x0 - margin, r.y0 - margin, r.x1 + margin, r.y1 + margin}.clipped(W, H);
+    const long area = static_cast<long>(r.x1 - r.x0) * (r.y1 - r.y0);
     Image work = preview.before;
-    op(work);
+    if (area <= 1536L * 1024L) {
+        Image part = raster::crop(preview.before, r);
+        op(part);
+        for (int y = r.y0; y < r.y1; ++y)
+            std::memcpy(work.data() + (static_cast<size_t>(y) * W + r.x0) * 4, part.data() + static_cast<size_t>(y - r.y0) * part.width() * 4,
+                        static_cast<size_t>(r.x1 - r.x0) * 4);
+    } else {
+        const float scale = std::min(1.0f, 1024.0f / std::max(W, H));
+        Image proxy = raster::resample(preview.before, std::max(1, static_cast<int>(W * scale)), std::max(1, static_cast<int>(H * scale)), raster::Filter::Bilinear);
+        op(proxy);
+        work = raster::resample(proxy, W, H, raster::Filter::Bilinear);
+        r = {0, 0, W, H};
+    }
     raster::apply_through_mask(work, preview.before, doc->selection());
     doc->layer(preview.layer).pixels = std::move(work);
-    doc->touch();
+    doc->touch(r);
     preview.dirty = false;
+    preview.approximate = true;
 }
 
 void App::preview_commit() {
@@ -62,7 +97,7 @@ void adjust_modal(App& app, const char* title, Body body, Op op) {
     if (body()) app.preview.dirty = true;
     app.preview_update(op);
     ImGui::Separator();
-    if (!app.preview.live) ImGui::TextDisabled("Large image: preview updates when a slider is released.");
+    if (!app.preview.live) ImGui::TextDisabled("Large image: the preview is approximate while a slider is held.");
     const bool ok = ImGui::Button("OK", ImVec2(80, 0)) || ImGui::IsKeyPressed(ImGuiKey_Enter, false) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter, false);
     ImGui::SameLine();
     const bool cancel = ImGui::Button("Cancel", ImVec2(80, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape, false);
