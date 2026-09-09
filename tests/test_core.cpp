@@ -7,6 +7,7 @@
 #include "firn/commands.h"
 #include "firn/document.h"
 #include "firn/io.h"
+#include "firn/io_psp.h"
 #include "firn/mask.h"
 #include "firn/raster.h"
 
@@ -386,7 +387,98 @@ static void test_layer_structure_commands() {
     CHECK(doc.layer(0).background && doc.layer(0).name == "Background");
 }
 
+// Builds a minimal version-6 native file: 3x2 canvas, one opaque background
+// layer and one 2x1 layer with transparency placed at (1,1), no compression.
+static std::vector<uint8_t> make_psp_file() {
+    std::vector<uint8_t> f;
+    auto u8 = [&](int v) { f.push_back(static_cast<uint8_t>(v)); };
+    auto u16 = [&](int v) { u8(v & 255); u8((v >> 8) & 255); };
+    auto u32 = [&](uint32_t v) { for (int i = 0; i < 4; ++i) u8((v >> (8 * i)) & 255); };
+    auto i32 = [&](int32_t v) { u32(static_cast<uint32_t>(v)); };
+    auto bytes = [&](const std::vector<uint8_t>& b) { f.insert(f.end(), b.begin(), b.end()); };
+    auto block = [&](uint16_t id, const std::vector<uint8_t>& payload) {
+        f.insert(f.end(), {'~', 'B', 'K', 0});
+        u16(id);
+        u32(static_cast<uint32_t>(payload.size()));
+        bytes(payload);
+    };
+    auto build = [&](auto&& fn) { std::vector<uint8_t> saved; saved.swap(f); fn(); std::vector<uint8_t> out; out.swap(f); f.swap(saved); return out; };
+
+    const char sig[] = "Paint Shop Pro Image File\n\x1a";
+    f.insert(f.end(), sig, sig + 27);
+    while (f.size() < 32) u8(0);
+    u16(6); u16(0);  // version 6.0
+
+    block(0, build([&] {  // general image attributes
+        u32(46); i32(3); i32(2);
+        for (int i = 0; i < 8; ++i) u8(0);  // resolution
+        u8(0); u16(0 /*none*/); u16(24); u16(1); u32(16777216); u8(0); u32(18); i32(1); u16(2); u32(0);
+    }));
+
+    auto channel = [&](int bitmap_type, int channel_type, std::vector<uint8_t> data) {
+        return build([&] { block(5, build([&] { u32(16); u32(static_cast<uint32_t>(data.size())); u32(static_cast<uint32_t>(data.size())); u16(bitmap_type); u16(channel_type); bytes(data); })); });
+    };
+    auto layer = [&](const std::string& name, int32_t rect[4], int32_t saved[4], int opacity, int blend, int visible, std::vector<std::vector<uint8_t>> chans) {
+        return build([&] {
+            block(4, build([&] {
+                std::vector<uint8_t> info = build([&] {
+                    u32(0);  // chunk length, patched below
+                    u16(static_cast<int>(name.size())); for (char c : name) u8(c);
+                    u8(1);
+                    for (int i = 0; i < 4; ++i) i32(rect[i]);
+                    for (int i = 0; i < 4; ++i) i32(saved[i]);
+                    u8(opacity); u8(blend); u8(visible); u8(0); u8(0);
+                    for (int i = 0; i < 8; ++i) i32(0);
+                    u8(0); u8(0);
+                    for (int i = 0; i < 43; ++i) u8(0);  // blend ranges etc.
+                });
+                const uint32_t len = static_cast<uint32_t>(info.size());
+                for (int i = 0; i < 4; ++i) info[i] = static_cast<uint8_t>((len >> (8 * i)) & 255);
+                bytes(info);
+                u32(8); u16(static_cast<int>(chans.size() > 3 ? 2 : 1)); u16(static_cast<int>(chans.size()));
+                for (auto& c : chans) bytes(c);
+            }));
+        });
+    };
+    int32_t full[4] = {0, 0, 3, 2}, full_saved[4] = {0, 0, 3, 2};
+    int32_t top_rect[4] = {0, 0, 3, 2}, top_saved[4] = {1, 1, 3, 2};
+    std::vector<uint8_t> bank = layer("Background", full, full_saved, 255, 0, 1,
+                                      {channel(0, 1, {10, 20, 30, 40, 50, 60}), channel(0, 2, {1, 2, 3, 4, 5, 6}), channel(0, 3, {9, 9, 9, 9, 9, 9})});
+    std::vector<uint8_t> top = layer("Top", top_rect, top_saved, 128, 7, 1,
+                                     {channel(0, 1, {200, 201}), channel(0, 2, {0, 0}), channel(0, 3, {0, 0}), channel(1, 0, {255, 0})});
+    bank.insert(bank.end(), top.begin(), top.end());
+    block(3, bank);
+    return f;
+}
+
+static void test_psp_reader() {
+    std::vector<uint8_t> file = make_psp_file();
+    std::string err;
+    std::vector<std::string> warnings;
+    auto doc = io::load_psp_from_memory(file.data(), file.size(), &err, &warnings);
+    if (!doc) std::fprintf(stderr, "load_psp: %s\n", err.c_str());
+    CHECK(doc != nullptr);
+    CHECK(doc->width() == 3 && doc->height() == 2 && doc->layer_count() == 2);
+    CHECK(doc->active_layer() == 1);
+    const Layer& bg = doc->layer(0);
+    CHECK(bg.name == "Background" && bg.background);
+    Color c = bg.pixels.get(2, 1);
+    CHECK(c.r == 60 && c.g == 6 && c.b == 9 && c.a == 255);
+    const Layer& top = doc->layer(1);
+    CHECK(top.name == "Top" && !top.background && top.blend == BlendMode::Multiply);
+    CHECK(top.opacity > 0.49f && top.opacity < 0.51f);
+    CHECK(top.pixels.get(0, 0).a == 0 && top.pixels.get(1, 0).a == 0);  // outside the saved rect
+    CHECK(top.pixels.get(1, 1).r == 200 && top.pixels.get(1, 1).a == 255);
+    CHECK(top.pixels.get(2, 1).r == 201 && top.pixels.get(2, 1).a == 0);
+    CHECK(warnings.empty());
+
+    file[0] = 'X';
+    CHECK(io::load_psp_from_memory(file.data(), file.size(), &err, nullptr) == nullptr && !err.empty());
+    CHECK(io::is_psp_extension("a.PspImage") && io::is_psp_extension("b.psptube") && !io::is_psp_extension("c.png"));
+}
+
 int main() {
+    test_psp_reader();
     test_blend_modes();
     test_layer_structure_commands();
     test_save_formats();

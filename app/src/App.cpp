@@ -6,6 +6,7 @@
 
 #include "imgui.h"
 #include "firn/io.h"
+#include "firn/io_psp.h"
 #include "firn/mask.h"
 
 using namespace firn;
@@ -26,20 +27,19 @@ void App::new_document(int w, int h) {
 
 bool App::open_document(const std::string& path) {
     std::string err;
-    auto img = io::load(path, &err);
-    if (!img) {
+    std::vector<std::string> warnings;
+    auto loaded = io::load_document(path, &err, &warnings);
+    if (!loaded) {
         status = "Open failed: " + err;
         return false;
     }
     tool().cancel(*this);
-    doc = std::make_unique<Document>(img->width(), img->height());
-    Layer& bg = doc->add_layer("Background");
-    bg.background = true;
-    bg.pixels = std::move(*img);
+    doc = std::move(loaded);
     history.clear();
     doc_path = path;
     fit_requested = true;
     status = "Opened " + path;
+    for (const auto& w : warnings) status += "\n" + w;
     return true;
 }
 

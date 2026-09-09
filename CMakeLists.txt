@@ -21,6 +21,8 @@ target_include_directories(stb INTERFACE ${CMAKE_SOURCE_DIR}/third_party)
 
 add_subdirectory(core)
 
+add_subdirectory(tools)
+
 if(FIRN_BUILD_APP)
   add_subdirectory(app)
 endif()

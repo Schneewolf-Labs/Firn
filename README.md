@@ -34,6 +34,16 @@ ctest --test-dir build
 FIRN_WINDOW=1280x800 ./build/app/firn   # override the initial window size
 ```
 
+## File formats
+
+Opens PNG, JPEG, BMP, TGA, GIF and PNM through stb, and the original
+program's native container (`.PspImage`, plus `.PspTube` and `.PspFrame`,
+which share it) with layers, positions, opacity, blend modes and visibility.
+Vector, adjustment, mask and group layers are skipped with a warning; a file
+with no raster layers falls back to its embedded flattened composite. See
+`docs/FORMAT.md`. Saves PNG, JPEG, BMP and TGA (flattened). `firn-convert`
+does the same from the command line.
+
 ## Tools
 
 Single-key shortcuts as in the original: **A** pan, **Z** zoom, **S**

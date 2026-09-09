@@ -21,8 +21,9 @@ and maps its module layout onto this repo.
 ```sh
 cmake -S . -B build -G Ninja      # fetches Dear ImGui on first configure
 cmake --build build
-ctest --test-dir build --output-on-failure
+ctest --test-dir build --output-on-failure   # core tests + native-format corpus
 ./build/app/firn [image.png]
+./build/tools/firn-convert in.PspImage out.png
 FIRN_WINDOW=1280x800 ./build/app/firn   # small window for test runs
 ```
 
@@ -34,12 +35,15 @@ keep the build at zero warnings. Link legacy `libGL`, not GLVND `libOpenGL`
 ## Layout
 
 ```
-core/    libfirncore: image model, layers, document, commands, undo, raster ops, codecs.
+core/    libfirncore: image model, layers, document, commands, undo, raster ops, codecs
+         (stb for PNG/JPEG/BMP/TGA, io_psp.cpp for the native container).
          No ImGui, SDL, or GL includes here, ever.
+tools/   firn-convert: CLI that prints a file's layer stack and flattens it to PNG.
 app/     the desktop app. src/ui/ = canvas, menus, palettes, file dialog; src/tools/ = canvas tools.
 tests/   assert-based core tests (no framework), one ctest target.
 scripts/ drive.py drives the running app with synthesized X11 input for screenshots.
-docs/    notes on the original: command inventory, module mapping.
+docs/    notes on the original: command inventory, module mapping, FORMAT.md
+         (the native container layout, verified against the sample files).
 ```
 
 ## Architecture rules
@@ -72,6 +76,11 @@ docs/    notes on the original: command inventory, module mapping.
   original where one exists (A pan, Z zoom, S selection, E dropper, B brush,
   X eraser, F fill). L freehand and W magic wand are ours; the original put
   those on the S flyout.
+- **Native format reading** lives in `core/src/io_psp.cpp`; `docs/FORMAT.md`
+  is the reference and must be updated when the reader learns a new block.
+  `tests/test_psp_corpus.cpp` loads every sample under `WindowsInstall/`
+  (skips when absent); run it after any reader change. Open files through
+  `io::load_document`, which dispatches on extension.
 - File open/save go through `FileDialog` (`app/src/ui/FileDialog.*`), an
   ImGui modal, via `App::request_open` / `request_save_as`. No native dialogs
   or extra dependencies. `io::save` picks the format from the extension.

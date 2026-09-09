@@ -18,7 +18,7 @@ bool save_png(const Image& img, const std::string& path, std::string* err = null
 bool save(const Image& img, const std::string& path, std::string* err = nullptr, int jpeg_quality = 90);
 
 // Extensions load()/save() understand, lower-case without the dot.
-const std::vector<std::string>& load_extensions();
+const std::vector<std::string>& load_extensions();  // includes the native container formats
 const std::vector<std::string>& save_extensions();
 
 }  // namespace firn::io
