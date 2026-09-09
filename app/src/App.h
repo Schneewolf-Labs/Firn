@@ -174,6 +174,9 @@ struct App {
     void sync_overlay_texture();
     int show_sel_dialog = 0;            // 1 expand, 2 contract, 3 feather
     bool show_layer_props_dialog = false;
+    bool show_jpeg_dialog = false;
+    int jpeg_quality = 90;
+    std::string pending_jpeg_path;
     bool show_resize_dialog = false;
     bool show_canvas_dialog = false;
     bool show_rotate_dialog = false;
@@ -197,6 +200,14 @@ struct App {
     float shape_radius = 10.0f;         // rounded rectangle corner radius
     int shape_sides = 6, star_points = 5;
     float star_inner = 0.5f;
+    // Custom brush tips
+    struct TipEntry { std::string path, name; std::shared_ptr<const firn::raster::BrushTip> tip; };
+    std::vector<TipEntry> brush_tips;
+    bool brush_tips_loaded = false;
+    int brush_tip_index = -1;            // -1 = built-in shape
+    void ensure_brush_tips();
+    void select_brush_tip(int index);
+    void brush_tip_from_selection();
     // Picture tubes
     struct TubeEntry { std::string path, name; };
     std::vector<TubeEntry> tubes;

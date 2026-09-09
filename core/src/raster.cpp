@@ -42,7 +42,21 @@ Stroke::Stroke(const Image& base, Brush brush, Color color, StrokeMode mode, con
     : base_(base), brush_(brush), color_(color), mode_(mode), clip_(clip && !clip->empty() ? clip : nullptr),
       mask_(static_cast<size_t>(base.width()) * base.height(), 0.0f) {}
 
+std::shared_ptr<const BrushTip> BrushTip::from_image(const Image& img) {
+    auto tip = std::make_shared<BrushTip>();
+    tip->width = img.width();
+    tip->height = img.height();
+    tip->coverage.resize(static_cast<size_t>(img.width()) * img.height());
+    for (size_t i = 0; i < tip->coverage.size(); ++i) {
+        const uint8_t* p = img.data() + i * 4;
+        const float luma = (p[0] * 299 + p[1] * 587 + p[2] * 114) / 255000.0f;
+        tip->coverage[i] = (1.0f - luma) * (p[3] / 255.0f);
+    }
+    return tip;
+}
+
 void Stroke::stamp(float cx, float cy) {
+    if (brush_.tip && brush_.tip->width > 0) { stamp_tip(cx, cy); return; }
     const float r = std::max(brush_.size * 0.5f, 0.5f);
     const float inner = r * std::clamp(brush_.hardness, 0.0f, 1.0f);
     const int w = base_.width(), h = base_.height();
@@ -64,6 +78,41 @@ void Stroke::stamp(float cx, float cy) {
             m = brush_.accumulate ? std::min(1.0f, m + cov * brush_.flow) : std::max(m, cov);
         }
     }
+    pending_ = pending_.united(box);
+}
+
+// Custom tip: the tip image scaled so its longer side equals the brush
+// size, sampled bilinearly, centered on (cx, cy).
+void Stroke::stamp_tip(float cx, float cy) {
+    const BrushTip& tip = *brush_.tip;
+    const float scale = std::max(brush_.size, 1.0f) / std::max(tip.width, tip.height);
+    const float tw = tip.width * scale, th = tip.height * scale;
+    const int w = base_.width(), h = base_.height();
+    Rect box{static_cast<int>(std::floor(cx - tw * 0.5f)), static_cast<int>(std::floor(cy - th * 0.5f)),
+             static_cast<int>(std::ceil(cx + tw * 0.5f)) + 1, static_cast<int>(std::ceil(cy + th * 0.5f)) + 1};
+    box = box.clipped(w, h);
+    if (box.empty()) return;
+    auto sample = [&](float u, float v) {  // tip coords in pixels
+        const int x0 = static_cast<int>(std::floor(u)), y0 = static_cast<int>(std::floor(v));
+        const float fx = u - x0, fy = v - y0;
+        float acc = 0.0f;
+        for (int j = 0; j < 2; ++j)
+            for (int i = 0; i < 2; ++i) {
+                const int px = x0 + i, py = y0 + j;
+                if (px < 0 || py < 0 || px >= tip.width || py >= tip.height) continue;
+                acc += tip.coverage[static_cast<size_t>(py) * tip.width + px] * (i ? fx : 1 - fx) * (j ? fy : 1 - fy);
+            }
+        return acc;
+    };
+    for (int y = box.y0; y < box.y1; ++y)
+        for (int x = box.x0; x < box.x1; ++x) {
+            const float u = ((x + 0.5f) - (cx - tw * 0.5f)) / scale - 0.5f;
+            const float v = ((y + 0.5f) - (cy - th * 0.5f)) / scale - 0.5f;
+            const float cov = std::clamp(sample(u, v), 0.0f, 1.0f);
+            if (cov <= 0.0f) continue;
+            float& m = mask_[static_cast<size_t>(y) * w + x];
+            m = brush_.accumulate ? std::min(1.0f, m + cov * brush_.flow) : std::max(m, cov);
+        }
     pending_ = pending_.united(box);
 }
 

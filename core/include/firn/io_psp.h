@@ -49,6 +49,6 @@ std::vector<uint8_t> save_psp_to_memory(const Document& doc);
 
 // Saves by extension: the native container keeps layers; anything else
 // writes the flattened composite through io::save.
-bool save_document(const Document& doc, const std::string& path, std::string* err);
+bool save_document(const Document& doc, const std::string& path, std::string* err, int jpeg_quality = 90);
 
 }  // namespace firn::io

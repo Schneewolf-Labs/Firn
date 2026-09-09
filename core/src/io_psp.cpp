@@ -840,9 +840,9 @@ bool save_psp(const Document& doc, const std::string& path, std::string* err) {
     return true;
 }
 
-bool save_document(const Document& doc, const std::string& path, std::string* err) {
+bool save_document(const Document& doc, const std::string& path, std::string* err, int jpeg_quality) {
     if (is_psp_extension(path)) return save_psp(doc, path, err);
-    return save(doc.composite(), path, err);
+    return save(doc.composite(), path, err, jpeg_quality);
 }
 
 }  // namespace firn::io

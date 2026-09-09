@@ -258,7 +258,11 @@ public:
             flush(app);
         }
         const float r = app.brush.size * 0.5f * in.zoom;
-        if (app.brush.square) {
+        if (app.brush.tip) {
+            const float scale = app.brush.size / std::max(app.brush.tip->width, app.brush.tip->height);
+            const float hw = app.brush.tip->width * scale * 0.5f * in.zoom, hh = app.brush.tip->height * scale * 0.5f * in.zoom;
+            in.dl->AddRect(ImVec2(in.screen.x - hw, in.screen.y - hh), ImVec2(in.screen.x + hw, in.screen.y + hh), IM_COL32(255, 255, 255, 160));
+        } else if (app.brush.square) {
             in.dl->AddRect(ImVec2(in.screen.x - r, in.screen.y - r), ImVec2(in.screen.x + r, in.screen.y + r), IM_COL32(0, 0, 0, 200));
             in.dl->AddRect(ImVec2(in.screen.x - r - 1, in.screen.y - r - 1), ImVec2(in.screen.x + r + 1, in.screen.y + r + 1), IM_COL32(255, 255, 255, 160));
         } else {
@@ -288,10 +292,21 @@ public:
         ImGui::SetNextItemWidth(100);
         float step = app.brush.step * 100.0f;
         if (ImGui::SliderFloat("Step", &step, 1.0f, 200.0f, "%.0f")) app.brush.step = step / 100.0f;
-        ImGui::SameLine();
+        // Second row: shape, custom tip, tool-specific extras.
         ImGui::SetNextItemWidth(80);
         int shape = app.brush.square ? 1 : 0;
         if (ImGui::Combo("Shape", &shape, "Round\0Square\0")) app.brush.square = shape == 1;
+        ImGui::SameLine();
+        app.ensure_brush_tips();
+        ImGui::SetNextItemWidth(140);
+        const char* tip_label = app.brush_tip_index >= 0 ? app.brush_tips[app.brush_tip_index].name.c_str() : "(shape)";
+        if (ImGui::BeginCombo("Tip", tip_label)) {
+            if (ImGui::Selectable("(shape)", app.brush_tip_index < 0)) app.select_brush_tip(-1);
+            for (size_t i = 0; i < app.brush_tips.size(); ++i)
+                if (ImGui::Selectable(app.brush_tips[i].name.c_str(), static_cast<int>(i) == app.brush_tip_index)) app.select_brush_tip(static_cast<int>(i));
+            ImGui::EndCombo();
+        }
+        if (app.doc && app.doc->has_selection()) { ImGui::SameLine(); if (ImGui::SmallButton("Tip from selection")) app.brush_tip_from_selection(); }
         switch (kind_) {
             case Kind::Airbrush: {
                 ImGui::SameLine();

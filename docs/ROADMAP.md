@@ -54,7 +54,8 @@ what to work on next.
 - [x] Smudge / Push, Dodge / Burn, Soften / Sharpen brushes
 - [x] Round and square brush shapes
 - [x] Picture Tube tool (.PspTube cells, scale, step, placement, selection modes)
-- [ ] Custom brush tips and stamp textures
+- [x] Custom brush tips (.PspBrush and PNG tips, tip from selection)
+- [ ] Stamp textures (paper grain under strokes)
 
 ## 6. Text and shapes
 

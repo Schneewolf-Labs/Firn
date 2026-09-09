@@ -1155,7 +1155,24 @@ static void test_photo_fixes() {
     CHECK(skin.get(10, 10).r > 200);  // mild redness of skin barely changes
 }
 
+static void test_brush_tip() {
+    // A tip: black left half, white right half -> only the left half paints.
+    Image tip_img(4, 4, {255, 255, 255, 255});
+    for (int y = 0; y < 4; ++y) for (int x = 0; x < 2; ++x) tip_img.set(x, y, {0, 0, 0, 255});
+    auto tip = raster::BrushTip::from_image(tip_img);
+    CHECK(tip->width == 4 && tip->coverage[0] == 1.0f && tip->coverage[3] == 0.0f);
+    Image base(40, 40, {0, 0, 0, 255});
+    raster::Brush b; b.size = 20; b.tip = tip;
+    raster::Stroke st(base, b, {255, 255, 255, 255}, raster::StrokeMode::Paint);
+    Image out = base;
+    st.add_point(20, 20);
+    st.render(out);
+    CHECK(out.get(13, 20).r == 255 && out.get(27, 20).r == 0);   // left half painted, right half not
+    CHECK(out.get(20, 5).r == 0 && out.get(5, 20).r == 0);        // outside the 20 px tip
+}
+
 int main() {
+    test_brush_tip();
     test_tube_info();
     test_photo_fixes();
     test_composite_region_and_speed();

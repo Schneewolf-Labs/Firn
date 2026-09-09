@@ -57,6 +57,10 @@ Hue brushes have no key. `[` and `]` resize the brush.
 Left button uses the foreground material, right button the background.
 Space + drag or middle-drag pans with any tool; Escape cancels a stroke.
 
+Brush tips: the brush tools take a custom tip from `.PspBrush` or PNG files
+in `~/.config/firn/brushes` (or `FIRN_BRUSH_DIRS`), or from the current
+selection. Saving as JPEG asks for the quality.
+
 Picture Tubes: the Picture Tube tool stamps cells from `.PspTube` files found
 in `~/.config/firn/tubes` (or `FIRN_TUBE_DIRS`), with the original's random,
 incremental and angular selection and random or continuous placement.

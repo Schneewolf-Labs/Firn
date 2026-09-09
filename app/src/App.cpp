@@ -167,8 +167,20 @@ bool App::open_document(const std::string& path) {
 
 bool App::save_document(const std::string& path) {
     if (!doc) return false;
+    // JPEG: ask for the quality first; the dialog calls back with the path.
+    {
+        const auto dot = path.rfind('.');
+        std::string ext = dot == std::string::npos ? "" : path.substr(dot + 1);
+        for (char& c : ext) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        if ((ext == "jpg" || ext == "jpeg") && pending_jpeg_path != path) {
+            pending_jpeg_path = path;
+            show_jpeg_dialog = true;
+            return false;
+        }
+        pending_jpeg_path.clear();
+    }
     std::string err;
-    if (!io::save_document(*doc, path, &err)) {
+    if (!io::save_document(*doc, path, &err, jpeg_quality)) {
         status = "Save failed: " + err;
         return false;
     }
@@ -421,6 +433,71 @@ void App::layer_mask_from_image() {
             m.at(x, y) = static_cast<uint8_t>((c.r * 299 + c.g * 587 + c.b * 114 + 500) / 1000 * c.a / 255);
         }
     layer_set_mask("New Mask Layer", std::move(m));
+}
+
+// --- Custom brush tips ------------------------------------------------------
+
+void App::ensure_brush_tips() {
+    if (brush_tips_loaded) return;
+    brush_tips_loaded = true;
+    namespace fs = std::filesystem;
+    std::vector<fs::path> dirs;
+    if (const char* extra = std::getenv("FIRN_BRUSH_DIRS")) {
+        std::string s = extra;
+        size_t start = 0;
+        while (start <= s.size()) {
+            const size_t end = s.find(':', start);
+            dirs.emplace_back(s.substr(start, end == std::string::npos ? std::string::npos : end - start));
+            if (end == std::string::npos) break;
+            start = end + 1;
+        }
+    }
+    dirs.emplace_back(fs::path(Config::directory()) / "brushes");
+#ifdef FIRN_SOURCE_DIR
+    dirs.emplace_back(fs::path(FIRN_SOURCE_DIR) / "WindowsInstall" / "Brushes");
+#endif
+    for (const fs::path& d : dirs) {
+        std::error_code ec;
+        if (!fs::is_directory(d, ec)) continue;
+        for (const auto& de : fs::recursive_directory_iterator(d, fs::directory_options::skip_permission_denied, ec)) {
+            if (!de.is_regular_file(ec)) continue;
+            std::string ext = de.path().extension().string();
+            for (char& c : ext) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+            if (ext != ".pspbrush" && ext != ".png") continue;
+            brush_tips.push_back({de.path().string(), de.path().stem().string(), nullptr});
+        }
+    }
+    std::sort(brush_tips.begin(), brush_tips.end(), [](const TipEntry& a, const TipEntry& b) { return a.name < b.name; });
+}
+
+void App::select_brush_tip(int index) {
+    if (index < 0 || index >= static_cast<int>(brush_tips.size())) { brush_tip_index = -1; brush.tip.reset(); return; }
+    TipEntry& e = brush_tips[index];
+    if (!e.tip) {
+        std::string err;
+        auto d = io::load_document(e.path, &err, nullptr);
+        if (!d) { status = "Brush tip failed: " + err; return; }
+        e.tip = raster::BrushTip::from_image(d->composite());
+    }
+    brush_tip_index = index;
+    brush.tip = e.tip;
+}
+
+void App::brush_tip_from_selection() {
+    if (!doc || !doc->has_selection()) return;
+    const raster::Rect r = doc->selection().bounds();
+    Image cut = raster::crop(doc->composite(), r);
+    // Selection coverage becomes the tip's alpha.
+    for (int y = 0; y < cut.height(); ++y)
+        for (int x = 0; x < cut.width(); ++x) {
+            uint8_t* p = cut.data() + (static_cast<size_t>(y) * cut.width() + x) * 4;
+            p[3] = static_cast<uint8_t>(p[3] * doc->selection().at(x + r.x0, y + r.y0) / 255);
+        }
+    ensure_brush_tips();
+    brush_tips.insert(brush_tips.begin(), {"", "From selection " + std::to_string(cut.width()) + "x" + std::to_string(cut.height()), raster::BrushTip::from_image(cut)});
+    brush_tip_index = 0;
+    brush.tip = brush_tips[0].tip;
+    status = "Brush tip created from the selection.";
 }
 
 // --- Picture tubes ---------------------------------------------------------

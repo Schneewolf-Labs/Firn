@@ -1,6 +1,7 @@
 #pragma once
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <vector>
 
 #include "firn/image.h"
@@ -21,6 +22,15 @@ struct Rect {
     Rect united(const Rect& o) const;
 };
 
+// A custom brush tip: coverage 0..1 per pixel, scaled to the brush size.
+struct BrushTip {
+    int width = 0, height = 0;
+    std::vector<float> coverage;
+    // Builds a tip from an image: darker pixels cover more (white = nothing),
+    // weighted by alpha, as the original's brush files are stored.
+    static std::shared_ptr<const BrushTip> from_image(const Image& img);
+};
+
 struct Brush {
     float size = 16.0f;      // diameter in pixels
     float hardness = 0.5f;   // 0 = fully soft falloff, 1 = hard edge (1px AA)
@@ -29,6 +39,7 @@ struct Brush {
     bool accumulate = false; // airbrush: coverage builds up per stamp by `flow`
     float flow = 0.1f;
     bool square = false;     // square stamp instead of round
+    std::shared_ptr<const BrushTip> tip;  // custom tip; overrides round/square and hardness
 };
 
 // Paint: color. Erase: clear alpha. Clone: pixels from a source image at an
@@ -65,6 +76,7 @@ public:
 
 private:
     void stamp(float cx, float cy);
+    void stamp_tip(float cx, float cy);
     Image base_;
     Brush brush_;
     Color color_;

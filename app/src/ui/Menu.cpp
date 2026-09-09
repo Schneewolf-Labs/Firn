@@ -277,6 +277,20 @@ void App::draw_dialogs() {
     }
 
     if (show_new_dialog) { ImGui::OpenPopup("New Image"); show_new_dialog = false; }
+    if (show_jpeg_dialog) { ImGui::OpenPopup("JPEG Options"); show_jpeg_dialog = false; }
+
+    if (ImGui::BeginPopupModal("JPEG Options", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::SliderInt("Quality", &jpeg_quality, 1, 100);
+        ImGui::TextDisabled("Layers are flattened; transparency becomes white.");
+        if (ImGui::Button("Save") || ImGui::IsKeyPressed(ImGuiKey_Enter, false) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter, false)) {
+            const std::string p = pending_jpeg_path;
+            ImGui::CloseCurrentPopup();
+            save_document(p);
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel") || ImGui::IsKeyPressed(ImGuiKey_Escape, false)) { pending_jpeg_path.clear(); ImGui::CloseCurrentPopup(); }
+        ImGui::EndPopup();
+    }
     if (pending_close >= 0 && !ImGui::IsPopupOpen("Unsaved Changes")) ImGui::OpenPopup("Unsaved Changes");
 
     if (ImGui::BeginPopupModal("Unsaved Changes", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
