@@ -12,6 +12,7 @@ add_executable(firn
   src/ui/Canvas.cpp
   src/ui/Palettes.cpp
   src/ui/Menu.cpp
+  src/ui/FileDialog.cpp
   src/tools/Tools.cpp
 )
 target_include_directories(firn PRIVATE src)

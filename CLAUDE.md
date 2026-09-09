@@ -36,7 +36,7 @@ keep the build at zero warnings. Link legacy `libGL`, not GLVND `libOpenGL`
 ```
 core/    libfirncore: image model, layers, document, commands, undo, raster ops, codecs.
          No ImGui, SDL, or GL includes here, ever.
-app/     the desktop app. src/ui/ = canvas, menus, palettes; src/tools/ = canvas tools.
+app/     the desktop app. src/ui/ = canvas, menus, palettes, file dialog; src/tools/ = canvas tools.
 tests/   assert-based core tests (no framework), one ctest target.
 scripts/ drive.py drives the running app with synthesized X11 input for screenshots.
 docs/    notes on the original: command inventory, module mapping.
@@ -72,6 +72,9 @@ docs/    notes on the original: command inventory, module mapping.
   original where one exists (A pan, Z zoom, S selection, E dropper, B brush,
   X eraser, F fill). L freehand and W magic wand are ours; the original put
   those on the S flyout.
+- File open/save go through `FileDialog` (`app/src/ui/FileDialog.*`), an
+  ImGui modal, via `App::request_open` / `request_save_as`. No native dialogs
+  or extra dependencies. `io::save` picks the format from the extension.
 - Add a test in `tests/test_core.cpp` for every new raster op or command.
 
 ## Checking UI changes
@@ -82,6 +85,7 @@ Unit tests cover the core. For the app, launch it small and drive it:
 FIRN_WINDOW=1280x800 ./build/app/firn some.png &
 WID=$(xwininfo -root -tree | grep '"Firn"' | awk '{print $1}')
 python3 scripts/drive.py $WID key:b drag:400,300:700,500:1 shot:/tmp/out.png
+python3 scripts/drive.py $WID ctrl:o type:grad.png key:Return   # dialogs too
 ```
 
 Needs `python3-xlib`, `xwininfo`, and ImageMagick `import`. Coordinates are

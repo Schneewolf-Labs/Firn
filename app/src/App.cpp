@@ -43,16 +43,38 @@ bool App::open_document(const std::string& path) {
     return true;
 }
 
-bool App::save_document_png(const std::string& path) {
+bool App::save_document(const std::string& path) {
     if (!doc) return false;
     std::string err;
-    if (!io::save_png(doc->composite(), path, &err)) {
+    if (!io::save(doc->composite(), path, &err)) {
         status = "Save failed: " + err;
         return false;
     }
     doc_path = path;
     status = "Saved " + path;
     return true;
+}
+
+void App::request_open() {
+    file_op = PendingFileOp::Open;
+    file_dialog.open(FileDialog::Mode::Open, "Open Image", io::load_extensions(), doc_path);
+}
+
+void App::request_save_as() {
+    if (!doc) return;
+    file_op = PendingFileOp::SaveAs;
+    file_dialog.open(FileDialog::Mode::Save, "Save As", io::save_extensions(), doc_path.empty() ? "untitled.png" : doc_path);
+}
+
+void App::save() {
+    if (!doc) return;
+    // Only save in place to a format we can write; an opened .gif goes through Save As.
+    const auto& exts = io::save_extensions();
+    const auto dot = doc_path.rfind('.');
+    std::string ext = dot == std::string::npos ? "" : doc_path.substr(dot + 1);
+    for (char& c : ext) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    if (!doc_path.empty() && std::find(exts.begin(), exts.end(), ext) != exts.end()) save_document(doc_path);
+    else request_save_as();
 }
 
 void App::run(std::unique_ptr<Command> cmd) {
@@ -240,8 +262,9 @@ void App::handle_shortcuts() {
     if (ctrl && ImGui::IsKeyPressed(ImGuiKey_Z, false)) { io.KeyShift ? redo() : undo(); }
     if (ctrl && ImGui::IsKeyPressed(ImGuiKey_Y, false)) redo();
     if (ctrl && ImGui::IsKeyPressed(ImGuiKey_N, false)) show_new_dialog = true;
-    if (ctrl && ImGui::IsKeyPressed(ImGuiKey_O, false)) show_open_dialog = true;
-    if (ctrl && ImGui::IsKeyPressed(ImGuiKey_S, false)) show_save_dialog = true;
+    if (ctrl && ImGui::IsKeyPressed(ImGuiKey_O, false)) request_open();
+    if (ctrl && io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_S, false)) request_save_as();
+    else if (ctrl && ImGui::IsKeyPressed(ImGuiKey_S, false)) save();
     if (ctrl && io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_I, false)) select_invert();
     else if (ctrl && ImGui::IsKeyPressed(ImGuiKey_I, false) && doc && active_layer() >= 0)
         run(std::make_unique<InvertCommand>(active_layer()));

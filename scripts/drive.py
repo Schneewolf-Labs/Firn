@@ -8,6 +8,8 @@ Steps (coordinates are window-relative pixels):
     click:X:Y[:B]     click button B (1 left, 3 right) at X,Y
     drag:X,Y:X,Y...[:B]  press, move through the points, release
     key:K             tap a key by X keysym name (b, f, Escape, ...)
+    type:TEXT         type text (letters, digits, . / - _ space)
+    dbl:X:Y           double-click
     ctrl:K            tap Ctrl+K
     shot:FILE         capture the window to FILE with ImageMagick import
     sleep:SECONDS
@@ -50,6 +52,15 @@ for s in steps:
         pts = [tuple(map(int, p.split(","))) for p in args[:-1]] if args[-1] in ("1","3") else [tuple(map(int, p.split(","))) for p in args]
         b = int(args[-1]) if args[-1] in ("1","3") else 1
         drag(pts, b)
+    elif op == "type":
+        names = {'.': 'period', '/': 'slash', '-': 'minus', '_': 'underscore', ' ': 'space'}
+        for ch in args[0]:
+            key(names.get(ch, ch))
+    elif op == "dbl":
+        mv(int(args[0]), int(args[1])); time.sleep(0.1)
+        for _ in range(2):
+            press(1); time.sleep(0.03); rel(1); time.sleep(0.06)
+        time.sleep(0.3)
     elif op == "ctrl":
         ctl = d.keysym_to_keycode(XK.string_to_keysym("Control_L"))
         xtest.fake_input(d, X.KeyPress, ctl); d.sync(); time.sleep(0.05)

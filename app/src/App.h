@@ -10,6 +10,7 @@
 #include "firn/document.h"
 #include "firn/raster.h"
 #include "tools/Tool.h"
+#include "ui/FileDialog.h"
 
 // Application state shared by all UI panels. The UI is immediate-mode: every
 // frame it reads this and the Document and emits Commands. Nothing in the UI
@@ -58,15 +59,15 @@ struct App {
     float bg_color[4] = {1.f, 1.f, 1.f, 1.f};
 
     // Dialog state
-    bool show_open_dialog = false;
-    bool show_save_dialog = false;
+    FileDialog file_dialog;
+    enum class PendingFileOp { None, Open, SaveAs };
+    PendingFileOp file_op = PendingFileOp::None;
     bool show_new_dialog = false;
     bool show_blur_dialog = false;
     bool blur_gaussian = false;         // which blur the pending dialog is for
     bool show_bc_dialog = false;
     int show_sel_dialog = 0;            // 1 expand, 2 contract, 3 feather
     bool show_imgui_demo = false;
-    char path_buf[1024] = {};
     int new_w = 800, new_h = 600;
     float blur_radius = 3.0f;
     int bc_brightness = 0, bc_contrast = 0;
@@ -77,7 +78,10 @@ struct App {
     // Actions (implemented in App.cpp)
     void new_document(int w, int h);
     bool open_document(const std::string& path);
-    bool save_document_png(const std::string& path);
+    bool save_document(const std::string& path);
+    void request_open();
+    void request_save_as();
+    void save();  // to doc_path, or Save As when there is none
     void run(std::unique_ptr<firn::Command> cmd);       // execute and record
     void commit(std::unique_ptr<firn::Command> cmd);    // record an already-applied edit
     void undo();

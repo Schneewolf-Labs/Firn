@@ -18,9 +18,10 @@ void App::draw_menu() {
 
     if (ImGui::BeginMenu("File")) {
         if (ImGui::MenuItem("New...", "Ctrl+N")) show_new_dialog = true;
-        if (ImGui::MenuItem("Open...", "Ctrl+O")) show_open_dialog = true;
+        if (ImGui::MenuItem("Open...", "Ctrl+O")) request_open();
         ImGui::Separator();
-        if (ImGui::MenuItem("Save As PNG...", "Ctrl+S", false, has_doc)) show_save_dialog = true;
+        if (ImGui::MenuItem("Save", "Ctrl+S", false, has_doc)) save();
+        if (ImGui::MenuItem("Save As...", "Ctrl+Shift+S", false, has_doc)) request_save_as();
         ImGui::Separator();
         if (ImGui::MenuItem("Exit")) quit = true;
         ImGui::EndMenu();
@@ -95,11 +96,10 @@ void App::draw_menu() {
 
 void App::draw_dialogs() {
     if (show_new_dialog) { ImGui::OpenPopup("New Image"); show_new_dialog = false; }
-    if (show_open_dialog) { ImGui::OpenPopup("Open Image"); show_open_dialog = false; }
-    if (show_save_dialog) {
-        std::snprintf(path_buf, sizeof(path_buf), "%s", doc_path.c_str());
-        ImGui::OpenPopup("Save As PNG");
-        show_save_dialog = false;
+    if (file_dialog.draw()) {
+        if (file_op == PendingFileOp::Open) open_document(file_dialog.path());
+        else if (file_op == PendingFileOp::SaveAs) save_document(file_dialog.path());
+        file_op = PendingFileOp::None;
     }
     if (show_blur_dialog) { ImGui::OpenPopup(blur_gaussian ? "Gaussian Blur" : "Average"); show_blur_dialog = false; }
     if (show_bc_dialog) { ImGui::OpenPopup("Brightness/Contrast"); show_bc_dialog = false; }
@@ -112,23 +112,6 @@ void App::draw_dialogs() {
         if (new_w < 1) new_w = 1;
         if (new_h < 1) new_h = 1;
         if (ImGui::Button("OK")) { new_document(new_w, new_h); ImGui::CloseCurrentPopup(); }
-        ImGui::SameLine();
-        if (ImGui::Button("Cancel")) ImGui::CloseCurrentPopup();
-        ImGui::EndPopup();
-    }
-    // Text-entry file dialogs are a stopgap; a real file browser comes later.
-    if (ImGui::BeginPopupModal("Open Image", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
-        ImGui::SetNextItemWidth(500);
-        bool enter = ImGui::InputText("Path", path_buf, sizeof(path_buf), ImGuiInputTextFlags_EnterReturnsTrue);
-        if (ImGui::Button("Open") || enter) { open_document(path_buf); ImGui::CloseCurrentPopup(); }
-        ImGui::SameLine();
-        if (ImGui::Button("Cancel")) ImGui::CloseCurrentPopup();
-        ImGui::EndPopup();
-    }
-    if (ImGui::BeginPopupModal("Save As PNG", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
-        ImGui::SetNextItemWidth(500);
-        bool enter = ImGui::InputText("Path", path_buf, sizeof(path_buf), ImGuiInputTextFlags_EnterReturnsTrue);
-        if (ImGui::Button("Save") || enter) { save_document_png(path_buf); ImGui::CloseCurrentPopup(); }
         ImGui::SameLine();
         if (ImGui::Button("Cancel")) ImGui::CloseCurrentPopup();
         ImGui::EndPopup();

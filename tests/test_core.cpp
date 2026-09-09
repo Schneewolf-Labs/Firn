@@ -267,7 +267,27 @@ static void test_selection_clips_commands() {
     CHECK(doc.layer_count() == 1 && doc.active_layer() == 0);
 }
 
+static void test_save_formats() {
+    Image img(4, 4, {200, 100, 50, 255});
+    img.set(0, 0, {0, 0, 0, 0});  // transparent pixel -> white in jpg/bmp
+    for (const char* name : {"t.jpg", "t.bmp", "t.tga"}) {
+        CHECK(io::save(img, name));
+        auto back = io::load(name);
+        CHECK(back && back->width() == 4);
+        std::remove(name);
+    }
+    CHECK(io::save(img, "t.bmp"));
+    auto bmp = io::load("t.bmp");
+    Color c = bmp->get(0, 0);
+    CHECK(c.r == 255 && c.g == 255 && c.b == 255);
+    CHECK(bmp->get(1, 1).r == 200);
+    std::remove("t.bmp");
+    std::string err;
+    CHECK(!io::save(img, "t.xyz", &err) && !err.empty());
+}
+
 int main() {
+    test_save_formats();
     test_mask_shapes();
     test_mask_ops();
     test_selection_clips_commands();
