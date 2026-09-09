@@ -110,7 +110,7 @@ struct App {
 
     // Dialog state
     FileDialog file_dialog;
-    enum class PendingFileOp { None, Open, SaveAs, LoadSelection, SaveSelection };
+    enum class PendingFileOp { None, Open, SaveAs, LoadSelection, SaveSelection, LoadPalette, SavePalette };
     PendingFileOp file_op = PendingFileOp::None;
     bool show_new_dialog = false;
     // Adjustment / effect dialogs with live preview (ui/Adjust.cpp)
@@ -198,6 +198,26 @@ struct App {
     // Rotate dialog
     float rotate_degrees = 15.0f;
     int rotate_cw = 1;
+    // Image menu (ui/ImageMenu.cpp)
+    bool show_borders_dialog = false, show_frame_dialog = false, show_depth_dialog = false, show_combine_dialog = false, show_arith_dialog = false;
+    int border_l = 10, border_r = 10, border_t = 10, border_b = 10; bool border_symmetric = true;
+    int depth_colors = 256; bool depth_dither = true;
+    int combine_mode = 0, combine_src[4] = {0, 1, 2, 3};
+    int arith_a = 0, arith_b = 1, arith_op = 0, arith_channel = 0, arith_bias = 0; float arith_divisor = 1.0f; bool arith_clip = true;
+    struct FrameEntry { std::string path, name; };
+    std::vector<FrameEntry> frame_library;
+    bool frames_loaded = false;
+    int frame_index = 0; bool frame_inside = true, frame_flip = false, frame_mirror = false;
+    void ensure_frames();
+    void draw_image_dialogs();
+    void image_count_colors();
+    void image_decrease_depth(int colors, bool dither);
+    void image_split_channels(int mode);
+    void request_load_palette();
+    void request_save_palette();
+    void load_palette(const std::string& path);
+    void save_palette(const std::string& path);
+    firn::Document* document_at(int index);   // any open document by tab index
     // Deform family options
     int straighten_mode = 0;             // 0 auto, 1 vertical, 2 horizontal
     bool straighten_all_layers = true, straighten_crop = true;

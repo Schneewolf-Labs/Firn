@@ -1,4 +1,5 @@
 #include "firn/io.h"
+#include <fstream>
 
 #include <algorithm>
 #include <cctype>
@@ -85,6 +86,34 @@ const std::vector<std::string>& load_extensions() {
 const std::vector<std::string>& save_extensions() {
     static const std::vector<std::string> v{"pspimage", "png", "jpg", "jpeg", "bmp", "tga"};
     return v;
+}
+
+
+std::vector<Color> load_palette(const std::string& path, std::string* err) {
+    std::ifstream f(path);
+    std::vector<Color> out;
+    if (!f) { if (err) *err = "cannot open " + path; return out; }
+    std::string line;
+    std::getline(f, line);
+    if (line.rfind("JASC-PAL", 0) != 0) { if (err) *err = "not a JASC-PAL palette"; return out; }
+    std::getline(f, line);  // version
+    int count = 0;
+    f >> count;
+    for (int i = 0; i < count && f; ++i) {
+        int r, g, b;
+        if (!(f >> r >> g >> b)) break;
+        out.push_back({static_cast<uint8_t>(std::clamp(r, 0, 255)), static_cast<uint8_t>(std::clamp(g, 0, 255)), static_cast<uint8_t>(std::clamp(b, 0, 255)), 255});
+    }
+    if (out.empty() && err) *err = "empty palette";
+    return out;
+}
+
+bool save_palette(const std::vector<Color>& palette, const std::string& path, std::string* err) {
+    std::ofstream f(path);
+    if (!f) { if (err) *err = "cannot write " + path; return false; }
+    f << "JASC-PAL\r\n0100\r\n" << palette.size() << "\r\n";
+    for (const Color& c : palette) f << static_cast<int>(c.r) << ' ' << static_cast<int>(c.g) << ' ' << static_cast<int>(c.b) << "\r\n";
+    return static_cast<bool>(f);
 }
 
 }  // namespace firn::io

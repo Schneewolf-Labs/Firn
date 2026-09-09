@@ -141,8 +141,10 @@ public:
                 float nx0 = box_[0], ny0 = box_[1], nx1 = box_[2], ny1 = box_[3];
                 const bool left = handle_ == 0 || handle_ == 6 || handle_ == 7, right = handle_ == 2 || handle_ == 3 || handle_ == 4;
                 const bool top = handle_ <= 2, bottom = handle_ >= 4 && handle_ <= 6;
-                if (left) nx0 = x1_; if (right) nx1 = x1_;
-                if (top) ny0 = y1_; if (bottom) ny1 = y1_;
+                if (left) nx0 = x1_;
+                if (right) nx1 = x1_;
+                if (top) ny0 = y1_;
+                if (bottom) ny1 = y1_;
                 float sx = (nx1 - nx0) / std::max(box_[2] - box_[0], 1e-3f), sy = (ny1 - ny0) / std::max(box_[3] - box_[1], 1e-3f);
                 if (io.KeyShift && (left || right) && (top || bottom)) { const float s = std::max(std::abs(sx), std::abs(sy)); sx = std::copysign(s, sx); sy = std::copysign(s, sy); }
                 const float ax = left ? box_[2] : box_[0], ay = top ? box_[3] : box_[1];   // anchor

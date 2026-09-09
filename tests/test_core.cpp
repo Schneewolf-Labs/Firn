@@ -1574,7 +1574,53 @@ static void test_warp() {
     CHECK(doc.width() == 20 && doc.layer(1).pixels.get(3, 2).r == 200 && doc.layer(1).pixels.get(7, 8).a == 0);
 }
 
+static void test_color_ops() {
+    Image img(8, 8, {255, 0, 0, 255});
+    for (int x = 0; x < 4; ++x) for (int y = 0; y < 8; ++y) img.set(x, y, {0, 0, 255, 255});
+    img.set(7, 7, {10, 200, 30, 0});   // transparent pixels do not count
+    CHECK(raster::count_colors(img) == 2);
+    auto pal = raster::median_cut_palette(img, 2);
+    CHECK(pal.size() == 2);
+    Image q = img;
+    raster::apply_palette(q, pal, false);
+    CHECK(raster::count_colors(q) == 2 && q.get(0, 0).b > 200 && q.get(7, 0).r > 200);
+    Image mono(4, 1, {128, 128, 128, 255});
+    raster::to_monochrome(mono, true);
+    int white = 0;
+    for (int x = 0; x < 4; ++x) { CHECK(mono.get(x, 0).r == 0 || mono.get(x, 0).r == 255); if (mono.get(x, 0).r == 255) ++white; }
+    CHECK(white == 2);   // dithered mid-gray alternates
+    // Split and combine are inverses for RGB and CMYK, and close for HSL.
+    Image src(3, 2);
+    src.set(0, 0, {10, 20, 30, 255}); src.set(1, 0, {200, 100, 50, 255}); src.set(2, 0, {0, 255, 0, 255});
+    src.set(0, 1, {255, 255, 255, 255}); src.set(1, 1, {0, 0, 0, 255}); src.set(2, 1, {123, 45, 67, 255});
+    for (int mode : {0, 1, 2}) {
+        auto planes = raster::split_channels(src, mode);
+        CHECK(planes.size() == (mode == 2 ? 4u : 3u));
+        Image back = raster::combine_channels(planes, mode);
+        for (int y = 0; y < 2; ++y) for (int x = 0; x < 3; ++x) {
+            const Color a = src.get(x, y), b = back.get(x, y);
+            const int tol = mode == 1 ? 6 : 2;
+            CHECK(std::abs(a.r - b.r) <= tol && std::abs(a.g - b.g) <= tol && std::abs(a.b - b.b) <= tol);
+        }
+    }
+    Image a(2, 1, {100, 100, 100, 255}), b(2, 1, {200, 50, 0, 255});
+    Image sum = raster::arithmetic(a, b, raster::ArithOp::Add, 1, 0, true, 0);
+    CHECK(sum.get(0, 0).r == 255 && sum.get(0, 0).g == 150 && sum.get(0, 0).b == 100);
+    Image wrapped = raster::arithmetic(a, b, raster::ArithOp::Add, 1, 0, false, 0);
+    CHECK(wrapped.get(0, 0).r == 44);
+    Image diff = raster::arithmetic(a, b, raster::ArithOp::Difference, 2, 10, true, 1);
+    CHECK(diff.get(0, 0).r == 60 && diff.get(0, 0).g == 100);
+    const std::string tmp = "/tmp/firn_test.PspPalette";
+    CHECK(io::save_palette(pal, tmp));
+    auto loaded = io::load_palette(tmp);
+    std::remove(tmp.c_str());
+    CHECK(loaded.size() == pal.size() && loaded[0].r == pal[0].r && loaded[1].b == pal[1].b);
+    const auto shipped = io::load_palette(std::string(FIRN_SOURCE_DIR) + "/WindowsInstall/Palettes/Safety.PspPalette");
+    CHECK(shipped.empty() || shipped.size() == 256);
+}
+
 int main() {
+    test_color_ops();
     test_warp();
     test_adjustment_layers();
     test_vector_default_bytes();

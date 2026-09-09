@@ -165,6 +165,15 @@ void App::ensure_patterns() {
     std::sort(pattern_library.begin(), pattern_library.end(), [](const PatternEntry& a, const PatternEntry& b) { return a.name < b.name; });
 }
 
+void App::ensure_frames() {
+    if (frames_loaded) return;
+    frames_loaded = true;
+    scan_files(library_dirs("FIRN_FRAME_DIRS", "frames", "Picture Frames"), {".pspframe"}, [&](const std::filesystem::path& p) {
+        frame_library.push_back({p.string(), p.stem().string()});
+    });
+    std::sort(frame_library.begin(), frame_library.end(), [](const FrameEntry& a, const FrameEntry& b) { return a.name < b.name; });
+}
+
 // --- Layers menu -----------------------------------------------------------------
 
 void App::layer_new_vector() {

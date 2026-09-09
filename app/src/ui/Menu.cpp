@@ -91,8 +91,42 @@ void App::draw_menu() {
         if (ImGui::MenuItem("Resize...", nullptr, false, has_doc)) open_resize_dialog();
         if (ImGui::MenuItem("Canvas Size...", nullptr, false, has_doc)) open_canvas_dialog();
         ImGui::Separator();
-        if (ImGui::MenuItem("Grayscale", nullptr, false, has_layer)) run(std::make_unique<GrayscaleCommand>(layer));
+        if (ImGui::MenuItem("Add Borders...", nullptr, false, has_doc)) show_borders_dialog = true;
+        if (ImGui::MenuItem("Picture Frame...", nullptr, false, has_doc)) show_frame_dialog = true;
         ImGui::Separator();
+        if (ImGui::MenuItem("Grayscale", nullptr, false, has_layer)) run(std::make_unique<GrayscaleCommand>(layer));
+        if (ImGui::BeginMenu("Decrease Color Depth", has_layer)) {
+            if (ImGui::MenuItem("2 Colors...")) { depth_colors = 2; show_depth_dialog = true; }
+            if (ImGui::MenuItem("16 Colors...")) { depth_colors = 16; show_depth_dialog = true; }
+            if (ImGui::MenuItem("256 Colors...")) { depth_colors = 256; show_depth_dialog = true; }
+            if (ImGui::MenuItem("32K Colors")) image_decrease_depth(32, false);
+            if (ImGui::MenuItem("64K Colors")) image_decrease_depth(64, false);
+            ImGui::EndMenu();
+        }
+        if (ImGui::BeginMenu("Increase Color Depth", has_doc)) {
+            ImGui::TextDisabled("Images are always 16 million colors here.");
+            ImGui::EndMenu();
+        }
+        if (ImGui::BeginMenu("Palette", has_layer)) {
+            if (ImGui::MenuItem("Load Palette...")) request_load_palette();
+            if (ImGui::MenuItem("Save Palette...")) request_save_palette();
+            ImGui::EndMenu();
+        }
+        if (ImGui::BeginMenu("Split Channel", has_doc)) {
+            if (ImGui::MenuItem("Split to RGB")) image_split_channels(0);
+            if (ImGui::MenuItem("Split to HSL")) image_split_channels(1);
+            if (ImGui::MenuItem("Split to CMYK")) image_split_channels(2);
+            ImGui::EndMenu();
+        }
+        if (ImGui::BeginMenu("Combine Channel", docs.size() >= 3)) {
+            if (ImGui::MenuItem("Combine from RGB")) { combine_mode = 0; show_combine_dialog = true; }
+            if (ImGui::MenuItem("Combine from HSL")) { combine_mode = 1; show_combine_dialog = true; }
+            if (ImGui::MenuItem("Combine from CMYK")) { combine_mode = 2; show_combine_dialog = true; }
+            ImGui::EndMenu();
+        }
+        if (ImGui::MenuItem("Arithmetic...", nullptr, false, docs.size() >= 2)) show_arith_dialog = true;
+        ImGui::Separator();
+        if (ImGui::MenuItem("Count Colors Used", nullptr, false, has_doc)) image_count_colors();
         if (ImGui::MenuItem("Image Information...", "Shift+I", false, has_doc)) show_info_dialog = true;
         ImGui::EndMenu();
     }
@@ -358,12 +392,15 @@ void App::draw_dialogs() {
     draw_text_dialog();
     draw_vector_dialogs();
     draw_adjustment_layer_dialog();
+    draw_image_dialogs();
 
     if (file_dialog.draw()) {
         if (file_op == PendingFileOp::Open) open_document(file_dialog.path());
         else if (file_op == PendingFileOp::SaveAs) save_document(file_dialog.path());
         else if (file_op == PendingFileOp::LoadSelection) load_selection(file_dialog.path());
         else if (file_op == PendingFileOp::SaveSelection) save_selection(file_dialog.path());
+        else if (file_op == PendingFileOp::LoadPalette) load_palette(file_dialog.path());
+        else if (file_op == PendingFileOp::SavePalette) save_palette(file_dialog.path());
         file_op = PendingFileOp::None;
     }
 

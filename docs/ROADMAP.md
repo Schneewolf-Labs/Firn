@@ -104,9 +104,10 @@ for. Ranked by value per effort; work top to bottom, tick as they land.
       the palette and Layers > Properties, native read/write per the spec
 - [x] Deform tool (move/scale/rotate/skew/perspective a layer), Straighten,
       Perspective Correction (all layers or one, optional crop)
-- [ ] Image menu odds and ends: Flip, Mirror, Negative Image, Grayscale, Add
-      Borders, Count Colors, Decrease/Increase Color Depth with palettes,
-      Split/Combine Channels, Arithmetic, Picture Frame
+- [x] Image menu odds and ends: Add Borders, Picture Frame (.PspFrame, inside
+      or outside), Count Colors, Decrease Color Depth (2/16/256 with error
+      diffusion, median cut), palettes (JASC-PAL load/save), Split/Combine
+      Channel (RGB, HSL, CMYK), Arithmetic
 - [ ] Photo fixes: One Step Photo Fix, Automatic Color/Contrast/Saturation
       Enhancement, Clarify, Black and White Points, Histogram Adjustment,
       Salt and Pepper, JPEG Artifact Removal, Fill Flash, Backlighting,

@@ -1,4 +1,5 @@
 #include "firn/raster.h"
+#include "firn/adjust.h"
 
 #include "firn/mask.h"
 
@@ -631,6 +632,204 @@ Image rotate(const Image& src, float degrees) {
     return out;
 }
 
+
+// --- Colors and palettes ---------------------------------------------------------
+
+size_t count_colors(const Image& img) {
+    std::vector<uint32_t> seen;
+    seen.reserve(4096);
+    const uint8_t* p = img.data();
+    for (size_t i = 0; i < img.size_bytes(); i += 4) {
+        if (p[i + 3] == 0) continue;
+        seen.push_back(static_cast<uint32_t>(p[i]) << 16 | static_cast<uint32_t>(p[i + 1]) << 8 | p[i + 2]);
+    }
+    std::sort(seen.begin(), seen.end());
+    return static_cast<size_t>(std::unique(seen.begin(), seen.end()) - seen.begin());
+}
+
+std::vector<Color> median_cut_palette(const Image& img, int colors) {
+    colors = std::clamp(colors, 2, 256);
+    // Histogram at 5 bits per channel keeps the boxes manageable.
+    std::vector<uint32_t> counts(32 * 32 * 32, 0);
+    const uint8_t* p = img.data();
+    for (size_t i = 0; i < img.size_bytes(); i += 4)
+        if (p[i + 3]) ++counts[(p[i] >> 3) << 10 | (p[i + 1] >> 3) << 5 | (p[i + 2] >> 3)];
+    struct Entry { uint8_t r, g, b; uint32_t n; };
+    std::vector<Entry> all;
+    for (int i = 0; i < 32 * 32 * 32; ++i)
+        if (counts[i]) all.push_back({static_cast<uint8_t>(i >> 10), static_cast<uint8_t>((i >> 5) & 31), static_cast<uint8_t>(i & 31), counts[i]});
+    if (all.empty()) return {{0, 0, 0, 255}, {255, 255, 255, 255}};
+    struct Box { size_t begin, end; };
+    std::vector<Box> boxes{{0, all.size()}};
+    while (static_cast<int>(boxes.size()) < colors) {
+        // Split the box with the largest extent along its longest axis.
+        int best = -1, best_axis = 0, best_range = -1;
+        for (size_t bi = 0; bi < boxes.size(); ++bi) {
+            const Box& b = boxes[bi];
+            if (b.end - b.begin < 2) continue;
+            int lo[3] = {32, 32, 32}, hi[3] = {-1, -1, -1};
+            for (size_t i = b.begin; i < b.end; ++i) {
+                const int v[3] = {all[i].r, all[i].g, all[i].b};
+                for (int c = 0; c < 3; ++c) { lo[c] = std::min(lo[c], v[c]); hi[c] = std::max(hi[c], v[c]); }
+            }
+            for (int c = 0; c < 3; ++c) if (hi[c] - lo[c] > best_range) { best_range = hi[c] - lo[c]; best = static_cast<int>(bi); best_axis = c; }
+        }
+        if (best < 0) break;
+        Box b = boxes[static_cast<size_t>(best)];
+        std::sort(all.begin() + static_cast<long>(b.begin), all.begin() + static_cast<long>(b.end), [&](const Entry& x, const Entry& y) {
+            return best_axis == 0 ? x.r < y.r : best_axis == 1 ? x.g < y.g : x.b < y.b;
+        });
+        // Median by pixel count.
+        uint64_t total = 0, acc = 0;
+        for (size_t i = b.begin; i < b.end; ++i) total += all[i].n;
+        size_t mid = b.begin + 1;
+        for (size_t i = b.begin; i + 1 < b.end; ++i) { acc += all[i].n; if (acc * 2 >= total) { mid = i + 1; break; } }
+        boxes[static_cast<size_t>(best)] = {b.begin, mid};
+        boxes.push_back({mid, b.end});
+    }
+    std::vector<Color> out;
+    for (const Box& b : boxes) {
+        uint64_t r = 0, g = 0, bl = 0, n = 0;
+        for (size_t i = b.begin; i < b.end; ++i) { r += (all[i].r * 8 + 4) * static_cast<uint64_t>(all[i].n); g += (all[i].g * 8 + 4) * static_cast<uint64_t>(all[i].n); bl += (all[i].b * 8 + 4) * static_cast<uint64_t>(all[i].n); n += all[i].n; }
+        if (n == 0) continue;
+        out.push_back({static_cast<uint8_t>(std::min<uint64_t>(255, r / n)), static_cast<uint8_t>(std::min<uint64_t>(255, g / n)), static_cast<uint8_t>(std::min<uint64_t>(255, bl / n)), 255});
+    }
+    return out;
+}
+
+void apply_palette(Image& img, const std::vector<Color>& palette, bool dither) {
+    if (palette.empty()) return;
+    const int w = img.width(), h = img.height();
+    auto nearest = [&](int r, int g, int b) {
+        int best = 0, bd = 1 << 30;
+        for (size_t i = 0; i < palette.size(); ++i) {
+            const int dr = r - palette[i].r, dg = g - palette[i].g, db = b - palette[i].b;
+            const int d = dr * dr * 2 + dg * dg * 4 + db * db * 3;
+            if (d < bd) { bd = d; best = static_cast<int>(i); }
+        }
+        return palette[static_cast<size_t>(best)];
+    };
+    if (!dither) {
+        uint8_t* p = img.data();
+        for (size_t i = 0; i < img.size_bytes(); i += 4) {
+            if (!p[i + 3]) continue;
+            const Color c = nearest(p[i], p[i + 1], p[i + 2]);
+            p[i] = c.r; p[i + 1] = c.g; p[i + 2] = c.b;
+        }
+        return;
+    }
+    // Floyd-Steinberg error diffusion.
+    std::vector<float> err(static_cast<size_t>(w + 2) * 2 * 3, 0.0f);
+    auto E = [&](int row, int x, int c) -> float& { return err[(static_cast<size_t>(row) * (w + 2) + x + 1) * 3 + c]; };
+    for (int y = 0; y < h; ++y) {
+        const int cur = y & 1, nxt = cur ^ 1;
+        for (int x = -1; x <= w; ++x) for (int c = 0; c < 3; ++c) E(nxt, x, c) = 0.0f;
+        for (int x = 0; x < w; ++x) {
+            uint8_t* p = img.data() + (static_cast<size_t>(y) * w + x) * 4;
+            if (!p[3]) continue;
+            int v[3];
+            for (int c = 0; c < 3; ++c) v[c] = std::clamp(static_cast<int>(std::lround(p[c] + E(cur, x, c))), 0, 255);
+            const Color q = nearest(v[0], v[1], v[2]);
+            const int e[3] = {v[0] - q.r, v[1] - q.g, v[2] - q.b};
+            p[0] = q.r; p[1] = q.g; p[2] = q.b;
+            for (int c = 0; c < 3; ++c) {
+                E(cur, x + 1, c) += e[c] * 7.0f / 16.0f;
+                E(nxt, x - 1, c) += e[c] * 3.0f / 16.0f;
+                E(nxt, x, c) += e[c] * 5.0f / 16.0f;
+                E(nxt, x + 1, c) += e[c] * 1.0f / 16.0f;
+            }
+        }
+    }
+}
+
+void to_monochrome(Image& img, bool dither) {
+    grayscale(img);
+    apply_palette(img, {{0, 0, 0, 255}, {255, 255, 255, 255}}, dither);
+}
+
+namespace {
+Image gray_plane(int w, int h) { return Image(w, h, {0, 0, 0, 255}); }
+void set_gray(Image& img, int x, int y, int v) { uint8_t* p = img.data() + (static_cast<size_t>(y) * img.width() + x) * 4; p[0] = p[1] = p[2] = static_cast<uint8_t>(std::clamp(v, 0, 255)); p[3] = 255; }
+int get_gray(const Image& img, int x, int y) { return img.data()[(static_cast<size_t>(y) * img.width() + x) * 4]; }
+}  // namespace
+
+std::vector<Image> split_channels(const Image& img, int mode) {
+    const int w = img.width(), h = img.height();
+    std::vector<Image> out;
+    const int n = mode == 2 ? 4 : 3;
+    for (int i = 0; i < n; ++i) out.push_back(gray_plane(w, h));
+    for (int y = 0; y < h; ++y)
+        for (int x = 0; x < w; ++x) {
+            const Color c = img.get(x, y);
+            if (mode == 0) { set_gray(out[0], x, y, c.r); set_gray(out[1], x, y, c.g); set_gray(out[2], x, y, c.b); }
+            else if (mode == 1) {
+                const adjust::HSL hsl = adjust::rgb_to_hsl(c.r, c.g, c.b);
+                set_gray(out[0], x, y, static_cast<int>(hsl.h / 360.0f * 255.0f + 0.5f));
+                set_gray(out[1], x, y, static_cast<int>(hsl.s * 255.0f + 0.5f));
+                set_gray(out[2], x, y, static_cast<int>(hsl.l * 255.0f + 0.5f));
+            } else {
+                const int k = 255 - std::max({c.r, c.g, c.b});
+                const int den = 255 - k;
+                auto ch = [&](int v) { return den > 0 ? (255 - v - k) * 255 / den : 0; };
+                set_gray(out[0], x, y, ch(c.r)); set_gray(out[1], x, y, ch(c.g)); set_gray(out[2], x, y, ch(c.b)); set_gray(out[3], x, y, k);
+            }
+        }
+    return out;
+}
+
+Image combine_channels(const std::vector<Image>& planes, int mode) {
+    const int n = mode == 2 ? 4 : 3;
+    if (static_cast<int>(planes.size()) < n) return Image();
+    const int w = planes[0].width(), h = planes[0].height();
+    for (int i = 1; i < n; ++i) if (planes[static_cast<size_t>(i)].width() != w || planes[static_cast<size_t>(i)].height() != h) return Image();
+    Image out(w, h, {0, 0, 0, 255});
+    for (int y = 0; y < h; ++y)
+        for (int x = 0; x < w; ++x) {
+            const int a = get_gray(planes[0], x, y), b = get_gray(planes[1], x, y), c = get_gray(planes[2], x, y);
+            Color col{0, 0, 0, 255};
+            if (mode == 0) col = {static_cast<uint8_t>(a), static_cast<uint8_t>(b), static_cast<uint8_t>(c), 255};
+            else if (mode == 1) adjust::hsl_to_rgb({a / 255.0f * 360.0f, b / 255.0f, c / 255.0f}, &col.r, &col.g, &col.b);
+            else {
+                const int k = get_gray(planes[3], x, y);
+                col = {static_cast<uint8_t>((255 - a) * (255 - k) / 255), static_cast<uint8_t>((255 - b) * (255 - k) / 255), static_cast<uint8_t>((255 - c) * (255 - k) / 255), 255};
+            }
+            out.set(x, y, col);
+        }
+    return out;
+}
+
+Image arithmetic(const Image& a, const Image& b, ArithOp op, float divisor, int bias, bool clip, int channel) {
+    const int w = std::max(a.width(), b.width()), h = std::max(a.height(), b.height());
+    Image out(w, h, {0, 0, 0, 255});
+    if (divisor == 0.0f) divisor = 1.0f;
+    for (int y = 0; y < h; ++y)
+        for (int x = 0; x < w; ++x) {
+            const Color ca = x < a.width() && y < a.height() ? a.get(x, y) : Color{0, 0, 0, 255};
+            const Color cb = x < b.width() && y < b.height() ? b.get(x, y) : Color{0, 0, 0, 255};
+            const int va[3] = {ca.r, ca.g, ca.b}, vb[3] = {cb.r, cb.g, cb.b};
+            uint8_t res[3];
+            for (int c = 0; c < 3; ++c) {
+                if (channel != 0 && channel - 1 != c) { res[c] = static_cast<uint8_t>(va[c]); continue; }
+                int v;
+                switch (op) {
+                    case ArithOp::Add: v = va[c] + vb[c]; break;
+                    case ArithOp::Subtract: v = va[c] - vb[c]; break;
+                    case ArithOp::Multiply: v = va[c] * vb[c] / 255; break;
+                    case ArithOp::Difference: v = std::abs(va[c] - vb[c]); break;
+                    case ArithOp::Lightest: v = std::max(va[c], vb[c]); break;
+                    case ArithOp::Darkest: v = std::min(va[c], vb[c]); break;
+                    case ArithOp::Average: v = (va[c] + vb[c]) / 2; break;
+                    case ArithOp::And: v = va[c] & vb[c]; break;
+                    case ArithOp::Or: v = va[c] | vb[c]; break;
+                    default: v = va[c] ^ vb[c]; break;
+                }
+                v = static_cast<int>(v / divisor) + bias;
+                res[c] = static_cast<uint8_t>(clip ? std::clamp(v, 0, 255) : ((v % 256) + 256) % 256);
+            }
+            out.set(x, y, {res[0], res[1], res[2], 255});
+        }
+    return out;
+}
 
 // --- Projective warps -----------------------------------------------------
 

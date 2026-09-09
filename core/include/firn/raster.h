@@ -149,6 +149,18 @@ Image rotate(const Image& src, float degrees);
 // Size of the canvas rotate() produces for a given source size.
 void rotated_size(int w, int h, float degrees, int* out_w, int* out_h);
 
+// Colors and palettes (Image > Count Colors, Decrease Color Depth, Palette).
+size_t count_colors(const Image& img);                                        // distinct RGB among opaque pixels
+std::vector<Color> median_cut_palette(const Image& img, int colors);          // 2..256 entries
+void apply_palette(Image& img, const std::vector<Color>& palette, bool dither);   // nearest color, optional error diffusion
+void to_monochrome(Image& img, bool dither);                                  // black and white
+// Channel splitting and combining: mode 0 RGB, 1 HSL, 2 CMYK (four planes).
+std::vector<Image> split_channels(const Image& img, int mode);
+Image combine_channels(const std::vector<Image>& planes, int mode);
+// Image Arithmetic: per-channel (a op b) / divisor + bias, clipped or wrapped.
+enum class ArithOp { Add, Subtract, Multiply, Difference, Lightest, Darkest, Average, And, Or, Xor };
+Image arithmetic(const Image& a, const Image& b, ArithOp op, float divisor, int bias, bool clip, int channel /* 0 all, 1 r, 2 g, 3 b */);
+
 // Projective warps for the Deform, Straighten and Perspective tools.
 // A homography H maps source (x, y, 1) to destination; points are
 // (TL, TR, BR, BL) corner lists.

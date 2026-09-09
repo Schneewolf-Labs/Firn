@@ -21,4 +21,9 @@ bool save(const Image& img, const std::string& path, std::string* err = nullptr,
 const std::vector<std::string>& load_extensions();  // includes the native container formats
 const std::vector<std::string>& save_extensions();
 
+
+// JASC-PAL palette files (the original's .PspPalette): "JASC-PAL", "0100",
+// a count, then "r g b" lines.
+std::vector<Color> load_palette(const std::string& path, std::string* err = nullptr);
+bool save_palette(const std::vector<Color>& palette, const std::string& path, std::string* err = nullptr);
 }  // namespace firn::io
