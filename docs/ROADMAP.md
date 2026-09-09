@@ -108,10 +108,10 @@ for. Ranked by value per effort; work top to bottom, tick as they land.
       or outside), Count Colors, Decrease Color Depth (2/16/256 with error
       diffusion, median cut), palettes (JASC-PAL load/save), Split/Combine
       Channel (RGB, HSL, CMYK), Arithmetic
-- [ ] Photo fixes: One Step Photo Fix, Automatic Color/Contrast/Saturation
+- [x] Photo fixes: One Step Photo Fix, Automatic Color/Contrast/Saturation
       Enhancement, Clarify, Black and White Points, Histogram Adjustment,
       Salt and Pepper, JPEG Artifact Removal, Fill Flash, Backlighting,
-      Chromatic Aberration Removal, Digital Camera Noise Removal
+      Chromatic Aberration Removal, Digital Camera Noise Removal (bilateral)
 - [ ] Warp Brush and Mesh Warp; Scratch Remover, Object Remover
 - [ ] Effects long tail: Page Curl, Lights, Fur, Weave, Pattern, Balls and
       Bubbles, Neon Glow, Glowing Edges, Colored Edges/Foil, Hot Wax, Enamel,

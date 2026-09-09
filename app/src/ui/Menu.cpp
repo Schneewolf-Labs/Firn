@@ -5,6 +5,7 @@
 #include "firn/adjust.h"
 #include "firn/io_psp.h"
 #include "firn/effects.h"
+#include "firn/photo.h"
 #include "firn/mask.h"
 #include "imgui.h"
 
@@ -156,6 +157,9 @@ void App::draw_menu() {
             if (ImGui::MenuItem("Add Noise...")) open_adjust = Adj::AddNoise;
             if (ImGui::MenuItem("Median Filter...")) open_adjust = Adj::Median;
             if (ImGui::MenuItem("Despeckle")) run(std::make_unique<AdjustCommand>(layer, "Despeckle", [](Image& i) { effects::median(i, 1); }));
+            if (ImGui::MenuItem("Salt and Pepper Filter...")) open_adjust = Adj::SaltPepper;
+            if (ImGui::MenuItem("JPEG Artifact Removal...")) open_adjust = Adj::JpegArtifacts;
+            if (ImGui::MenuItem("Digital Camera Noise Removal...")) open_adjust = Adj::NoiseRemoval;
             if (ImGui::MenuItem("Erode")) run(std::make_unique<AdjustCommand>(layer, "Erode", effects::erode));
             if (ImGui::MenuItem("Dilate")) run(std::make_unique<AdjustCommand>(layer, "Dilate", effects::dilate));
             ImGui::EndMenu();
@@ -179,13 +183,24 @@ void App::draw_menu() {
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("Photo Fix", has_layer)) {
+            if (ImGui::MenuItem("One Step Photo Fix")) run(std::make_unique<AdjustCommand>(layer, "One Step Photo Fix", photo::one_step_photo_fix));
+            if (ImGui::MenuItem("Automatic Color Balance...")) open_adjust = Adj::AutoColor;
+            if (ImGui::MenuItem("Automatic Contrast Enhancement...")) open_adjust = Adj::AutoContrast;
+            if (ImGui::MenuItem("Automatic Saturation Enhancement...")) open_adjust = Adj::AutoSaturation;
+            if (ImGui::MenuItem("Clarify...")) open_adjust = Adj::Clarify;
             if (ImGui::MenuItem("Fade Correction...")) open_adjust = Adj::FadeCorrection;
             ImGui::TextDisabled("Red-eye: use the Red-eye Removal tool.");
             ImGui::EndMenu();
         }
+        if (ImGui::BeginMenu("Photo Fix (more)", has_layer)) {
+            if (ImGui::MenuItem("Black and White Points...")) open_adjust = Adj::BlackWhitePoints;
+            if (ImGui::MenuItem("Histogram Adjustment...")) open_adjust = Adj::HistogramAdjust;
+            if (ImGui::MenuItem("Fill Flash...")) open_adjust = Adj::FillFlash;
+            if (ImGui::MenuItem("Backlighting...")) open_adjust = Adj::Backlighting;
+            if (ImGui::MenuItem("Chromatic Aberration Removal...")) open_adjust = Adj::ChromaticAberration;
+            ImGui::EndMenu();
+        }
         ImGui::Separator();
-        if (ImGui::MenuItem("Automatic Contrast Enhancement", nullptr, false, has_layer))
-            run(std::make_unique<AdjustCommand>(layer, "Automatic Contrast Enhancement", [](Image& img) { adjust::auto_contrast(img); }));
         if (ImGui::MenuItem("Negative Image", "Ctrl+I", false, has_layer))
             run(std::make_unique<InvertCommand>(layer));
         ImGui::EndMenu();

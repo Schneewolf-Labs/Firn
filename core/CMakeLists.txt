@@ -10,6 +10,7 @@ add_library(firncore STATIC
   src/text.cpp
   src/vector.cpp
   src/adjustment.cpp
+  src/photo.cpp
   src/io.cpp
   src/io_psp.cpp
 )

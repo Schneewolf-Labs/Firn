@@ -117,7 +117,9 @@ struct App {
     enum class Adj { None, BrightnessContrast, Curves, Gamma, Levels, Threshold, ChannelMixer, Colorize, HSL,
                      Average, Gaussian, Posterize, Solarize, UnsharpMask, Median, MotionBlur, Mosaic, AddNoise, DropShadow,
                      ColorBalance, Sepia, HueMap, Wave, Pinch, Twirl, Buttonize, InnerBevel, Cutout,
-                     Ripple, Spherize, Lens, Halftone, Chrome, OuterBevel, FadeCorrection, Kaleidoscope, Sunburst };
+                     Ripple, Spherize, Lens, Halftone, Chrome, OuterBevel, FadeCorrection, Kaleidoscope, Sunburst,
+                     AutoColor, AutoContrast, AutoSaturation, Clarify, BlackWhitePoints, HistogramAdjust, SaltPepper,
+                     JpegArtifacts, FillFlash, Backlighting, ChromaticAberration, NoiseRemoval };
     Adj open_adjust = Adj::None;
     struct Preview {
         bool active = false;
@@ -142,6 +144,18 @@ struct App {
     float lv_gamma = 1.0f, gamma_value = 1.0f;
     float gamma_rgb[3] = {1.0f, 1.0f, 1.0f}; bool gamma_link = true;
     int fade_amount = 45;
+    // Photo fixes
+    int acb_strength = 30, acb_temperature = 6500;
+    int ace_bias = 1, ace_strength = 0, ace_appearance = 1;
+    int ase_bias = 1, ase_strength = 1; bool ase_skin = true;
+    int clarify_strength = 2;
+    float bwp_src_black[3] = {0, 0, 0}, bwp_src_white[3] = {1, 1, 1}, bwp_dst_black[3] = {0, 0, 0}, bwp_dst_white[3] = {1, 1, 1};
+    float ha_low = 0.5f, ha_high = 0.5f, ha_gamma = 1.0f; int ha_midtones = 0, ha_channel = 0;
+    int sp_size = 3, sp_sensitivity = 15; bool sp_smaller = true, sp_aggressive = false;
+    int jpeg_strength = 1, jpeg_crispness = 30;
+    int flash_strength = 40, backlight_strength = 40;
+    float ca_red = 0.0f, ca_blue = 0.0f;
+    int nr_strength = 50, nr_blend = 70, nr_sharpen = 0;
     float redeye_strength = 1.0f;
     int kal_petals = 6; float kal_angle = 0, kal_radius = 50;
     float sun_x = 0.5f, sun_y = 0.5f, sun_brightness = 0.8f, sun_ray_brightness = 0.6f; int sun_rays = 12; float sun_color[3] = {1, 1, 0.9f};

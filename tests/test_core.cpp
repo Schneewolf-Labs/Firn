@@ -17,6 +17,7 @@
 #include "firn/mask.h"
 #include "firn/raster.h"
 #include "firn/text.h"
+#include "firn/photo.h"
 #include "firn/vector.h"
 
 #define CHECK(cond)                                                              \
@@ -1619,7 +1620,44 @@ static void test_color_ops() {
     CHECK(shipped.empty() || shipped.size() == 256);
 }
 
+static void test_photo_fix_suite() {
+    // A dark, blue-tinted, low-contrast image.
+    Image img(16, 16);
+    for (int y = 0; y < 16; ++y) for (int x = 0; x < 16; ++x) img.set(x, y, {static_cast<uint8_t>(40 + x * 2), static_cast<uint8_t>(50 + x * 2), static_cast<uint8_t>(90 + x * 2), 255});
+    Image a = img; photo::auto_color_balance(a, 100);
+    CHECK(std::abs(a.get(8, 8).r - a.get(8, 8).b) < std::abs(img.get(8, 8).r - img.get(8, 8).b));   // less blue cast
+    Image c = img; photo::auto_contrast_enhance(c, 1, 0, 1);
+    CHECK(c.get(15, 0).r - c.get(0, 0).r > img.get(15, 0).r - img.get(0, 0).r);                      // more contrast
+    Image sat = img; photo::auto_saturation(sat, 2, 2, false);
+    CHECK(sat.get(8, 8).b - sat.get(8, 8).r > img.get(8, 8).b - img.get(8, 8).r);                    // more saturated
+    Image ff = img; photo::fill_flash(ff, 100);
+    CHECK(ff.get(0, 0).r > img.get(0, 0).r);                                                       // shadows lifted
+    Image bl(2, 1, {240, 240, 240, 255}); photo::backlighting(bl, 100);
+    CHECK(bl.get(0, 0).r < 240);                                                                   // highlights lowered
+    Image bw(2, 1); bw.set(0, 0, {20, 20, 20, 255}); bw.set(1, 0, {200, 200, 200, 255});
+    photo::black_white_points(bw, {20, 20, 20, 255}, {200, 200, 200, 255}, {0, 0, 0, 255}, {255, 255, 255, 255});
+    CHECK(bw.get(0, 0).r == 0 && bw.get(1, 0).r == 255);
+    Image ha = img; photo::histogram_adjust(ha, 0, 0, 1.0f, 0, 0);
+    CHECK(ha.get(15, 0).r >= img.get(15, 0).r);
+    // Salt and pepper: a lone white pixel on a gray field disappears; the field survives.
+    Image sp(9, 9, {100, 100, 100, 255}); sp.set(4, 4, {255, 255, 255, 255});
+    photo::salt_and_pepper(sp, 3, 20, true, false);
+    CHECK(sp.get(4, 4).r < 130 && sp.get(0, 0).r == 100);
+    Image nr = sp; nr.set(2, 2, {130, 100, 100, 255}); photo::noise_removal(nr, 80, 100, 0);
+    CHECK(std::abs(nr.get(2, 2).r - 100) < 30);
+    Image ja(8, 8, {100, 100, 100, 255}); for (int x = 4; x < 8; ++x) for (int y = 0; y < 8; ++y) ja.set(x, y, {200, 200, 200, 255});
+    photo::jpeg_artifact_removal(ja, 1, 0);
+    CHECK(ja.get(0, 0).r == 100 && ja.get(7, 7).r == 200);                                          // an edge stays an edge
+    Image ca(9, 9, {50, 60, 70, 255}); photo::chromatic_aberration(ca, 2.0f, -2.0f);
+    CHECK(ca.get(4, 4).r == 50 && ca.get(4, 4).g == 60 && ca.get(4, 4).b == 70);                     // center untouched
+    Image cl = img; photo::clarify(cl, 3);
+    CHECK(cl.get(8, 8).a == 255);
+    Image osf = img; photo::one_step_photo_fix(osf);
+    CHECK(osf.get(8, 8).a == 255 && osf.get(15, 0).r != img.get(15, 0).r);
+}
+
 int main() {
+    test_photo_fix_suite();
     test_color_ops();
     test_warp();
     test_adjustment_layers();

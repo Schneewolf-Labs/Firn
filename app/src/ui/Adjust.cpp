@@ -8,6 +8,7 @@
 #include "App.h"
 #include "firn/adjust.h"
 #include "firn/effects.h"
+#include "firn/photo.h"
 #include "firn/raster.h"
 #include "imgui.h"
 
@@ -201,7 +202,11 @@ void App::draw_adjust_dialogs() {
                                     "Add Noise", "Drop Shadow", "Color Balance", "Sepia Toning", "Hue Map", "Wave",
                                     "Pinch", "Twirl", "Buttonize", "Inner Bevel", "Cutout", "Ripple", "Spherize",
                                     "Lens Distortion", "Halftone", "Chrome", "Outer Bevel", "Fade Correction",
-                                    "Kaleidoscope", "Sunburst"};
+                                    "Kaleidoscope", "Sunburst",
+                                    "Automatic Color Balance", "Automatic Contrast Enhancement", "Automatic Saturation Enhancement",
+                                    "Clarify", "Black and White Points", "Histogram Adjustment", "Salt and Pepper Filter",
+                                    "JPEG Artifact Removal", "Fill Flash", "Backlighting", "Chromatic Aberration Removal",
+                                    "Digital Camera Noise Removal"};
     if (open_adjust != Adj::None) {
         if (doc && active_layer() >= 0) ImGui::OpenPopup(kTitles[static_cast<int>(open_adjust)]);
         open_adjust = Adj::None;
@@ -517,6 +522,59 @@ void App::draw_adjust_dialogs() {
     adjust_modal(*this, "Fade Correction",
         [&] { return ImGui::SliderInt("Amount of correction", &fade_amount, 1, 100); },
         [&](Image& img) { adjust::fade_correction(img, fade_amount); });
+
+    adjust_modal(*this, "Automatic Color Balance",
+        [&] { bool c = ImGui::SliderInt("Strength", &acb_strength, 0, 100); c |= ImGui::SliderInt("Illuminant temperature (K)", &acb_temperature, 2000, 12000); return c; },
+        [&](Image& img) { photo::auto_color_balance(img, acb_strength, acb_temperature); });
+    adjust_modal(*this, "Automatic Contrast Enhancement",
+        [&] { bool c = ImGui::Combo("Bias", &ace_bias, "Lighter\0Neutral\0Darker\0"); c |= ImGui::Combo("Strength", &ace_strength, "Normal\0Mild\0"); c |= ImGui::Combo("Appearance", &ace_appearance, "Flat\0Natural\0Bold\0"); return c; },
+        [&](Image& img) { photo::auto_contrast_enhance(img, ace_bias, ace_strength, ace_appearance); });
+    adjust_modal(*this, "Automatic Saturation Enhancement",
+        [&] { bool c = ImGui::Combo("Bias", &ase_bias, "Less colorful\0Normal\0More colorful\0"); c |= ImGui::Combo("Strength", &ase_strength, "Weak\0Normal\0Strong\0"); c |= ImGui::Checkbox("Skin tones present", &ase_skin); return c; },
+        [&](Image& img) { photo::auto_saturation(img, ase_bias, ase_strength, ase_skin); });
+    adjust_modal(*this, "Clarify",
+        [&] { return ImGui::SliderInt("Strength of effect", &clarify_strength, 1, 5); },
+        [&](Image& img) { photo::clarify(img, clarify_strength); });
+    adjust_modal(*this, "Black and White Points",
+        [&] {
+            bool c = ImGui::ColorEdit3("Source black", bwp_src_black, ImGuiColorEditFlags_NoInputs); ImGui::SameLine(); c |= ImGui::ColorEdit3("Destination black", bwp_dst_black, ImGuiColorEditFlags_NoInputs);
+            c |= ImGui::ColorEdit3("Source white", bwp_src_white, ImGuiColorEditFlags_NoInputs); ImGui::SameLine(); c |= ImGui::ColorEdit3("Destination white", bwp_dst_white, ImGuiColorEditFlags_NoInputs);
+            ImGui::TextDisabled("Pick the darkest and lightest colors that should become the destination black and white.");
+            return c;
+        },
+        [&](Image& img) {
+            auto col = [](const float* f) { return Color{static_cast<uint8_t>(f[0] * 255 + 0.5f), static_cast<uint8_t>(f[1] * 255 + 0.5f), static_cast<uint8_t>(f[2] * 255 + 0.5f), 255}; };
+            photo::black_white_points(img, col(bwp_src_black), col(bwp_src_white), col(bwp_dst_black), col(bwp_dst_white));
+        });
+    adjust_modal(*this, "Histogram Adjustment",
+        [&] {
+            draw_histogram(preview.histogram, ImVec2(256, 80));
+            bool c = ImGui::Combo("Edit", &ha_channel, "Luminance\0Red\0Green\0Blue\0");
+            c |= ImGui::SliderFloat("Low clip %", &ha_low, 0.0f, 50.0f, "%.2f");
+            c |= ImGui::SliderFloat("High clip %", &ha_high, 0.0f, 50.0f, "%.2f");
+            c |= ImGui::SliderFloat("Gamma", &ha_gamma, 0.1f, 7.0f, "%.2f", ImGuiSliderFlags_Logarithmic);
+            c |= ImGui::SliderInt("Midtones (compress / expand)", &ha_midtones, -100, 100);
+            return c;
+        },
+        [&](Image& img) { photo::histogram_adjust(img, ha_low, ha_high, ha_gamma, ha_midtones, ha_channel); });
+    adjust_modal(*this, "Salt and Pepper Filter",
+        [&] { bool c = ImGui::SliderInt("Speck size", &sp_size, 3, 9); c |= ImGui::SliderInt("Sensitivity to specks", &sp_sensitivity, 1, 30); c |= ImGui::Checkbox("Include all lower speck sizes", &sp_smaller); c |= ImGui::Checkbox("Aggressive action", &sp_aggressive); return c; },
+        [&](Image& img) { photo::salt_and_pepper(img, sp_size, sp_sensitivity, sp_smaller, sp_aggressive); });
+    adjust_modal(*this, "JPEG Artifact Removal",
+        [&] { bool c = ImGui::Combo("Strength", &jpeg_strength, "Low\0Normal\0High\0Maximum\0"); c |= ImGui::SliderInt("Crispness", &jpeg_crispness, 0, 100); return c; },
+        [&](Image& img) { photo::jpeg_artifact_removal(img, jpeg_strength, jpeg_crispness); });
+    adjust_modal(*this, "Fill Flash",
+        [&] { return ImGui::SliderInt("Strength", &flash_strength, 0, 100); },
+        [&](Image& img) { photo::fill_flash(img, flash_strength); });
+    adjust_modal(*this, "Backlighting",
+        [&] { return ImGui::SliderInt("Strength", &backlight_strength, 0, 100); },
+        [&](Image& img) { photo::backlighting(img, backlight_strength); });
+    adjust_modal(*this, "Chromatic Aberration Removal",
+        [&] { bool c = ImGui::SliderFloat("Red fringe (px at corners)", &ca_red, -20.0f, 20.0f, "%.1f"); c |= ImGui::SliderFloat("Blue fringe (px at corners)", &ca_blue, -20.0f, 20.0f, "%.1f"); return c; },
+        [&](Image& img) { photo::chromatic_aberration(img, ca_red, ca_blue); });
+    adjust_modal(*this, "Digital Camera Noise Removal",
+        [&] { bool c = ImGui::SliderInt("Strength", &nr_strength, 0, 100); c |= ImGui::SliderInt("Correction blend %", &nr_blend, 0, 100); c |= ImGui::SliderInt("Sharpening %", &nr_sharpen, 0, 100); return c; },
+        [&](Image& img) { photo::noise_removal(img, nr_strength, nr_blend, nr_sharpen); });
 
     adjust_modal(*this, "Kaleidoscope",
         [&] {
