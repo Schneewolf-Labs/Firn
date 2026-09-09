@@ -30,7 +30,12 @@ void App::apply_config() {
     new_h = config.new_height;
     history.set_limit(config.undo_limit);
     for (DocState& d : docs) d.history.set_limit(config.undo_limit);
-    if (color_managed_display != config.color_managed_display) { color_managed_display = config.color_managed_display; canvas_tex_revision = ~0ull; }
+    if (color_managed_display != config.color_managed_display) {
+        color_managed_display = config.color_managed_display;
+        canvas_tex_revision = ~0ull;
+        for (DocState& d : docs) d.tex_revision = ~0ull;
+    }
+    image_windows = config.image_windows;
     // Library folders may have changed: rescan on next use.
     tubes_loaded = brush_tips_loaded = textures_loaded = false;
     tubes.clear(); brush_tips.clear(); textures.clear();
@@ -95,6 +100,7 @@ void App::add_document(std::unique_ptr<Document> d, const std::string& path) {
     preview_cancel();
     stash_current();
     docs.emplace_back();
+    docs.back().uid = next_doc_uid++;
     current_doc = static_cast<int>(docs.size()) - 1;
     doc = std::move(d);
     history.clear();
@@ -124,6 +130,7 @@ bool App::document_modified(int index) const {
 void App::close_document(int index, bool force) {
     if (index < 0 || index >= static_cast<int>(docs.size())) return;
     if (!force && document_modified(index)) { pending_close = index; return; }
+    if (docs[index].tex) { glDeleteTextures(1, &docs[index].tex); docs[index].tex = 0; }
     if (index == current_doc) {
         tool().cancel(*this);
         preview_cancel();

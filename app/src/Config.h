@@ -16,6 +16,7 @@ struct Config {
     int checker_size = 12;            // transparency checkerboard cell, in screen px
     int new_width = 800, new_height = 600;
     bool color_managed_display = true;   // convert tagged images to sRGB for the screen
+    bool image_windows = false;          // one window per image instead of tabs
     std::string extra_tube_dir, extra_brush_dir, extra_texture_dir;
 
     static std::string directory();          // created on demand

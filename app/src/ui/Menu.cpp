@@ -487,6 +487,17 @@ void App::draw_menu() {
             if (ImGui::MenuItem(label.c_str(), nullptr, i == current_doc)) activate_document(i);
         }
         if (docs.empty()) ImGui::MenuItem("(no images open)", nullptr, false, false);
+        ImGui::Separator();
+        if (ImGui::MenuItem("Tabbed Documents", nullptr, !image_windows)) {
+            image_windows = !image_windows;
+            config.image_windows = image_windows;
+            config.save();
+            if (image_windows) arrange_request = Arrange::Cascade;
+        }
+        const bool can_arrange = image_windows && !docs.empty();
+        if (ImGui::MenuItem("Cascade", nullptr, false, can_arrange)) arrange_request = Arrange::Cascade;
+        if (ImGui::MenuItem("Tile Horizontally", nullptr, false, can_arrange)) arrange_request = Arrange::TileHorizontally;
+        if (ImGui::MenuItem("Tile Vertically", nullptr, false, can_arrange)) arrange_request = Arrange::TileVertically;
         ImGui::EndMenu();
     }
     ImGui::EndMainMenuBar();

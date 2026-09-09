@@ -38,6 +38,12 @@ struct DocState {
     bool fit_requested = true;
     firn::raster::Rect crop_rect;
     std::vector<float> guides_h, guides_v;  // image-space y / x positions
+    // Windowed view: a stable id for the ImGui window, its texture while the
+    // document is parked, and whether it has been placed in the workspace.
+    int uid = 0;
+    GLuint tex = 0;
+    uint64_t tex_revision = ~0ull;
+    bool placed = false;
 };
 
 struct App {
@@ -53,6 +59,17 @@ struct App {
     int current_doc = -1;
     int untitled_counter = 0;
     int select_tab_request = -1;        // tab index to select on the next frame
+    int next_doc_uid = 1;
+    // Windowed view: every open image in its own window over the Image
+    // workspace, each with its own zoom, instead of tabs in one view.
+    bool image_windows = false;
+    enum class Arrange { None, Cascade, TileHorizontally, TileVertically };
+    Arrange arrange_request = Arrange::None;
+    ImVec2 workspace_pos, workspace_size;   // the Image window's client area, in window mode
+    void draw_document_windows();
+    void draw_parked_view(DocState& s, ImVec2 view_pos, ImVec2 view_size);
+    void upload_document_texture(DocState& s);
+    void draw_canvas_view(ImVec2 view_pos, ImVec2 view_size);
     int pending_close = -1;             // document awaiting the unsaved-changes prompt
     bool pending_quit = false;
     bool modified() const { return doc && history.cursor() != saved_cursor; }

@@ -136,6 +136,17 @@ for. Ranked by value per effort; work top to bottom, tick as they land.
       Convert to Profile (8- and 16-bit), color managed display (composite converted
       to sRGB for the screen), profile shown in Image Information
 
+## 12. User feedback (2026-09-09, first hands-on session)
+
+- [x] Drag a file onto the window to open it
+- [x] Save As: a file type list
+- [x] Windowed view of all open images with independent zoom (Window >
+      Tabbed Documents off; Cascade, Tile Horizontally, Tile Vertically)
+- [ ] Tool icons in the Tools palette
+- [ ] The full Material Properties dialog (color, gradient, pattern, texture,
+      swatches, foreground/background, lock)
+- [ ] Thumbnails in the file dialog
+
 ## Dropped (not worth the effort for this port)
 
 - Art Media layers and tools (oil brush, chalk, pastel, palette knife,

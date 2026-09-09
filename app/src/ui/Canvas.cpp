@@ -2,16 +2,30 @@
 #include <cmath>
 #include <cstdio>
 
+#include <SDL_opengl.h>
+
 #include "App.h"
+#include "firn/icc.h"
 #include "imgui.h"
 
 // The image window. Draws the composite texture with zoom/pan, a checkerboard
 // behind it for transparency, handles wheel-zoom and middle/space-drag pan,
-// and routes everything else to the active tool.
+// and routes everything else to the active tool. In tabbed mode the "Image"
+// dock window holds one tab per document; in windowed mode it is the
+// workspace and every document floats over it in its own window.
 void App::draw_canvas() {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
     ImGui::Begin("Image", nullptr, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
     ImGui::PopStyleVar();
+
+    if (image_windows) {
+        workspace_pos = ImGui::GetCursorScreenPos();
+        workspace_size = ImGui::GetContentRegionAvail();
+        ImGui::GetWindowDrawList()->AddRectFilled(workspace_pos, ImVec2(workspace_pos.x + workspace_size.x, workspace_pos.y + workspace_size.y), IM_COL32(45, 45, 45, 255));
+        ImGui::End();
+        draw_document_windows();
+        return;
+    }
 
     // One tab per open document. Selecting a tab activates that document;
     // the close button asks about unsaved changes.
@@ -19,7 +33,7 @@ void App::draw_canvas() {
         int close_request = -1, select_request = -1;
         for (int i = 0; i < static_cast<int>(docs.size()); ++i) {
             char label[300];
-            std::snprintf(label, sizeof(label), "%s%s###doc%d", document_title(i).c_str(), document_modified(i) ? "*" : "", i);
+            std::snprintf(label, sizeof(label), "%s%s###doc%d", document_title(i).c_str(), document_modified(i) ? "*" : "", docs[i].uid);
             bool open = true;
             const ImGuiTabItemFlags flags = select_tab_request == i ? ImGuiTabItemFlags_SetSelected : 0;
             if (ImGui::BeginTabItem(label, &open, flags)) {
@@ -33,9 +47,147 @@ void App::draw_canvas() {
         if (select_request >= 0) activate_document(select_request);
         if (close_request >= 0) close_document(close_request);
     }
+    draw_canvas_view(ImGui::GetCursorScreenPos(), ImGui::GetContentRegionAvail());
+    ImGui::End();
+}
 
-    ImVec2 view_pos = ImGui::GetCursorScreenPos();
-    ImVec2 view_size = ImGui::GetContentRegionAvail();
+// Windowed mode: one floating window per document inside the workspace.
+// The active document draws the full canvas; the others draw a read-only
+// view from their own texture and become active when clicked or focused.
+void App::draw_document_windows() {
+    const int n = static_cast<int>(docs.size());
+    int activate = -1, close = -1;
+    const float chrome = ImGui::GetFrameHeight();  // title bar
+    for (int i = 0; i < n; ++i) {
+        DocState& s = docs[i];
+        char label[300];
+        std::snprintf(label, sizeof(label), "%s%s###docwin%d", document_title(i).c_str(), document_modified(i) ? "*" : "", s.uid);
+        const firn::Document* d = i == current_doc ? doc.get() : s.doc.get();
+
+        // Placement: an explicit arrangement, else a cascade slot for a new window.
+        ImVec2 pos, size;
+        bool place = false;
+        if (arrange_request == Arrange::Cascade) {
+            const float step = chrome + 6.0f;
+            size = ImVec2(std::max(200.0f, workspace_size.x * 0.65f), std::max(150.0f, workspace_size.y * 0.65f));
+            pos = ImVec2(workspace_pos.x + step * i, workspace_pos.y + step * i);
+            place = true;
+        } else if (arrange_request == Arrange::TileHorizontally || arrange_request == Arrange::TileVertically) {
+            // Horizontally: rows of full width stacked top to bottom. Vertically: columns side by side.
+            int major = static_cast<int>(std::ceil(std::sqrt(static_cast<float>(n))));
+            int minor = (n + major - 1) / major;
+            if (arrange_request == Arrange::TileHorizontally) std::swap(major, minor);
+            // major = columns, minor = rows
+            const int col = i % major, row = i / major;
+            const int cols_in_row = std::min(major, n - row * major);
+            const float cw = workspace_size.x / cols_in_row, rh = workspace_size.y / minor;
+            pos = ImVec2(workspace_pos.x + cw * col, workspace_pos.y + rh * row);
+            size = ImVec2(cw, rh);
+            place = true;
+        } else if (!s.placed && d) {
+            const float step = chrome + 6.0f;
+            const int slot = i % 8;
+            size = ImVec2(std::clamp(d->width() * 1.0f + 4.0f, 240.0f, workspace_size.x * 0.7f), std::clamp(d->height() * 1.0f + chrome + 4.0f, 180.0f, workspace_size.y * 0.7f));
+            pos = ImVec2(workspace_pos.x + step * slot, workspace_pos.y + step * slot);
+            place = true;
+        }
+        if (place) {
+            ImGui::SetNextWindowPos(pos, ImGuiCond_Always);
+            ImGui::SetNextWindowSize(size, ImGuiCond_Always);
+            s.placed = true;
+            if (i == current_doc) fit_requested = true; else s.fit_requested = true;
+        }
+        if (select_tab_request == i) ImGui::SetNextWindowFocus();
+
+        bool open = true;
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowMinSize, ImVec2(160, 120));
+        const bool shown = ImGui::Begin(label, &open, ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings);
+        ImGui::PopStyleVar(2);
+        if (shown) {
+            const ImVec2 view_pos = ImGui::GetCursorScreenPos();
+            const ImVec2 view_size = ImGui::GetContentRegionAvail();
+            if (i == current_doc) {
+                draw_canvas_view(view_pos, view_size);
+            } else {
+                draw_parked_view(s, view_pos, view_size);
+                const bool clicked = ImGui::IsWindowHovered(ImGuiHoveredFlags_RootAndChildWindows) && (ImGui::IsMouseClicked(ImGuiMouseButton_Left) || ImGui::IsMouseClicked(ImGuiMouseButton_Right) || ImGui::IsMouseClicked(ImGuiMouseButton_Middle));
+                if (clicked) activate = i;
+            }
+        }
+        ImGui::End();
+        if (!open) close = i;
+    }
+    select_tab_request = -1;
+    arrange_request = Arrange::None;
+    if (activate >= 0) activate_document(activate);
+    if (close >= 0) close_document(close);
+}
+
+// A parked document: its composite at its own zoom and pan, wheel to zoom,
+// middle drag to pan. Any other click activates it (handled by the caller).
+void App::draw_parked_view(DocState& s, ImVec2 view_pos, ImVec2 view_size) {
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    dl->AddRectFilled(view_pos, ImVec2(view_pos.x + view_size.x, view_pos.y + view_size.y), IM_COL32(60, 60, 60, 255));
+    if (!s.doc || view_size.x <= 0 || view_size.y <= 0) return;
+    upload_document_texture(s);
+    const float img_w = static_cast<float>(s.doc->width()), img_h = static_cast<float>(s.doc->height());
+    const ImVec2 center(view_pos.x + view_size.x * 0.5f, view_pos.y + view_size.y * 0.5f);
+    if (s.fit_requested && view_size.x > 64.0f && view_size.y > 64.0f) {
+        s.zoom = std::clamp(std::min(view_size.x / img_w, view_size.y / img_h) * 0.95f, 0.01f, 64.0f);
+        s.pan_x = s.pan_y = 0.0f;
+        s.fit_requested = false;
+    }
+    ImGui::SetCursorScreenPos(view_pos);
+    ImGui::InvisibleButton("parked", view_size, ImGuiButtonFlags_MouseButtonMiddle);
+    ImGuiIO& io = ImGui::GetIO();
+    if (ImGui::IsItemHovered() && io.MouseWheel != 0.0f) {
+        const float old_zoom = s.zoom;
+        s.zoom = std::clamp(s.zoom * std::pow(1.15f, io.MouseWheel), 0.01f, 64.0f);
+        const float k = s.zoom / old_zoom;
+        const float mx = io.MousePos.x - center.x, my = io.MousePos.y - center.y;
+        s.pan_x = mx - (mx - s.pan_x) * k;
+        s.pan_y = my - (my - s.pan_y) * k;
+    }
+    if (ImGui::IsItemActive() && ImGui::IsMouseDragging(ImGuiMouseButton_Middle)) { s.pan_x += io.MouseDelta.x; s.pan_y += io.MouseDelta.y; }
+    const float dw = img_w * s.zoom, dh = img_h * s.zoom;
+    const ImVec2 p0(center.x + s.pan_x - dw * 0.5f, center.y + s.pan_y - dh * 0.5f);
+    const ImVec2 p1(p0.x + dw, p0.y + dh);
+    dl->PushClipRect(view_pos, ImVec2(view_pos.x + view_size.x, view_pos.y + view_size.y), true);
+    dl->AddRectFilled(p0, p1, IM_COL32(175, 175, 175, 255));
+    if (s.tex) dl->AddImage((ImTextureID)(intptr_t)s.tex, p0, p1);
+    dl->AddRect(ImVec2(p0.x - 1, p0.y - 1), ImVec2(p1.x + 1, p1.y + 1), IM_COL32(0, 0, 0, 255));
+    dl->PopClipRect();
+}
+
+// Composite of a parked document as a texture (color managed like the
+// active one). Parked documents do not change, so this uploads once.
+void App::upload_document_texture(DocState& s) {
+    if (!s.doc) return;
+    if (s.tex && s.tex_revision == s.doc->revision()) return;
+    firn::Image img = s.doc->composite();
+    if (color_managed_display && !s.doc->icc().empty()) {
+        const firn::icc::Profile p = firn::icc::parse(s.doc->icc());
+        if (p.valid && p.matrix_trc && !p.is_srgb()) firn::icc::Transform(p, firn::icc::srgb()).apply(img);
+    }
+    if (!s.tex) {
+        glGenTextures(1, &s.tex);
+        glBindTexture(GL_TEXTURE_2D, s.tex);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    } else {
+        glBindTexture(GL_TEXTURE_2D, s.tex);
+    }
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, img.width(), img.height(), 0, GL_RGBA, GL_UNSIGNED_BYTE, img.data());
+    s.tex_revision = s.doc->revision();
+}
+
+// The active document's view: everything from rulers to marching ants,
+// inside whatever window is current.
+void App::draw_canvas_view(ImVec2 view_pos, ImVec2 view_size) {
     ImDrawList* dl = ImGui::GetWindowDrawList();
 
     // Rulers take a strip along the top and left; the canvas view shrinks.
@@ -46,7 +198,6 @@ void App::draw_canvas() {
 
     if (!doc || !canvas_tex || view_size.x <= 0 || view_size.y <= 0) {
         dl->AddRectFilled(view_pos, ImVec2(view_pos.x + view_size.x, view_pos.y + view_size.y), IM_COL32(60, 60, 60, 255));
-        ImGui::End();
         return;
     }
 
@@ -256,5 +407,4 @@ void App::draw_canvas() {
     cursor_inside = hovered && in.inside;
     cursor_x = static_cast<int>(std::floor(in.img_x));
     cursor_y = static_cast<int>(std::floor(in.img_y));
-    ImGui::End();
 }

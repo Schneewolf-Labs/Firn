@@ -138,7 +138,7 @@ ImVec2 Driver::image_to_window(const App& app, float x, float y) const {
 std::string Driver::state_text(App& app) const {
     std::ostringstream o;
     o << "tool=\"" << app.tool().name() << "\"";
-    o << " docs=" << app.docs.size();
+    o << " docs=" << app.docs.size() << " windows=" << (app.image_windows ? 1 : 0);
     if (app.doc) {
         o << " title=\"" << app.doc_title << "\" modified=" << (app.modified() ? 1 : 0);
         o << " size=" << app.doc->width() << "x" << app.doc->height() << " depth=" << app.doc->bit_depth() << " layers=" << app.doc->layer_count();
@@ -319,7 +319,9 @@ void Driver::before_frame(App& app, SDL_Window* window) {
                 // Tool options that scripts set directly instead of hunting for the widget.
                 const std::string& n = s.text;
                 const float v = s.x;
-                if (n == "create_as_vector") app.create_as_vector = v != 0;
+                if (n == "image_windows") { app.image_windows = v != 0; if (app.image_windows) app.arrange_request = App::Arrange::Cascade; }
+                else if (n == "arrange") app.arrange_request = static_cast<App::Arrange>(static_cast<int>(v));  // 1 cascade, 2 tile horizontally, 3 tile vertically
+                else if (n == "create_as_vector") app.create_as_vector = v != 0;
                 else if (n == "shape_fill") app.shape_fill = v != 0;
                 else if (n == "shape_stroke") app.shape_stroke = v != 0;
                 else if (n == "shape_antialias") app.shape_antialias = v != 0;
