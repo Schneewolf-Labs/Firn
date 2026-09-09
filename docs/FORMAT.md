@@ -99,6 +99,17 @@ composite image block (id 9). Files whose layers are all vector or adjustment
 still carry a full-size (type 0) composite, which the reader uses as a
 fallback Background layer.
 
+## What the writer emits
+
+`io::save_psp` writes version 6.0: image attributes (LZ77, 24-bit), a
+creator block (dates, application id 1, version 8.0.0.1), a composite bank
+with a JPEG thumbnail and a full-size zlib composite, then the layer bank.
+Every non-Background layer gets a transparency channel even when opaque,
+because the original does the same and the reader uses "no transparency
+channel" to recognise the Background. Layer info chunks end with the 43-byte
+tail found in every sample. The original (under Wine) opens the result with
+all layers intact; `scripts/original-open.sh` automates that check.
+
 ## Not read
 
 Selections (id 6) and alpha channel banks (7/8), masks attached to groups or

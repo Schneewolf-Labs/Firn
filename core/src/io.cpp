@@ -83,7 +83,7 @@ const std::vector<std::string>& load_extensions() {
 }
 
 const std::vector<std::string>& save_extensions() {
-    static const std::vector<std::string> v{"png", "jpg", "jpeg", "bmp", "tga"};
+    static const std::vector<std::string> v{"pspimage", "png", "jpg", "jpeg", "bmp", "tga"};
     return v;
 }
 

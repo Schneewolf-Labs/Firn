@@ -24,8 +24,8 @@ what to work on next.
 
 ## 2. Native format writer (essential for layered work)
 
-- [ ] Save .PspImage (version 6.0, zlib) with layers, opacity, blend, visibility
-- [ ] Save/Save As default to the native format when a document has layers
+- [x] Save .PspImage (version 6.0, zlib) with layers, opacity, blend, visibility
+- [x] Save/Save As default to the native format when a document has layers
 
 ## 3. Adjustments with live preview (the most-called script commands)
 

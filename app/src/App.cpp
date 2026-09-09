@@ -46,12 +46,13 @@ bool App::open_document(const std::string& path) {
 bool App::save_document(const std::string& path) {
     if (!doc) return false;
     std::string err;
-    if (!io::save(doc->composite(), path, &err)) {
+    if (!io::save_document(*doc, path, &err)) {
         status = "Save failed: " + err;
         return false;
     }
     doc_path = path;
     status = "Saved " + path;
+    if (!io::is_psp_extension(path) && doc->layer_count() > 1) status += "\nFlattened: only .PspImage keeps layers.";
     return true;
 }
 
@@ -63,7 +64,16 @@ void App::request_open() {
 void App::request_save_as() {
     if (!doc) return;
     file_op = PendingFileOp::SaveAs;
-    file_dialog.open(FileDialog::Mode::Save, "Save As", io::save_extensions(), doc_path.empty() ? "untitled.png" : doc_path);
+    // Layered documents default to the native container; single-layer ones keep their format.
+    std::string suggested = doc_path.empty() ? "untitled" : doc_path;
+    const bool layered = doc->layer_count() > 1 || !doc->layer(0).background;
+    if (doc_path.empty() || (layered && !io::is_psp_extension(doc_path))) {
+        const auto dot = suggested.rfind('.');
+        const auto slash = suggested.find_last_of("/\\");
+        if (dot != std::string::npos && (slash == std::string::npos || dot > slash)) suggested.resize(dot);
+        suggested += layered ? ".pspimage" : ".png";
+    }
+    file_dialog.open(FileDialog::Mode::Save, "Save As", io::save_extensions(), suggested);
 }
 
 void App::save() {

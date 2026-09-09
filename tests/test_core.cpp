@@ -570,7 +570,44 @@ static void test_geometry() {
     CHECK(doc.width() == 4 && doc.layer(1).pixels.get(3, 3).r == 9 && doc.layer(0).background);
 }
 
+static void test_psp_writer_roundtrip() {
+    Document doc(5, 4);
+    Layer& bg = doc.add_layer("Background");
+    bg.background = true;
+    for (int y = 0; y < 4; ++y) for (int x = 0; x < 5; ++x) bg.pixels.set(x, y, {static_cast<uint8_t>(x * 50), static_cast<uint8_t>(y * 60), 7, 255});
+    Layer& top = doc.add_layer("Semi");
+    top.pixels.set(2, 1, {255, 0, 0, 128});
+    top.pixels.set(3, 2, {0, 255, 0, 255});
+    top.opacity = 0.6f;
+    top.blend = BlendMode::Screen;
+    top.visible = false;
+    Layer& empty = doc.add_layer("Empty");
+    (void)empty;
+    doc.set_active_layer(1);
+
+    std::vector<uint8_t> file = io::save_psp_to_memory(doc);
+    std::string err;
+    std::vector<std::string> warnings;
+    auto back = io::load_psp_from_memory(file.data(), file.size(), &err, &warnings);
+    if (!back) std::fprintf(stderr, "roundtrip: %s\n", err.c_str());
+    CHECK(back != nullptr && warnings.empty());
+    CHECK(back->width() == 5 && back->height() == 4 && back->layer_count() == 3 && back->active_layer() == 1);
+    CHECK(back->layer(0).name == "Background" && back->layer(0).background);
+    for (int y = 0; y < 4; ++y) for (int x = 0; x < 5; ++x) {
+        Color a = bg.pixels.get(x, y), b = back->layer(0).pixels.get(x, y);
+        CHECK(a.r == b.r && a.g == b.g && a.b == b.b && b.a == 255);
+    }
+    const Layer& t = back->layer(1);
+    CHECK(t.name == "Semi" && !t.background && !t.visible && t.blend == BlendMode::Screen);
+    CHECK(t.opacity > 0.59f && t.opacity < 0.61f);
+    Color p = t.pixels.get(2, 1);
+    CHECK(p.r == 255 && p.g == 0 && p.a == 128);
+    CHECK(t.pixels.get(3, 2).g == 255 && t.pixels.get(0, 0).a == 0 && t.pixels.get(4, 3).a == 0);
+    CHECK(back->layer(2).name == "Empty" && back->layer(2).pixels.get(0, 0).a == 0);
+}
+
 int main() {
+    test_psp_writer_roundtrip();
     test_geometry();
     test_psp_reader();
     test_blend_modes();

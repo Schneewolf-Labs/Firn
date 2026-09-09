@@ -84,8 +84,13 @@ docs/    notes on the original: command inventory, module mapping, FORMAT.md
 - **Native format reading** lives in `core/src/io_psp.cpp`; `docs/FORMAT.md`
   is the reference and must be updated when the reader learns a new block.
   `tests/test_psp_corpus.cpp` loads every sample under `WindowsInstall/`
-  (skips when absent); run it after any reader change. Open files through
-  `io::load_document`, which dispatches on extension.
+  (skips when absent) and round-trips each through the writer; run it after
+  any reader or writer change. Open files through `io::load_document` and
+  save through `io::save_document`; both dispatch on extension.
+- **The original runs under Wine** from `WindowsInstall/`.
+  `scripts/original-open.sh file.pspimage shot.png` opens a file in it and
+  captures the window: the definitive check for anything the writer emits,
+  and a way to observe the original's behaviour when a port detail is unclear.
 - File open/save go through `FileDialog` (`app/src/ui/FileDialog.*`), an
   ImGui modal, via `App::request_open` / `request_save_as`. No native dialogs
   or extra dependencies. `io::save` picks the format from the extension.

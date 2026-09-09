@@ -25,4 +25,14 @@ std::unique_ptr<Document> load_document(const std::string& path, std::string* er
 
 bool is_psp_extension(const std::string& path);
 
+// Writes a version 6.0 file (zlib channels) with every layer, its name,
+// position, opacity, blend mode and visibility, plus the composite bank the
+// original expects (JPEG thumbnail and full-size composite).
+bool save_psp(const Document& doc, const std::string& path, std::string* err);
+std::vector<uint8_t> save_psp_to_memory(const Document& doc);
+
+// Saves by extension: the native container keeps layers; anything else
+// writes the flattened composite through io::save.
+bool save_document(const Document& doc, const std::string& path, std::string* err);
+
 }  // namespace firn::io

@@ -3,11 +3,17 @@
 #include <algorithm>
 #include <cctype>
 #include <cstring>
+#include <ctime>
 #include <fstream>
 #include <iterator>
 
 #include "firn/io.h"
-#include "stb/stb_image.h"  // declarations only; the implementation lives in io.cpp
+#include "stb/stb_image.h"        // declarations only; the implementation lives in io.cpp
+#include "stb/stb_image_write.h"  // in-memory JPEG
+
+// Defined by the stb_image_write implementation in io.cpp but only declared
+// inside its implementation section.
+extern "C" unsigned char* stbi_zlib_compress(unsigned char* data, int data_len, int* out_len, int quality);
 
 namespace firn::io {
 namespace {
@@ -350,6 +356,239 @@ std::unique_ptr<Document> load_document(const std::string& path, std::string* er
     bg.background = true;
     bg.pixels = std::move(*img);
     return doc;
+}
+
+// --- Writer --------------------------------------------------------------
+
+namespace {
+
+struct Writer {
+    std::vector<uint8_t> out;
+    void u8(int v) { out.push_back(static_cast<uint8_t>(v)); }
+    void u16(int v) { u8(v & 255); u8((v >> 8) & 255); }
+    void u32(uint32_t v) { for (int i = 0; i < 4; ++i) u8((v >> (8 * i)) & 255); }
+    void i32(int32_t v) { u32(static_cast<uint32_t>(v)); }
+    void f64(double v) { uint8_t b[8]; std::memcpy(b, &v, 8); out.insert(out.end(), b, b + 8); }
+    void bytes(const std::vector<uint8_t>& b) { out.insert(out.end(), b.begin(), b.end()); }
+    void bytes(const uint8_t* b, size_t n) { out.insert(out.end(), b, b + n); }
+    void block(uint16_t id, const std::vector<uint8_t>& payload) {
+        out.insert(out.end(), {'~', 'B', 'K', 0});
+        u16(id);
+        u32(static_cast<uint32_t>(payload.size()));
+        bytes(payload);
+    }
+    // "~FL" field inside creator / extended data blocks.
+    void field(uint16_t id, const std::vector<uint8_t>& payload) {
+        out.insert(out.end(), {'~', 'F', 'L', 0});
+        u16(id);
+        u32(static_cast<uint32_t>(payload.size()));
+        bytes(payload);
+    }
+};
+
+std::vector<uint8_t> zlib_compress(const std::vector<uint8_t>& data) {
+    int len = 0;
+    unsigned char* z = stbi_zlib_compress(const_cast<unsigned char*>(data.data()), static_cast<int>(data.size()), &len, 8);
+    std::vector<uint8_t> out(z, z + len);
+    free(z);
+    return out;
+}
+
+// One channel block: `plane` is sw*sh bytes.
+std::vector<uint8_t> channel_block(uint16_t dib_type, uint16_t channel_type, const std::vector<uint8_t>& plane, size_t nominal_len) {
+    Writer w;
+    const std::vector<uint8_t> z = zlib_compress(plane);
+    Writer payload;
+    payload.u32(16);
+    payload.u32(static_cast<uint32_t>(z.size()));
+    payload.u32(static_cast<uint32_t>(nominal_len));
+    payload.u16(dib_type);
+    payload.u16(channel_type);
+    payload.bytes(z);
+    w.block(kChannelBlock, payload.out);
+    return w.out;
+}
+
+// Splits an RGBA tile into planes and writes bitmap chunk + channel blocks.
+// `dib_image` / `dib_trans` select layer (0/1) or composite (8/9) types.
+std::vector<uint8_t> bitmap_and_channels(const Image& tile, bool with_alpha, uint16_t dib_image, uint16_t dib_trans) {
+    const size_t npx = static_cast<size_t>(tile.width()) * tile.height();
+    std::vector<uint8_t> planes[4];
+    for (auto& p : planes) p.resize(npx);
+    const uint8_t* s = tile.data();
+    for (size_t i = 0; i < npx; ++i)
+        for (int c = 0; c < 4; ++c) planes[c][i] = s[i * 4 + c];
+    Writer w;
+    w.u32(8);
+    w.u16(with_alpha ? 2 : 1);
+    w.u16(with_alpha ? 4 : 3);
+    const size_t padded = (static_cast<size_t>(tile.width()) + 3) / 4 * 4 * tile.height();
+    for (int c = 0; c < 3; ++c) w.bytes(channel_block(dib_image, static_cast<uint16_t>(c + 1), planes[c], padded * 3));
+    if (with_alpha) w.bytes(channel_block(dib_trans, 0, planes[3], padded));
+    return w.out;
+}
+
+raster::Rect content_bounds(const Image& img) {
+    raster::Rect r{img.width(), img.height(), 0, 0};
+    const uint8_t* p = img.data();
+    for (int y = 0; y < img.height(); ++y)
+        for (int x = 0; x < img.width(); ++x)
+            if (p[(static_cast<size_t>(y) * img.width() + x) * 4 + 3]) {
+                r.x0 = std::min(r.x0, x); r.x1 = std::max(r.x1, x + 1);
+                r.y0 = std::min(r.y0, y); r.y1 = y + 1;
+            }
+    return r.empty() ? raster::Rect{} : r;
+}
+
+bool any_transparency(const Image& img) {
+    const uint8_t* p = img.data();
+    for (size_t i = 3; i < img.size_bytes(); i += 4)
+        if (p[i] != 255) return true;
+    return false;
+}
+
+// Trailing bytes of a version 6 layer info chunk: invert-mask flag, blend
+// range count, five default blend ranges. Identical in every sample file.
+const uint8_t kLayerInfoTail[43] = {
+    0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0x00, 0x00, 0xff, 0xff, 0x00, 0x00, 0xff, 0xff, 0x00, 0x00, 0xff, 0xff, 0x00, 0x00,
+    0xff, 0xff, 0x00, 0x00, 0xff, 0xff, 0x00, 0x00, 0xff, 0xff, 0x00, 0x00, 0xff, 0xff, 0x00, 0x00, 0xff, 0xff, 0x00, 0x00,
+    0xff, 0xff, 0x00};
+
+std::vector<uint8_t> layer_block(const Layer& L, int doc_w, int doc_h) {
+    Writer info;
+    std::string name = L.name.substr(0, 255);
+    info.u32(0);  // chunk length, patched below
+    info.u16(static_cast<int>(name.size()));
+    info.bytes(reinterpret_cast<const uint8_t*>(name.data()), name.size());
+    info.u8(kLayerRaster);
+    info.i32(0); info.i32(0); info.i32(doc_w); info.i32(doc_h);
+    // Only a Background layer omits the transparency channel; the original
+    // writes one for every other layer even when it is fully opaque, and the
+    // reader relies on that to tell them apart.
+    const bool with_alpha = !L.background;
+    raster::Rect saved = with_alpha ? content_bounds(L.pixels) : raster::Rect{0, 0, doc_w, doc_h};
+    info.i32(saved.x0); info.i32(saved.y0); info.i32(saved.x1); info.i32(saved.y1);
+    info.u8(static_cast<int>(std::clamp(L.opacity, 0.0f, 1.0f) * 255.0f + 0.5f));
+    info.u8(static_cast<int>(L.blend));
+    info.u8(L.visible ? 1 : 0);
+    info.u8(0);  // transparency protected
+    info.u8(0);  // link group
+    for (int i = 0; i < 8; ++i) info.i32(0);  // mask rect, saved mask rect
+    info.u8(0); info.u8(0);                    // mask linked, mask disabled
+    info.bytes(kLayerInfoTail, sizeof(kLayerInfoTail));
+    const uint32_t len = static_cast<uint32_t>(info.out.size());
+    for (int i = 0; i < 4; ++i) info.out[i] = static_cast<uint8_t>((len >> (8 * i)) & 255);
+
+    Writer payload;
+    payload.bytes(info.out);
+    if (!saved.empty()) {
+        Image tile = raster::crop(L.pixels, saved);
+        if (!with_alpha) {  // opaque layer: drop alpha so readers see a solid Background
+            uint8_t* p = tile.data();
+            for (size_t i = 3; i < tile.size_bytes(); i += 4) p[i] = 255;
+        }
+        payload.bytes(bitmap_and_channels(tile, with_alpha, kDibImage, kDibTransMask));
+    } else {
+        payload.u32(8); payload.u16(2); payload.u16(4);  // empty layer: no channel data
+    }
+    Writer w;
+    w.block(kLayerBlock, payload.out);
+    return w.out;
+}
+
+void jpeg_sink(void* ctx, void* data, int size) {
+    auto* v = static_cast<std::vector<uint8_t>*>(ctx);
+    v->insert(v->end(), static_cast<uint8_t*>(data), static_cast<uint8_t*>(data) + size);
+}
+
+std::vector<uint8_t> composite_bank(const Image& flat) {
+    // Thumbnail: JPEG, longest side 200, flattened onto white.
+    const int tw = flat.width() >= flat.height() ? 200 : std::max(1, 200 * flat.width() / flat.height());
+    const int th = flat.width() >= flat.height() ? std::max(1, 200 * flat.height() / flat.width()) : 200;
+    Image thumb = raster::resample(flat, std::min(tw, flat.width()), std::min(th, flat.height()), raster::Filter::Bilinear);
+    std::vector<uint8_t> rgb(static_cast<size_t>(thumb.width()) * thumb.height() * 3);
+    for (size_t i = 0; i < rgb.size() / 3; ++i) {
+        const uint8_t* s = thumb.data() + i * 4;
+        const int a = s[3];
+        for (int c = 0; c < 3; ++c) rgb[i * 3 + c] = static_cast<uint8_t>((s[c] * a + 255 * (255 - a) + 127) / 255);
+    }
+    std::vector<uint8_t> jpg;
+    stbi_write_jpg_to_func(jpeg_sink, &jpg, thumb.width(), thumb.height(), 3, rgb.data(), 85);
+
+    Writer attr_thumb;
+    attr_thumb.u32(24); attr_thumb.i32(thumb.width()); attr_thumb.i32(thumb.height()); attr_thumb.u16(24); attr_thumb.u16(kCompJpeg);
+    attr_thumb.u16(1); attr_thumb.u32(16777216); attr_thumb.u16(1);
+    Writer attr_full;
+    attr_full.u32(24); attr_full.i32(flat.width()); attr_full.i32(flat.height()); attr_full.u16(24); attr_full.u16(kCompLz77);
+    attr_full.u16(1); attr_full.u32(16777216); attr_full.u16(0);
+    Writer jpeg_payload;
+    jpeg_payload.u32(14); jpeg_payload.u32(static_cast<uint32_t>(jpg.size())); jpeg_payload.u32(0); jpeg_payload.u16(5);
+    jpeg_payload.bytes(jpg);
+
+    Writer bank;
+    bank.u32(8); bank.u32(2);
+    bank.block(kCompositeAttrBlock, attr_thumb.out);
+    bank.block(kCompositeAttrBlock, attr_full.out);
+    bank.block(kJpegBlock, jpeg_payload.out);
+    bank.block(kCompositeImageBlock, bitmap_and_channels(flat, any_transparency(flat), kDibComposite, kDibCompositeTrans));
+    Writer w;
+    w.block(kCompositeBankBlock, bank.out);
+    return w.out;
+}
+
+}  // namespace
+
+std::vector<uint8_t> save_psp_to_memory(const Document& doc) {
+    Writer w;
+    w.bytes(reinterpret_cast<const uint8_t*>(kSignature), sizeof(kSignature) - 1);
+    while (w.out.size() < 32) w.u8(0);
+    w.u16(6); w.u16(0);
+
+    const Image flat = doc.composite();
+    const bool single_opaque = doc.layer_count() == 1 && doc.layer(0).background;
+    uint32_t contents = 0x00000001u | 0x01000000u | 0x04000000u;  // raster layers, thumbnail, composite
+    if (single_opaque) contents |= 0x10000000u;                    // flat image
+    if (any_transparency(flat)) contents |= 0x08000000u;          // composite transparency
+
+    Writer img;
+    img.u32(46); img.i32(doc.width()); img.i32(doc.height()); img.f64(72.0); img.u8(1);
+    img.u16(kCompLz77); img.u16(24); img.u16(1); img.u32(16777216); img.u8(0);
+    img.u32(static_cast<uint32_t>(doc.width()) * doc.height() * 3);
+    img.i32(std::max(0, doc.active_layer())); img.u16(static_cast<int>(doc.layer_count())); img.u32(contents);
+    w.block(kImageBlock, img.out);
+
+    Writer creator;
+    const uint32_t now = static_cast<uint32_t>(std::time(nullptr));
+    Writer t; t.u32(now);
+    creator.field(1, t.out);  // created
+    creator.field(2, t.out);  // modified
+    Writer app; app.u32(1);
+    creator.field(6, app.out);  // application id
+    Writer ver; ver.u32(0x08000001u);
+    creator.field(7, ver.out);  // application version
+    w.block(kCreatorBlock, creator.out);
+
+    w.bytes(composite_bank(flat));
+
+    Writer bank;
+    for (size_t i = 0; i < doc.layer_count(); ++i) bank.bytes(layer_block(doc.layer(i), doc.width(), doc.height()));
+    w.block(kLayerStartBlock, bank.out);
+    return w.out;
+}
+
+bool save_psp(const Document& doc, const std::string& path, std::string* err) {
+    const std::vector<uint8_t> data = save_psp_to_memory(doc);
+    std::ofstream f(path, std::ios::binary);
+    if (!f || !f.write(reinterpret_cast<const char*>(data.data()), static_cast<std::streamsize>(data.size()))) {
+        if (err) *err = "cannot write " + path;
+        return false;
+    }
+    return true;
+}
+
+bool save_document(const Document& doc, const std::string& path, std::string* err) {
+    if (is_psp_extension(path)) return save_psp(doc, path, err);
+    return save(doc.composite(), path, err);
 }
 
 }  // namespace firn::io

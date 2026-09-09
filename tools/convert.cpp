@@ -1,5 +1,6 @@
-// firn-convert: flatten any supported image (including the native container)
-// to PNG/JPEG/BMP/TGA from the command line. Also prints the layer stack.
+// firn-convert: convert any supported image from the command line. Writing
+// .pspimage keeps the layers; other formats get the flattened composite.
+// Also prints the layer stack.
 #include <cstdio>
 #include <string>
 #include <vector>
@@ -28,7 +29,7 @@ int main(int argc, char** argv) {
     }
     for (const auto& w : warnings) std::printf("  warning: %s\n", w.c_str());
     if (argc >= 3) {
-        if (!firn::io::save(doc->composite(), argv[2], &err)) {
+        if (!firn::io::save_document(*doc, argv[2], &err)) {
             std::fprintf(stderr, "%s: %s\n", argv[2], err.c_str());
             return 1;
         }

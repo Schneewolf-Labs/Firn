@@ -41,8 +41,9 @@ program's native container (`.PspImage`, plus `.PspTube` and `.PspFrame`,
 which share it) with layers, positions, opacity, blend modes and visibility.
 Vector, adjustment, mask and group layers are skipped with a warning; a file
 with no raster layers falls back to its embedded flattened composite. See
-`docs/FORMAT.md`. Saves PNG, JPEG, BMP and TGA (flattened). `firn-convert`
-does the same from the command line.
+`docs/FORMAT.md`. Saves the native container with layers, or PNG, JPEG, BMP
+and TGA flattened. Files Firn writes open in the original program.
+`firn-convert` does the same from the command line.
 
 ## Tools
 
