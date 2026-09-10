@@ -24,6 +24,8 @@ endif()
 add_library(stb INTERFACE)
 target_include_directories(stb INTERFACE ${CMAKE_SOURCE_DIR}/third_party)
 
+include(${CMAKE_SOURCE_DIR}/cmake/webp.cmake)   # WebP codec for core/src/io.cpp
+
 add_subdirectory(core)
 
 add_subdirectory(tools)
