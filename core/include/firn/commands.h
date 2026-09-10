@@ -406,6 +406,19 @@ public:
 private:
 };
 
+// Several commands as one history entry: executed in order, undone in reverse.
+class CompoundCommand : public Command {
+public:
+    CompoundCommand(std::string name, std::vector<std::unique_ptr<Command>> parts) : name_(std::move(name)), parts_(std::move(parts)) {}
+    std::string name() const override { return name_; }
+    void execute(Document& doc) override { for (auto& c : parts_) c->execute(doc); }
+    void undo(Document& doc) override { for (auto it = parts_.rbegin(); it != parts_.rend(); ++it) (*it)->undo(doc); }
+    size_t memory_bytes() const override { size_t n = 0; for (const auto& c : parts_) n += c->memory_bytes(); return n; }
+private:
+    std::string name_;
+    std::vector<std::unique_ptr<Command>> parts_;
+};
+
 class ArrangeLayerCommand : public Command {
 public:
     ArrangeLayerCommand(size_t index, int steps) : index_(index), steps_(steps) {}

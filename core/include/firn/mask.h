@@ -88,6 +88,9 @@ Mask select_similar(const Image& img, const Mask& selection, int tolerance);
 // result scaled back up. Returns a selection mask with a soft edge.
 Mask foreground_select(const Image& img, const Mask& fg, const Mask& bg, const Mask& region);
 
+// The mask warped by the homography H (see raster::warp), same size.
+Mask warp(const Mask& m, const float H[9]);
+
 // Edge helpers for the freehand selection's Smart Edge and Edge Seeker modes.
 // `edge_map` is a Sobel magnitude of the luma, 0..1, one float per pixel.
 std::vector<float> edge_map(const Image& img);

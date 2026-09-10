@@ -704,4 +704,14 @@ Mask foreground_select(const Image& img, const Mask& fg, const Mask& bg, const M
     return scaled ? grow_mask(out, W, H) : out;
 }
 
+Mask warp(const Mask& m, const float H[9]) {
+    if (m.empty()) return m;
+    Image tmp(m.width(), m.height(), {255, 255, 255, 0});
+    for (size_t i = 0; i < m.size(); ++i) tmp.data()[i * 4 + 3] = m.data()[i];
+    const Image w = raster::warp(tmp, H, m.width(), m.height());
+    Mask out(m.width(), m.height(), 0);
+    for (size_t i = 0; i < out.size(); ++i) out.data()[i] = w.data()[i * 4 + 3];
+    return out;
+}
+
 }  // namespace firn::mask

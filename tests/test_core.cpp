@@ -1370,6 +1370,29 @@ static void test_text_objects_survive_native_save() {
     CHECK(std::abs(rx0 - qx0) < 2.0f && std::abs(ry0 - qy0) < 2.0f && std::abs(rx1 - qx1) < 2.0f && std::abs(ry1 - qy1) < 2.0f);
 }
 
+static void test_compound_and_mask_warp() {
+    // A compound entry runs its parts in order and undoes them together.
+    Document doc(20, 20);
+    doc.add_layer("Background").pixels.fill({0, 0, 0, 255});
+    CommandStack stack;
+    Image after = doc.layer(0).pixels;
+    after.set(3, 3, {255, 0, 0, 255});
+    Mask sel = mask::rectangle(20, 20, 2, 2, 8, 8, false);
+    std::vector<std::unique_ptr<Command>> parts;
+    parts.push_back(std::make_unique<LayerSnapshotCommand>(0, "Deform", doc.layer(0).pixels, after));
+    parts.push_back(std::make_unique<SelectionCommand>("Deform", sel));
+    stack.run(doc, std::make_unique<CompoundCommand>("Deform", std::move(parts)));
+    CHECK(doc.layer(0).pixels.get(3, 3).r == 255 && doc.selection().at(4, 4) == 255);
+    stack.undo(doc);
+    CHECK(doc.layer(0).pixels.get(3, 3).r == 0 && !doc.has_selection());
+    stack.redo(doc);
+    CHECK(doc.layer(0).pixels.get(3, 3).r == 255 && doc.selection().at(4, 4) == 255);
+    // Warping a mask by a translation moves it.
+    const float H[9] = {1, 0, 5, 0, 1, 0, 0, 0, 1};
+    Mask moved = mask::warp(sel, H);
+    CHECK(moved.at(12, 4) == 255 && moved.at(3, 4) == 0);
+}
+
 static void test_foreground_select() {
     // A noisy red disk on a noisy blue field: one scribble across the disk
     // and one on the field pick out the disk, edge included.
@@ -2293,6 +2316,7 @@ int main() {
     test_heal_and_color_to_alpha();
     test_symmetry();
     test_foreground_select();
+    test_compound_and_mask_warp();
     test_vector_core();
     test_history_limit();
     test_brush_texture();

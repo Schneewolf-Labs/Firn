@@ -20,6 +20,11 @@ section into the next version.
   (seamless clone per stamp), next to the Clone Brush.
 - Brush smoothing in Tool Options: Basic (averaged points), Weighted
   (inertia) and Stabilizer (the brush trails the cursor on a string).
+- Deform tool as a unified transform: with a selection it transforms only
+  the selected pixels (the selection follows, one history entry), rotation
+  happens about a draggable pivot from anywhere outside the box, Alt scales
+  from the center, and Tool Options gain numeric X / Y / W / H / Angle
+  fields plus Flip H, Flip V, 90 CCW and 90 CW buttons.
 - Foreground Select tool: scribble on the object (left button) and on the
   background (right button) and the selection is computed from color
   models of the marks regularized by geodesic distance; a selection made

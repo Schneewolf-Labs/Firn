@@ -1,6 +1,7 @@
 // Deform, Straighten and Perspective Correction tools. Deform warps the
-// active raster layer live by a homography from its content box to a
-// dragged quad (move, scale, rotate, skew, perspective) and commits on
+// active raster layer (or just the selected pixels) live by a homography
+// from its content box to a dragged quad (move, scale, rotate about a
+// movable pivot, skew, perspective, numeric entry, flips) and commits on
 // Apply; Straighten rotates by a drawn line; Perspective Correction maps a
 // dragged quad back to a rectangle. The latter two act on all layers by
 // default through WarpLayersCommand.
@@ -11,6 +12,7 @@
 
 #include "App.h"
 #include "firn/commands.h"
+#include "firn/mask.h"
 #include "firn/raster.h"
 #include "tools/Tool.h"
 
@@ -99,11 +101,14 @@ public:
         x0_ = in.img_x; y0_ = in.img_y;
         start_ = quad_;
         const int h = hit_handle(in, quad_, true);
-        if (h == 8) mode_ = Mode::Rotate;
+        const ImVec2 pv = to_screen(in, pivot_x_, pivot_y_);
+        if (std::abs(in.screen.x - pv.x) <= kHandle + 3 && std::abs(in.screen.y - pv.y) <= kHandle + 3) mode_ = Mode::Pivot;
+        else if (h == 8) mode_ = Mode::Rotate;
         else if (h >= 0 && h < 4) { handle_ = h; mode_ = io.KeyCtrl ? Mode::Perspective : Mode::ScaleCorner; }
         else if (h >= 4) { handle_ = h - 4; mode_ = io.KeyShift ? Mode::Skew : Mode::ScaleEdge; }
         else if (inside_quad(quad_, in.img_x, in.img_y)) mode_ = Mode::Move;
-        else mode_ = Mode::None;
+        else mode_ = Mode::Rotate;   // outside the box: rotate about the pivot
+        start_pivot_x_ = pivot_x_; start_pivot_y_ = pivot_y_;
     }
 
     void on_drag(App& app, const ToolInput& in, ImGuiMouseButton) override {
@@ -111,15 +116,16 @@ public:
         const float dx = in.img_x - x0_, dy = in.img_y - y0_;
         const ImGuiIO& io = ImGui::GetIO();
         quad_ = start_;
-        float cx, cy;
-        quad_center(start_, &cx, &cy);
+        const float cx = start_pivot_x_, cy = start_pivot_y_;
         switch (mode_) {
-            case Mode::Move: for (int i = 0; i < 4; ++i) { quad_.x[i] += dx; quad_.y[i] += dy; } break;
+            case Mode::Pivot: pivot_x_ = start_pivot_x_ + dx; pivot_y_ = start_pivot_y_ + dy; return;
+            case Mode::Move: for (int i = 0; i < 4; ++i) { quad_.x[i] += dx; quad_.y[i] += dy; } pivot_x_ = cx + dx; pivot_y_ = cy + dy; break;
             case Mode::Perspective: quad_.x[handle_] += dx; quad_.y[handle_] += dy; break;
             case Mode::ScaleCorner: {
-                // Scale about the opposite corner, in the quad's own axes.
+                // Scale about the opposite corner (Alt: about the center), in the quad's own axes.
                 const int opp = (handle_ + 2) % 4;
-                const float ax = start_.x[opp], ay = start_.y[opp];
+                float ax = start_.x[opp], ay = start_.y[opp];
+                if (io.KeyAlt) quad_center(start_, &ax, &ay);
                 const float hx = start_.x[handle_] - ax, hy = start_.y[handle_] - ay;
                 const float nx = start_.x[handle_] + dx - ax, ny = start_.y[handle_] + dy - ay;
                 // Express in the frame of the two edges leaving the anchor.
@@ -166,7 +172,6 @@ public:
                     quad_.x[i] = cx + px * c - py * s;
                     quad_.y[i] = cy + px * s + py * c;
                 }
-                angle_ += 0;  // shown from the quad
                 break;
             }
             default: break;
@@ -188,6 +193,11 @@ public:
     void draw_overlay(App& app, const ToolInput& in) override {
         if (!session_) return;
         draw_quad(in, quad_, true, true);
+        const ImVec2 pv = to_screen(in, pivot_x_, pivot_y_);
+        in.dl->AddCircle(pv, kHandle + 3, IM_COL32(0, 0, 0, 255), 0, 3.0f);
+        in.dl->AddCircle(pv, kHandle + 3, IM_COL32(255, 255, 255, 255), 0, 1.0f);
+        in.dl->AddLine(ImVec2(pv.x - kHandle - 6, pv.y), ImVec2(pv.x + kHandle + 6, pv.y), IM_COL32(255, 255, 255, 200));
+        in.dl->AddLine(ImVec2(pv.x, pv.y - kHandle - 6), ImVec2(pv.x, pv.y + kHandle + 6), IM_COL32(255, 255, 255, 200));
         if (ImGui::IsKeyPressed(ImGuiKey_Enter, false) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter, false)) apply(app);
     }
 
@@ -203,26 +213,101 @@ public:
             ImGui::SameLine();
             if (ImGui::SmallButton("Cancel")) cancel(app);
             ImGui::SameLine();
+            if (ImGui::SmallButton("Flip H")) { std::swap(quad_.x[0], quad_.x[1]); std::swap(quad_.y[0], quad_.y[1]); std::swap(quad_.x[2], quad_.x[3]); std::swap(quad_.y[2], quad_.y[3]); render(app); }
+            ImGui::SameLine();
+            if (ImGui::SmallButton("Flip V")) { std::swap(quad_.x[0], quad_.x[3]); std::swap(quad_.y[0], quad_.y[3]); std::swap(quad_.x[1], quad_.x[2]); std::swap(quad_.y[1], quad_.y[2]); render(app); }
+            ImGui::SameLine();
+            if (ImGui::SmallButton("90 CCW")) { rotate_by(-90.0f); render(app); }
+            ImGui::SameLine();
+            if (ImGui::SmallButton("90 CW")) { rotate_by(90.0f); render(app); }
+            // Numeric entry: each field edits the quad relative to what it is now,
+            // so it keeps working after perspective drags.
             float cx, cy;
             quad_center(quad_, &cx, &cy);
+            const float w = std::hypot(quad_.x[1] - quad_.x[0], quad_.y[1] - quad_.y[0]);
+            const float h = std::hypot(quad_.x[3] - quad_.x[0], quad_.y[3] - quad_.y[0]);
             const float ang = std::atan2(quad_.y[1] - quad_.y[0], quad_.x[1] - quad_.x[0]) * 180.0f / 3.14159265f;
-            ImGui::Text("center %.0f, %.0f   top edge %.1f deg   %.0f x %.0f", cx, cy, ang, std::hypot(quad_.x[1] - quad_.x[0], quad_.y[1] - quad_.y[0]), std::hypot(quad_.x[3] - quad_.x[0], quad_.y[3] - quad_.y[0]));
+            float nx = cx, ny = cy, nw = w, nh = h, na = ang;
+            bool changed_num = false;
+            ImGui::SetNextItemWidth(70);
+            if (ImGui::DragFloat("X", &nx, 1.0f, -1e5f, 1e5f, "%.0f")) { translate(nx - cx, 0); changed_num = true; }
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(70);
+            if (ImGui::DragFloat("Y", &ny, 1.0f, -1e5f, 1e5f, "%.0f")) { translate(0, ny - cy); changed_num = true; }
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(70);
+            if (ImGui::DragFloat("W", &nw, 1.0f, 1.0f, 1e5f, "%.0f") && w > 0.5f) { scale_along(0, nw / w); changed_num = true; }
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(70);
+            if (ImGui::DragFloat("H", &nh, 1.0f, 1.0f, 1e5f, "%.0f") && h > 0.5f) { scale_along(1, nh / h); changed_num = true; }
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(70);
+            if (ImGui::DragFloat("Angle", &na, 0.5f, -1e5f, 1e5f, "%.1f")) { rotate_by(na - ang); changed_num = true; }
+            if (changed_num) render(app);
+            ImGui::SameLine();
+            ImGui::TextDisabled(has_sel_ ? "Transforming the selection." : "Transforming the whole layer.");
         }
         ImGui::SameLine();
-        ImGui::TextDisabled("Drag inside to move; corners scale (Shift keeps aspect, Ctrl moves one corner); edges scale (Shift skews); the knob rotates. Enter or double-click applies.");
+        ImGui::TextDisabled("Drag inside to move, outside or the knob to rotate about the pivot (drag the pivot to move it); corners scale (Shift keeps aspect, Alt from the center, Ctrl moves one corner); edges scale (Shift skews). Enter or double-click applies.");
     }
 
 private:
-    enum class Mode { None, Move, ScaleCorner, ScaleEdge, Skew, Rotate, Perspective };
+    enum class Mode { None, Move, ScaleCorner, ScaleEdge, Skew, Rotate, Perspective, Pivot };
 
     bool begin(App& app) {
         if (!app.active_is_raster()) { app.status = "Deform: the active layer is not a raster layer."; return false; }
         layer_ = app.active_layer();
         before_ = app.doc->layer(layer_).pixels;
-        quad_from_rect(raster::content_bounds(before_), original_);
+        has_sel_ = app.doc->has_selection() && app.doc->selection().any();
+        if (has_sel_) {
+            // The selected pixels become a floating piece; the layer keeps the rest.
+            sel_ = app.doc->selection();
+            piece_ = before_;
+            base_ = before_;
+            const bool bg = app.doc->layer(layer_).background;
+            const Color fill = app.background_fill();
+            for (size_t i = 0; i < sel_.size(); ++i) {
+                const float m = sel_.data()[i] / 255.0f;
+                uint8_t* p = piece_.data() + i * 4;
+                uint8_t* b = base_.data() + i * 4;
+                p[3] = static_cast<uint8_t>(p[3] * m + 0.5f);
+                if (bg) { b[0] = static_cast<uint8_t>(b[0] + (fill.r - b[0]) * m + 0.5f); b[1] = static_cast<uint8_t>(b[1] + (fill.g - b[1]) * m + 0.5f); b[2] = static_cast<uint8_t>(b[2] + (fill.b - b[2]) * m + 0.5f); }
+                else b[3] = static_cast<uint8_t>(b[3] * (1.0f - m) + 0.5f);
+            }
+            quad_from_rect(sel_.bounds(), original_);
+        } else {
+            quad_from_rect(raster::content_bounds(before_), original_);
+        }
         quad_ = original_;
+        quad_center(quad_, &pivot_x_, &pivot_y_);
         session_ = true;
         return true;
+    }
+    void translate(float dx, float dy) {
+        for (int i = 0; i < 4; ++i) { quad_.x[i] += dx; quad_.y[i] += dy; }
+        pivot_x_ += dx; pivot_y_ += dy;
+    }
+    void rotate_by(float degrees) {
+        const float rad = degrees * 3.14159265f / 180.0f, c = std::cos(rad), s = std::sin(rad);
+        for (int i = 0; i < 4; ++i) {
+            const float px = quad_.x[i] - pivot_x_, py = quad_.y[i] - pivot_y_;
+            quad_.x[i] = pivot_x_ + px * c - py * s;
+            quad_.y[i] = pivot_y_ + px * s + py * c;
+        }
+    }
+    // Scales the quad about the pivot along its top edge (axis 0) or left edge (axis 1).
+    void scale_along(int axis, float f) {
+        float ux = axis == 0 ? quad_.x[1] - quad_.x[0] : quad_.x[3] - quad_.x[0];
+        float uy = axis == 0 ? quad_.y[1] - quad_.y[0] : quad_.y[3] - quad_.y[0];
+        const float len = std::hypot(ux, uy);
+        if (len < 1e-6f) return;
+        ux /= len; uy /= len;
+        for (int i = 0; i < 4; ++i) {
+            const float px = quad_.x[i] - pivot_x_, py = quad_.y[i] - pivot_y_;
+            const float along = px * ux + py * uy;
+            quad_.x[i] += ux * along * (f - 1.0f);
+            quad_.y[i] += uy * along * (f - 1.0f);
+        }
     }
     bool quad_changed() const {
         for (int i = 0; i < 4; ++i) if (quad_.x[i] != original_.x[i] || quad_.y[i] != original_.y[i]) return true;
@@ -233,6 +318,18 @@ private:
         float H[9];
         if (!raster::homography(original_, quad_, H)) return;
         Layer& L = app.doc->layer(layer_);
+        if (has_sel_) {
+            // The warped piece composited over the layer with the selection cut out.
+            const Image moved = raster::warp(piece_, H, piece_.width(), piece_.height());
+            L.pixels = base_;
+            for (int y = 0; y < moved.height(); ++y)
+                for (int x = 0; x < moved.width(); ++x) {
+                    const Color c = moved.get(x, y);
+                    if (c.a) raster::blend_over(L.pixels, x, y, c, 1.0f);
+                }
+            app.doc->touch();
+            return;
+        }
         L.pixels = raster::warp(before_, H, before_.width(), before_.height());
         if (L.background) {
             const Color fill = app.background_fill();
@@ -246,18 +343,30 @@ private:
         if (!session_) return;
         if (quad_changed() && app.doc && layer_ < static_cast<int>(app.doc->layer_count())) {
             render(app);
-            app.commit(std::make_unique<LayerSnapshotCommand>(layer_, "Deform", before_, app.doc->layer(layer_).pixels));
+            if (has_sel_) {
+                // The selection follows the pixels; one history entry for both.
+                float H[9];
+                raster::homography(original_, quad_, H);
+                std::vector<std::unique_ptr<Command>> parts;
+                parts.push_back(std::make_unique<LayerSnapshotCommand>(layer_, "Deform", before_, app.doc->layer(layer_).pixels));
+                parts.push_back(std::make_unique<SelectionCommand>("Deform", mask::warp(sel_, H)));
+                app.run(std::make_unique<CompoundCommand>("Deform", std::move(parts)));
+            } else {
+                app.commit(std::make_unique<LayerSnapshotCommand>(layer_, "Deform", before_, app.doc->layer(layer_).pixels));
+            }
         }
         session_ = false;
         mode_ = Mode::None;
     }
 
-    bool session_ = false;
+    bool session_ = false, has_sel_ = false;
     Mode mode_ = Mode::None;
     int handle_ = 0, layer_ = 0;
-    float x0_ = 0, y0_ = 0, angle_ = 0;
+    float x0_ = 0, y0_ = 0;
+    float pivot_x_ = 0, pivot_y_ = 0, start_pivot_x_ = 0, start_pivot_y_ = 0;
     raster::Quad original_, quad_, start_;
-    Image before_;
+    Image before_, piece_, base_;   // piece_/base_: the selection and the rest, when transforming a selection
+    Mask sel_;
 };
 
 // --- Straighten --------------------------------------------------------------------
