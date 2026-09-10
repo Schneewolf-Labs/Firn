@@ -6,6 +6,10 @@ section into the next version.
 
 ## Unreleased
 
+### Fixed
+- Native format: a fully transparent layer is written with a 1 x 1 tile;
+  the previous empty-layer encoding hung the original on "Reading".
+
 ### Added
 - Apache License 2.0.
 - Preferences: undo memory budget per image (default 1 GB).
@@ -20,6 +24,11 @@ section into the next version.
   (seamless clone per stamp), next to the Clone Brush.
 - Brush smoothing in Tool Options: Basic (averaged points), Weighted
   (inertia) and Stabilizer (the brush trails the cursor on a string).
+- Filter layers (Layers > New Filter Layer): Gaussian Blur, Average and
+  Unsharp Mask applied live to everything below, with a mask and opacity
+  like adjustment layers; edits underneath recomposite only the touched
+  area plus the filter's reach. Saved in the native format as empty
+  placeholder layers plus a stash the original ignores (docs/FORMAT.md).
 - Painting assistants (Assistant tool in the View group): vanishing points,
   parallel rulers and rulers placed on the image; the brushes follow the
   nearest one while View > Snap to Assistants is on. Per image, like guides.

@@ -256,6 +256,21 @@ group with its mask, as the original does. Layer info chunks end with the 43-byt
 tail found in every sample. The original (under Wine) opens the result with
 all layers intact; `scripts/original-open.sh` automates that check.
 
+A fully transparent layer is written as a 1 x 1 transparent tile with real
+channel blocks: a layer block whose saved rect is empty and that has no
+channel data (what the original's own "empty layer" looks like) makes the
+original hang on "Reading".
+
+## Firn stash
+
+Things this format has no place for ride in the creator block's
+description field (`~FL` id 5) as JSON: `{"firn":1,"filters":[...]}`. The
+original shows the text under image information and ignores it. Each
+`filters` entry names a document layer index (`layer`), the filter
+`kind` (100 Gaussian Blur, 101 Average, 102 Unsharp Mask) and its
+parameters; the layer itself is written as an empty raster placeholder
+the original opens, and the reader turns it back into a filter layer.
+
 ## Text shapes
 
 A shape of type 1 (keVSTText) carries no outlines. After the shape

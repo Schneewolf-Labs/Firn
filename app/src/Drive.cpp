@@ -328,6 +328,7 @@ void Driver::before_frame(App& app, SDL_Window* window) {
                 else if (n == "smooth_amount") app.smooth_amount = v;
                 else if (n == "fgsel_size") app.fgsel_size = static_cast<int>(v);
                 else if (n == "assistant_kind") app.assistant_kind = static_cast<int>(v);
+                else if (n == "filter_layer") app.layer_new_adjustment(static_cast<firn::Adjustment::Kind>(static_cast<int>(v)));
                 else if (n == "assistant_snap") app.assistant_snap = v != 0;
                 else if (n == "csmudge_rate") app.csmudge_rate = static_cast<int>(v);
                 else if (n == "csmudge_mode") app.csmudge_mode = static_cast<int>(v);

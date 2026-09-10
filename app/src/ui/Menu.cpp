@@ -448,6 +448,12 @@ void App::draw_layer_menu_items() {
         for (K k : kinds) if (ImGui::MenuItem(Adjustment::kind_name(k))) layer_new_adjustment(k);
         ImGui::EndMenu();
     }
+    if (ImGui::BeginMenu("New Filter Layer", has_doc)) {
+        using K = Adjustment::Kind;
+        static const K kinds[] = {K::GaussianBlur, K::Average, K::UnsharpMask};
+        for (K k : kinds) if (ImGui::MenuItem(Adjustment::kind_name(k))) layer_new_adjustment(k);
+        ImGui::EndMenu();
+    }
     if (ImGui::MenuItem("New Layer Group", nullptr, false, has_any_layer)) layer_new_group();
     if (ImGui::BeginMenu("New Mask Layer", has_any_layer)) {
         if (ImGui::MenuItem("Show All")) layer_set_mask("New Mask Layer", Mask(doc->width(), doc->height(), 255));

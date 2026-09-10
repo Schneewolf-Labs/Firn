@@ -1,4 +1,8 @@
 #include "firn/adjustment.h"
+#include "firn/effects.h"
+#include "firn/raster.h"
+
+#include <cmath>
 
 #include <algorithm>
 #include <cstring>
@@ -16,6 +20,9 @@ const char* Adjustment::kind_name(Kind k) {
         case Kind::Invert: return "Invert";
         case Kind::Threshold: return "Threshold";
         case Kind::Posterize: return "Posterize";
+        case Kind::GaussianBlur: return "Gaussian Blur";
+        case Kind::Average: return "Average";
+        case Kind::UnsharpMask: return "Unsharp Mask";
         default: return "Adjustment";
     }
 }
@@ -24,6 +31,7 @@ bool Adjustment::operator==(const Adjustment& o) const {
     if (kind != o.kind || brightness != o.brightness || contrast != o.contrast || levels != o.levels || curves != o.curves) return false;
     if (hue != o.hue || saturation != o.saturation || lightness != o.lightness || colorize != o.colorize || colorize_hue != o.colorize_hue || colorize_saturation != o.colorize_saturation) return false;
     if (hsl_ranges != o.hsl_ranges || threshold != o.threshold || posterize != o.posterize) return false;
+    if (blur_radius != o.blur_radius || average_radius != o.average_radius || unsharp_radius != o.unsharp_radius || unsharp_strength != o.unsharp_strength || unsharp_clipping != o.unsharp_clipping) return false;
     if (color_balance.preserve_luminosity != o.color_balance.preserve_luminosity) return false;
     for (int i = 0; i < 3; ++i)
         if (color_balance.shadows[i] != o.color_balance.shadows[i] || color_balance.midtones[i] != o.color_balance.midtones[i] || color_balance.highlights[i] != o.color_balance.highlights[i]) return false;
@@ -35,8 +43,20 @@ bool Adjustment::operator==(const Adjustment& o) const {
     return true;
 }
 
+int Adjustment::reach() const {
+    switch (kind) {
+        case Kind::GaussianBlur: return static_cast<int>(std::ceil(blur_radius * 3.0f)) + 1;
+        case Kind::Average: return average_radius + 1;
+        case Kind::UnsharpMask: return static_cast<int>(std::ceil(unsharp_radius * 3.0f)) + 1;
+        default: return 0;
+    }
+}
+
 void Adjustment::apply(Image& img) const {
     switch (kind) {
+        case Kind::GaussianBlur: raster::gaussian_blur(img, blur_radius); return;
+        case Kind::Average: raster::box_blur(img, average_radius); return;
+        case Kind::UnsharpMask: effects::unsharp_mask(img, unsharp_radius, unsharp_strength, unsharp_clipping); return;
         case Kind::BrightnessContrast:
             adjust::apply_lut(img, adjust::brightness_contrast_lut(brightness, contrast));
             break;

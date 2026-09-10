@@ -1,5 +1,6 @@
 #include "firn/adjust.h"
 #include "firn/io_psp.h"
+#include "firn/json.h"
 #include "firn/raster16.h"
 #include "firn/text.h"
 
@@ -813,6 +814,74 @@ bool read_composite(const Reader& r, const Block& bank, const Header& hdr, const
 
 }  // namespace
 
+// --- Firn stash --------------------------------------------------------------
+// Things the original's format has no place for (our filter layers) ride in
+// the creator block's description field as JSON. The original shows the
+// text in its image information and otherwise ignores it; the layers
+// themselves are written as empty placeholders it can read.
+
+std::string creator_description(const Reader& r, const Block& b) {
+    size_t o = b.start;
+    while (o + 10 <= b.end) {
+        if (std::memcmp(r.p + o, "~FL\0", 4) != 0) break;
+        const uint16_t id = r.u16(o + 4);
+        const size_t len = r.u32(o + 6);
+        if (!r.ok(o + 10, len) || o + 10 + len > b.end) break;
+        if (id == 5) return std::string(reinterpret_cast<const char*>(r.p + o + 10), len);
+        o += 10 + len;
+    }
+    return {};
+}
+
+void apply_firn_stash(const Reader& r, const Block& creator, Document& doc) {
+    const std::string text = creator_description(r, creator);
+    if (text.empty() || text[0] != '{') return;
+    json::Value v;
+    if (!json::parse(text, v) || !v.find("firn")) return;
+    const json::Value& filters = v.get("filters");
+    for (size_t i = 0; i < filters.size(); ++i) {
+        const json::Value& f = filters[i];
+        const int idx = static_cast<int>(f.get("layer").as_number(-1));
+        if (idx < 0 || idx >= static_cast<int>(doc.layer_count()) || !doc.layer(idx).is_raster()) continue;
+        Layer& L = doc.layer(idx);
+        L.type = LayerType::Adjustment;
+        L.pixels = Image();
+        L.deep.reset();
+        L.background = false;
+        Adjustment& a = L.adjustment;
+        a.kind = static_cast<Adjustment::Kind>(static_cast<int>(f.get("kind").as_number(100)));
+        a.blur_radius = static_cast<float>(f.get("blur_radius").as_number(a.blur_radius));
+        a.average_radius = static_cast<int>(f.get("average_radius").as_number(a.average_radius));
+        a.unsharp_radius = static_cast<float>(f.get("unsharp_radius").as_number(a.unsharp_radius));
+        a.unsharp_strength = static_cast<int>(f.get("unsharp_strength").as_number(a.unsharp_strength));
+        a.unsharp_clipping = static_cast<int>(f.get("unsharp_clipping").as_number(a.unsharp_clipping));
+    }
+    doc.touch();
+}
+
+std::string firn_stash(const Document& doc) {
+    json::Value filters = json::Value::array();
+    for (size_t i = 0; i < doc.layer_count(); ++i) {
+        const Layer& L = doc.layer(i);
+        if (!L.is_adjustment() || !L.adjustment.is_filter()) continue;
+        const Adjustment& a = L.adjustment;
+        json::Value f = json::Value::object();
+        f.set("layer", json::Value::number(static_cast<double>(i)));
+        f.set("kind", json::Value::number(static_cast<int>(a.kind)));
+        f.set("blur_radius", json::Value::number(a.blur_radius));
+        f.set("average_radius", json::Value::number(a.average_radius));
+        f.set("unsharp_radius", json::Value::number(a.unsharp_radius));
+        f.set("unsharp_strength", json::Value::number(a.unsharp_strength));
+        f.set("unsharp_clipping", json::Value::number(a.unsharp_clipping));
+        filters.push(std::move(f));
+    }
+    if (filters.size() == 0) return {};
+    json::Value root = json::Value::object();
+    root.set("firn", json::Value::number(1));
+    root.set("filters", std::move(filters));
+    return json::dump(root);
+}
+
 std::unique_ptr<Document> load_psp_from_memory(const uint8_t* data, size_t size, std::string* err,
                                                std::vector<std::string>* warnings) {
     auto fail = [&](const std::string& m) { if (err) *err = m; return std::unique_ptr<Document>(); };
@@ -828,6 +897,7 @@ std::unique_ptr<Document> load_psp_from_memory(const uint8_t* data, size_t size,
     const Block* layer_bank = nullptr;
     const Block* composite_bank = nullptr;
     const Block* alpha_bank = nullptr;
+    const Block* creator = nullptr;
     bool have_header = false;
     for (const Block& b : top) {
         if (b.id == kImageBlock && r.ok(b.start, 42)) {
@@ -854,6 +924,8 @@ std::unique_ptr<Document> load_psp_from_memory(const uint8_t* data, size_t size,
             composite_bank = &b;
         } else if (b.id == kAlphaBankBlock) {
             alpha_bank = &b;
+        } else if (b.id == kCreatorBlock) {
+            creator = &b;
         }
     }
     if (!have_header) return fail("missing image attributes block");
@@ -897,6 +969,7 @@ std::unique_ptr<Document> load_psp_from_memory(const uint8_t* data, size_t size,
             }
             if (layers.size() != doc->layer_count()) doc->replace_layers(layers, 0);
         }
+        if (creator) apply_firn_stash(r, *creator, *doc);
     }
     if (doc->layer_count() == 0) {
         if (composite_bank && read_composite(r, *composite_bank, hdr, have_palette ? &pal : nullptr, *doc, e)) {
@@ -1596,6 +1669,9 @@ std::vector<uint8_t> layer_block(const Layer& L, int doc_w, int doc_h, bool deep
     // reader relies on that to tell them apart.
     const bool with_alpha = !L.background;
     raster::Rect saved = with_alpha ? content_bounds(L.pixels) : raster::Rect{0, 0, doc_w, doc_h};
+    // A fully transparent layer still gets a real (1 x 1) tile with channels:
+    // the original never finishes reading a layer block without channel data.
+    if (saved.empty() && !L.pixels.empty()) saved = {0, 0, 1, 1};
     const int32_t saved_rect[4] = {saved.x0, saved.y0, saved.x1, saved.y1};
     Writer payload;
     payload.bytes(layer_info(L.name, kLayerRaster, rect, saved_rect, L.opacity, L.blend, L.visible, kZeroRect, kZeroRect, false));
@@ -1721,6 +1797,16 @@ std::vector<uint8_t> save_psp_to_memory(const Document& doc) {
                 ++i;
                 continue;
             }
+            if (L.is_adjustment() && L.adjustment.is_filter()) {
+                // Our filter layer: an empty raster placeholder the original opens; the parameters go in the stash.
+                Layer ph;
+                ph.name = L.name; ph.visible = L.visible; ph.opacity = L.opacity; ph.blend = L.blend;
+                ph.pixels = Image(doc.width(), doc.height(), {0, 0, 0, 0});
+                { const int dw = doc.width(), dh = doc.height(); emit([ph, dw, dh, deep_file] { return layer_block(ph, dw, dh, deep_file); }); }
+                ++block_count;
+                ++i;
+                continue;
+            }
             if (L.is_adjustment()) {
                 { const Layer* Lp = &L; const int dw = doc.width(), dh = doc.height(); emit([Lp, dw, dh] { return adjustment_block(*Lp, dw, dh); }); }
                 ++block_count; has_adjustments = true;
@@ -1787,6 +1873,8 @@ std::vector<uint8_t> save_psp_to_memory(const Document& doc) {
     creator.field(6, app.out);  // application id
     Writer ver; ver.u32(0x08000001u);
     creator.field(7, ver.out);  // application version
+    const std::string stash = firn_stash(doc);
+    if (!stash.empty()) { Writer d; d.bytes(reinterpret_cast<const uint8_t*>(stash.data()), stash.size()); creator.field(5, d.out); }  // description
     w.block(kCreatorBlock, creator.out);
 
     w.bytes(composite_bank(flat));

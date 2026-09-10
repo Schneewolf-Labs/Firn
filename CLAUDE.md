@@ -162,6 +162,12 @@ docs/    notes on the original: command inventory, module mapping, FORMAT.md
   deformation matrix), so they stay
   editable after a reload in both programs; `vec::text_outline_paths`
   lays them out and `Object::transform` keeps the insert point in step.
+- **Filter layers** are adjustment layers with `Adjustment::is_filter()`
+  (kinds >= 100, ours only): spatial ops with a `reach()`, composited by
+  `Document::apply_filter_layer` over a padded rect; `touch(rect)` grows
+  the dirty rect by `filter_reach()`. The native writer emits them as empty
+  placeholder layers plus the Firn stash in the creator description
+  (docs/FORMAT.md, "Firn stash"); put other Firn-only data there too.
 - **Adjustment layers** (`LayerType::Adjustment`, `Layer::adjustment`,
   `core/include/firn/adjustment.h`) transform what is composited below them
   (within their group) through their mask and opacity. Create with

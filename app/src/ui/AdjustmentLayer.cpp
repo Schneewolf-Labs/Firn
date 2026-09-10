@@ -108,6 +108,20 @@ bool adjustment_body(App& app, Adjustment& a) {
         case Adjustment::Kind::Invert: ImGui::TextDisabled("Inverts the colors of everything below this layer."); break;
         case Adjustment::Kind::Threshold: changed |= slider_int("Threshold", a.threshold, 1, 255); break;
         case Adjustment::Kind::Posterize: changed |= slider_int("Levels", a.posterize, 2, 255); break;
+        case Adjustment::Kind::GaussianBlur:
+            ImGui::SetNextItemWidth(220);
+            changed |= ImGui::SliderFloat("Radius", &a.blur_radius, 0.1f, 100.0f, "%.1f", ImGuiSliderFlags_Logarithmic);
+            ImGui::TextDisabled("Blurs everything below this layer, live.");
+            break;
+        case Adjustment::Kind::Average:
+            changed |= slider_int("Radius", a.average_radius, 1, 30);
+            break;
+        case Adjustment::Kind::UnsharpMask:
+            ImGui::SetNextItemWidth(220);
+            changed |= ImGui::SliderFloat("Radius", &a.unsharp_radius, 0.1f, 50.0f, "%.1f", ImGuiSliderFlags_Logarithmic);
+            changed |= slider_int("Strength", a.unsharp_strength, 1, 500);
+            changed |= slider_int("Clipping", a.unsharp_clipping, 0, 100);
+            break;
         default: break;
     }
     return changed;

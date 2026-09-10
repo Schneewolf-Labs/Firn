@@ -1370,6 +1370,44 @@ static void test_text_objects_survive_native_save() {
     CHECK(std::abs(rx0 - qx0) < 2.0f && std::abs(ry0 - qy0) < 2.0f && std::abs(rx1 - qx1) < 2.0f && std::abs(ry1 - qy1) < 2.0f);
 }
 
+static void test_filter_layers() {
+    // A blur filter layer softens the edge of what lies below it.
+    Document doc(40, 40);
+    Layer& bg = doc.add_layer("Background");
+    bg.background = true;
+    for (int y = 0; y < 40; ++y) for (int x = 0; x < 40; ++x) bg.pixels.set(x, y, x < 20 ? Color{255, 255, 255, 255} : Color{0, 0, 0, 255});
+    Adjustment a;
+    a.kind = Adjustment::Kind::GaussianBlur;
+    a.blur_radius = 3.0f;
+    CommandStack stack;
+    stack.run(doc, std::make_unique<AddAdjustmentLayerCommand>("Blur", a));
+    CHECK(doc.layer_count() == 2 && doc.layer(1).is_adjustment() && doc.layer(1).adjustment.is_filter());
+    Image full = doc.composite();
+    CHECK(full.get(19, 20).r > 60 && full.get(19, 20).r < 200);    // the edge is soft
+    CHECK(full.get(2, 20).r == 255 && full.get(38, 20).r == 0);     // far from it, untouched
+    // An edit below the filter dirties a rect grown by the filter's reach,
+    // and recompositing only that rect reproduces the full composite.
+    doc.take_dirty();
+    for (int y = 8; y < 12; ++y) for (int x = 8; x < 12; ++x) doc.layer(0).pixels.set(x, y, {0, 0, 0, 255});
+    doc.touch({8, 8, 12, 12});
+    const raster::Rect dirty = doc.take_dirty();
+    CHECK(dirty.x0 < 8 && dirty.y0 < 8 && dirty.x1 > 12 && dirty.y1 > 12);
+    Image part = full;
+    doc.composite_into(part, dirty);
+    const Image again = doc.composite();
+    CHECK(std::memcmp(part.data(), again.data(), again.size_bytes()) == 0);
+    CHECK(again.get(10, 10).r < 200);   // the black square shows through the blur
+    // The native format keeps the filter layer (as a placeholder plus the stash).
+    const std::vector<uint8_t> bytes = io::save_psp_to_memory(doc);
+    std::string err;
+    auto back = io::load_psp_from_memory(bytes.data(), bytes.size(), &err, nullptr);
+    CHECK(back && back->layer_count() == 2);
+    CHECK(back->layer(1).is_adjustment() && back->layer(1).adjustment.kind == Adjustment::Kind::GaussianBlur);
+    CHECK(std::abs(back->layer(1).adjustment.blur_radius - 3.0f) < 1e-4f);
+    const Image rt = back->composite();
+    CHECK(std::abs(rt.get(19, 20).r - again.get(19, 20).r) <= 2);
+}
+
 static void test_compound_and_mask_warp() {
     // A compound entry runs its parts in order and undoes them together.
     Document doc(20, 20);
@@ -2317,6 +2355,7 @@ int main() {
     test_symmetry();
     test_foreground_select();
     test_compound_and_mask_warp();
+    test_filter_layers();
     test_vector_core();
     test_history_limit();
     test_brush_texture();

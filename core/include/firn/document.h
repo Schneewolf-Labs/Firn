@@ -138,7 +138,9 @@ public:
     uint64_t revision() const { return revision_; }
     void touch() { ++revision_; dirty_ = {0, 0, width_, height_}; }
     // Mutation confined to a rect: lets the display recomposite only that area.
-    void touch(const raster::Rect& r) { ++revision_; dirty_ = dirty_.empty() ? r.clipped(width_, height_) : dirty_.united(r.clipped(width_, height_)); }
+    void touch(const raster::Rect& r);
+    // Pixels a filter layer spreads an edit by (the sum over visible filter layers).
+    int filter_reach() const;
     // Area changed since the last take_dirty(); the whole image after touch().
     raster::Rect take_dirty() { raster::Rect r = dirty_; dirty_ = {}; return r; }
 
@@ -146,7 +148,10 @@ public:
     void composite_into(Image& dst, const raster::Rect& r) const;
 
 private:
-    void composite_region(Image& out, size_t from, size_t to, const raster::Rect& r) const;
+    // Composites layers [from, to] over `r` (document coordinates) into
+    // `out`, whose pixel (0, 0) sits at document (ox, oy).
+    void composite_region(Image& out, int ox, int oy, size_t from, size_t to, const raster::Rect& r) const;
+    void apply_filter_layer(Image& out, int ox, int oy, size_t from, size_t li, const raster::Rect& r) const;
     int width_;
     int height_;
     std::vector<std::unique_ptr<Layer>> layers_;

@@ -16,7 +16,11 @@ namespace firn {
 struct Adjustment {
     enum class Kind : uint16_t {
         None = 0, Levels = 1, Curves = 2, BrightnessContrast = 3, ColorBalance = 4,
-        HSL = 5, ChannelMixer = 6, Invert = 7, Threshold = 8, Posterize = 9
+        HSL = 5, ChannelMixer = 6, Invert = 7, Threshold = 8, Posterize = 9,
+        // Filter layers (ours, not the original's): spatial effects applied
+        // live to everything below. Saved in the native format as empty
+        // placeholder layers plus a stash the original ignores.
+        GaussianBlur = 100, Average = 101, UnsharpMask = 102
     };
     Kind kind = Kind::BrightnessContrast;
 
@@ -44,8 +48,17 @@ struct Adjustment {
     adjust::ChannelMix mixer;
     int threshold = 128;
     int posterize = 6;
+    // Filter layers.
+    float blur_radius = 5.0f;
+    int average_radius = 2;
+    float unsharp_radius = 2.0f;
+    int unsharp_strength = 100, unsharp_clipping = 0;
 
-    void apply(Image& img) const;   // in place, alpha untouched
+    bool is_filter() const { return static_cast<uint16_t>(kind) >= 100; }
+    // How far (pixels) a filter spreads what lies below; 0 for color kinds.
+    int reach() const;
+
+    void apply(Image& img) const;   // in place; color kinds leave alpha alone
     static const char* kind_name(Kind k);
     bool operator==(const Adjustment&) const;
 };
