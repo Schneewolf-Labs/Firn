@@ -175,6 +175,20 @@ Ideas taken from studying GIMP and Krita (reimplemented, not copied):
 - [x] Layer styles (drop shadow, glow, bevel, stroke) kept editable
 - [x] OpenRaster (.ora) as the project format; the classic format kept for the original
 
+## 14. Next (2026-09-10, after the format work)
+
+- [ ] Check .ora against files written by GIMP and Krita on a machine that
+      has them; ours is validated only against files we write and a
+      hand-built foreign one
+- [ ] Foreground Select: a real matting pass so hair and soft edges come
+      out feathered rather than hard
+- [ ] Let a stroke choose which assistant it follows (a Tool Options
+      picker), which is what two-point perspective needs
+- [ ] Layer style presets, and styles that scale when the image is resized
+- [ ] Lighter PNG compression for large .ora saves (about a second for a
+      3 MP project today, most of it the layer and merged PNGs)
+- [ ] Filter layer masks in the classic format (only .ora keeps them)
+
 ## Dropped (not worth the effort for this port)
 
 - Art Media layers and tools (oil brush, chalk, pastel, palette knife,
