@@ -274,9 +274,11 @@ by the stroke and fill paint style sub-blocks and a line style sub-block.
 The reader lays the text out again with the nearest installed font (family
 and bold/italic from the weight and flags, then a common sans face) and
 keeps the settings on the object so it stays editable; the writer emits
-this form for unrotated text objects, and the original renders and edits
-them. Rotated text is still written as a polygon shape, since the
-deformation matrix convention is unverified.
+this form for every text object, and the original renders and edits them.
+The deformation matrix, verified against the original, maps image
+coordinates about the origin as x' = m0 x + m1 y + m2, y' = m3 x + m4 y +
+m5 (m6..m8 = 0 0 1); rotated text is written as a rotation about the
+insert point with the translation that pins it.
 
 ## Not read
 

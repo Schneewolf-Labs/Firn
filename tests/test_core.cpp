@@ -1,5 +1,6 @@
 // Minimal assert-based tests; no framework dependency yet.
 #include <chrono>
+#include <cmath>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
@@ -1349,6 +1350,23 @@ static void test_text_objects_survive_native_save() {
     float ax0, ay0, ax1, ay1, bx0, by0, bx1, by1;
     CHECK(vec::outline_bounds(o, &ax0, &ay0, &ax1, &ay1) && vec::outline_bounds(b, &bx0, &by0, &bx1, &by1));
     CHECK(std::abs(ax0 - bx0) < 1.5f && std::abs(ay0 - by0) < 1.5f && std::abs(ax1 - bx1) < 1.5f);
+    // Rotated about its center, as the app does: the matrix carries it.
+    vec::Object rot = o;
+    {
+        const float cx = (ax0 + ax1) * 0.5f, cy = (ay0 + ay1) * 0.5f, r = 25.0f * 3.14159265f / 180.0f, c = std::cos(r), sn = std::sin(r);
+        rot.transform(c, -sn, sn, c, cx - (c * cx - sn * cy), cy - (sn * cx + c * cy));
+    }
+    CHECK(std::abs(rot.text.rotation - 25.0f) < 0.01f);
+    doc.layer(1).objects[1] = rot;
+    CHECK(io::save_psp(doc, tmp, nullptr));
+    auto rt2 = io::load_psp(tmp, &err, &warnings);
+    std::remove(tmp.c_str());
+    CHECK(rt2 && rt2->layer(1).objects.size() == 2);
+    const vec::Object& rb = rt2->layer(1).objects[1];
+    float rx0, ry0, rx1, ry1, qx0, qy0, qx1, qy1;
+    CHECK(vec::outline_bounds(rot, &rx0, &ry0, &rx1, &ry1) && vec::outline_bounds(rb, &qx0, &qy0, &qx1, &qy1));
+    CHECK(rb.is_text && std::abs(rb.text.rotation - 25.0f) < 0.5f);
+    CHECK(std::abs(rx0 - qx0) < 2.0f && std::abs(ry0 - qy0) < 2.0f && std::abs(rx1 - qx1) < 2.0f && std::abs(ry1 - qy1) < 2.0f);
 }
 
 static void test_snapshot_crop_and_undo_budget() {

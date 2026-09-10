@@ -155,7 +155,8 @@ docs/    notes on the original: command inventory, module mapping, FORMAT.md
   modes; "Create as vector" keeps them editable, otherwise
   `vec::rasterize` paints them through the selection. Text objects keep
   their `TextInfo` (text, font, size, insert point) and are written as the
-  original's text shapes (`docs/FORMAT.md`, "Text shapes"), so they stay
+  original's text shapes (`docs/FORMAT.md`, "Text shapes", rotation in the
+  deformation matrix), so they stay
   editable after a reload in both programs; `vec::text_outline_paths`
   lays them out and `Object::transform` keeps the insert point in step.
 - **Adjustment layers** (`LayerType::Adjustment`, `Layer::adjustment`,

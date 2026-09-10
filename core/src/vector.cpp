@@ -68,8 +68,12 @@ void Object::transform(float a, float b, float c, float d, float tx, float ty) {
     for (Path& p : paths)
         for (Node& n : p.nodes) { ap(n.x, n.y); ap(n.in_x, n.in_y); ap(n.out_x, n.out_y); }
     if (is_text) {
-        // The insert point follows; a rotation part becomes the text's rotation.
-        ap(text.x, text.y);
+        // The insert point (baseline start) follows the outlines, and a
+        // rotation part becomes the text's rotation, so "lay out at (x, y)
+        // and rotate about the insert point" reproduces the paths.
+        float ix = text.x, iy = text.y + text.baseline;
+        ap(ix, iy);
+        text.x = ix; text.y = iy - text.baseline;
         const float rot = std::atan2(c, a) * 180.0f / 3.14159265f;
         if (std::abs(rot) > 1e-4f) text.rotation += rot;
     }

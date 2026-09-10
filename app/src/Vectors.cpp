@@ -553,7 +553,7 @@ std::vector<vec::Path> App::text_paths(const vec::TextInfo& t, std::vector<int>*
 void App::place_text_object(vec::Object& o, const vec::TextInfo& t, float x, float y) const {
     o.is_text = true;
     o.text = t;
-    o.text.x = x; o.text.y = y;
+    o.text.x = o.text.y = 0.0f;   // translate() below moves the insert point with the outlines
     std::shared_ptr<text::Font> font = text_font;
     if (!font || font->info().path != t.font_path) font = text::Font::load(t.font_path);
     o.paths = font ? vec::text_outline_paths(o.text, *font, &o.text.baseline) : std::vector<vec::Path>{};

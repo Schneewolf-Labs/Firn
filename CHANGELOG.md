@@ -9,9 +9,8 @@ section into the next version.
 ### Added
 - Apache License 2.0.
 - Preferences: undo memory budget per image (default 1 GB).
-- Text objects are saved as the native format's text shapes: they reopen
-  as editable text here and in the original (rotated text still saves as
-  outlines).
+- Text objects are saved as the native format's text shapes, rotation
+  included: they reopen as editable text here and in the original.
 
 ### Changed
 - Large images: Gaussian blur, resampling and native-file compression run

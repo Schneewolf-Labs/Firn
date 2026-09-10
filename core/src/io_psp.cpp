@@ -481,23 +481,19 @@ bool read_text_shape(const Reader& r, size_t p, size_t end, vec::Object& o) {
     o.stroke_width = stroke_width;
     o.antialias = t.antialias;
     o.is_text = true;
-    // Lay the text out again with the nearest font we have.
+    // Lay the text out again with the nearest font we have, then apply the
+    // deformation matrix. Verified against the original: x' = m0 x + m1 y +
+    // m2, y' = m3 x + m4 y + m5 in image coordinates (about the origin).
     t.font_path = font_file_for(t.font_family, bold, italic);
     if (!t.font_path.empty()) {
         if (auto font = text::Font::load(t.font_path)) {
             o.paths = vec::text_outline_paths(t, *font, &t.baseline);
-            t.x = static_cast<float>(ix);
-            t.y = static_cast<float>(iy) - t.baseline;
-            o.translate(t.x, t.y);
-            const bool identity = std::abs(m[0] - 1) < 1e-6 && std::abs(m[1]) < 1e-6 && std::abs(m[3]) < 1e-6 && std::abs(m[4] - 1) < 1e-6 && std::abs(m[6]) < 1e-6 && std::abs(m[7]) < 1e-6;
-            if (!identity) {
-                // A deformation matrix is applied about the insert point (row-vector convention).
-                const float a = static_cast<float>(m[0]), b = static_cast<float>(m[1]), c = static_cast<float>(m[3]), d = static_cast<float>(m[4]);
-                const float e = static_cast<float>(m[6]), f = static_cast<float>(m[7]);
-                const float px = static_cast<float>(ix), py = static_cast<float>(iy);
-                o.transform(a, b, c, d, px - (a * px + c * py) + e, py - (b * px + d * py) + f);
-                t.rotation = std::atan2(b, a) * 180.0f / 3.14159265f;
-            }
+            o.text = t;   // x, y at 0: translate() moves the insert point along with the outlines
+            o.translate(static_cast<float>(ix), static_cast<float>(iy) - t.baseline);
+            const bool identity = std::abs(m[0] - 1) < 1e-6 && std::abs(m[1]) < 1e-6 && std::abs(m[2]) < 1e-6 && std::abs(m[3]) < 1e-6 && std::abs(m[4] - 1) < 1e-6 && std::abs(m[5]) < 1e-6;
+            if (!identity)
+                o.transform(static_cast<float>(m[0]), static_cast<float>(m[1]), static_cast<float>(m[3]), static_cast<float>(m[4]), static_cast<float>(m[2]), static_cast<float>(m[5]));
+            return true;
         }
     }
     o.text = t;
@@ -1345,17 +1341,20 @@ std::vector<uint8_t> write_shape(const vec::Object& o) {
         gb.block(kShapeBlock, w.out);
         return gb.out;
     }
-    if (o.is_text && !o.text.text.empty() && o.text.rotation == 0.0f) {
+    if (o.is_text && !o.text.text.empty()) {
         // Text Vector Shape: the original lays the text out again from the
-        // font name, so it stays editable there and here. Rotated text keeps
-        // the polygon form below (the deformation matrix convention is unverified).
+        // font name, so it stays editable there and here. Rotation goes into
+        // the deformation matrix, about the insert point.
         const size_t type_at = static_cast<size_t>(4 + 2 + name.size());
         w.out[type_at] = 1; w.out[type_at + 1] = 0;  // shape type keVSTText
         const vec::TextInfo& t = o.text;
         w.u32(94); w.u8(static_cast<uint8_t>(std::clamp(t.align, 0, 2)));
         w.i32(static_cast<int32_t>(std::lround(t.x))); w.i32(static_cast<int32_t>(std::lround(t.y + t.baseline)));
-        const double identity[9] = {1, 0, 0, 0, 1, 0, 0, 0, 1};
-        for (double v : identity) w.f64(v);
+        // Rotation about the insert point: x' = m0 x + m1 y + m2, y' = m3 x + m4 y + m5.
+        const double rad = t.rotation * 3.14159265358979 / 180.0, rc = std::cos(rad), rs = std::sin(rad);
+        const double ix = std::lround(t.x), iy = std::lround(t.y + t.baseline);
+        const double matrix[9] = {rc, -rs, ix - (rc * ix - rs * iy), rs, rc, iy - (rs * ix + rc * iy), 0, 0, 1};
+        for (double v : matrix) w.f64(v);
         w.u8(0); w.f64(0.0);
         const std::vector<uint32_t> chars = decode_utf8(t.text);
         w.u32(8); w.u32(static_cast<uint32_t>(chars.size() + 1));
