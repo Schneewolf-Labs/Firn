@@ -457,6 +457,44 @@ void App::paste_into_selection() {
     status = "Pasted into the selection";
 }
 
+// Throws away every change and loads the file again. The document object is
+// replaced, so anything pointing into the old one is reset first.
+void App::revert() {
+    if (!doc || doc_path.empty()) { status = "Revert needs a file that has been saved."; return; }
+    std::string err;
+    std::vector<std::string> warnings;
+    auto fresh = io::load_document(doc_path, &err, &warnings);
+    if (!fresh) { status = "Revert failed: " + err; return; }
+    tool().cancel(*this);
+    mask_edit = false;
+    selection_edit = false;
+    preview = Preview{};
+    crop_rect = {};
+    doc = std::move(fresh);
+    history = CommandStack();
+    history.set_memory_limit(config.undo_memory_mb * 1024ull * 1024ull);
+    saved_cursor = 0;
+    canvas_tex_revision = ~0ull;
+    status = "Reverted to the saved " + doc_path;
+    for (const std::string& w : warnings) status += "\n" + w;
+}
+
+// Centers `r` in the canvas view and zooms so it fills it.
+void App::zoom_to_rect(raster::Rect r) {
+    if (!doc || r.empty() || canvas_view_size.x < 32.0f || canvas_view_size.y < 32.0f) return;
+    const float rw = static_cast<float>(r.x1 - r.x0), rh = static_cast<float>(r.y1 - r.y0);
+    zoom = std::clamp(std::min(canvas_view_size.x / rw, canvas_view_size.y / rh) * 0.9f, 0.01f, 64.0f);
+    fit_requested = false;
+    const float cx = (r.x0 + r.x1) * 0.5f, cy = (r.y0 + r.y1) * 0.5f;
+    pan_x = (doc->width() * 0.5f - cx) * zoom;
+    pan_y = (doc->height() * 0.5f - cy) * zoom;
+}
+
+void App::zoom_to_selection() {
+    if (!doc || !doc->has_selection()) { status = "Zoom to Selection needs a selection."; return; }
+    zoom_to_rect(doc->selection().bounds());
+}
+
 void App::repeat_last_effect() {
     if (!last_effect_op) { status = "Nothing to repeat yet."; return; }
     if (!doc || !active_is_raster()) { status = "Repeat needs a raster layer."; return; }

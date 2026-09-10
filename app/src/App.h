@@ -119,6 +119,7 @@ struct App {
     float pan_x = 0.0f, pan_y = 0.0f;  // canvas offset in screen px, relative to view center
     bool fit_requested = true;
     ImVec2 canvas_center;               // view center in screen space, updated by draw_canvas
+    ImVec2 canvas_view_size{0, 0};      // the canvas view's size, likewise
 
     // Tools
     std::vector<std::unique_ptr<Tool>> tools;
@@ -666,6 +667,10 @@ struct App {
     void copy_merged();          // the composite, not just the active layer
     void paste_into_selection(); // scales the clipboard to the selection and paints it through
     void repeat_last_effect();   // re-applies the last Adjust/Effects dialog with its settings
+    void revert();               // reloads the file from disk, dropping every change
+    bool show_revert_prompt = false;
+    void zoom_to_rect(firn::raster::Rect r);   // fills the view with an image rect
+    void zoom_to_selection();
     void cut();
     void clear_selection();
     void paste_as_new_layer();

@@ -45,6 +45,7 @@ void App::draw_menu() {
         ImGui::Separator();
         if (ImGui::MenuItem("Save", "Ctrl+S", false, has_doc)) save();
         if (ImGui::MenuItem("Save As...", "Ctrl+Shift+S", false, has_doc)) request_save_as();
+        if (ImGui::MenuItem("Revert", nullptr, false, has_doc && !doc_path.empty())) { if (modified()) show_revert_prompt = true; else revert(); }
         ImGui::Separator();
         if (ImGui::MenuItem("Preferences...")) { prefs_edit = config; prefs_scale_before = config.ui_scale; show_prefs_dialog = true; }
         ImGui::Separator();
@@ -74,6 +75,7 @@ void App::draw_menu() {
         if (ImGui::MenuItem("Zoom Out", "-", false, has_doc)) zoom_about(canvas_center, 0.8f);
         if (ImGui::MenuItem("Fit to Window", "Ctrl+0", false, has_doc)) fit_requested = true;
         if (ImGui::MenuItem("Actual Size", "Ctrl+Alt+0", false, has_doc)) { zoom = 1.0f; pan_x = pan_y = 0.0f; }
+        if (ImGui::MenuItem("Zoom to Selection", nullptr, false, has_doc && doc->has_selection())) zoom_to_selection();
         ImGui::Separator();
         ImGui::MenuItem("Rulers", nullptr, &show_rulers);
         ImGui::MenuItem("Grid", nullptr, &show_grid);
@@ -689,6 +691,17 @@ void App::draw_dialogs() {
         if (ImGui::Button("Cancel") || ImGui::IsKeyPressed(ImGuiKey_Escape, false)) { pending_jpeg_path.clear(); ImGui::CloseCurrentPopup(); }
         ImGui::EndPopup();
     }
+    if (show_revert_prompt) { ImGui::OpenPopup("Revert"); show_revert_prompt = false; }
+    if (ImGui::BeginPopupModal("Revert", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::Text("Discard the changes to \"%s\" and load the saved file again?", doc_title.c_str());
+        ImGui::TextDisabled("This cannot be undone.");
+        ImGui::Separator();
+        if (ImGui::Button("Revert", ImVec2(90, 0))) { revert(); ImGui::CloseCurrentPopup(); }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel", ImVec2(90, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape, false)) ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
+    }
+
     if (pending_close >= 0 && !ImGui::IsPopupOpen("Unsaved Changes")) ImGui::OpenPopup("Unsaved Changes");
 
     if (ImGui::BeginPopupModal("Unsaved Changes", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {

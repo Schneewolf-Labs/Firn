@@ -274,6 +274,7 @@ void App::draw_canvas_view(ImVec2 view_pos, ImVec2 view_size) {
     const float img_w = static_cast<float>(doc->width());
     const float img_h = static_cast<float>(doc->height());
     canvas_center = ImVec2(view_pos.x + view_size.x * 0.5f, view_pos.y + view_size.y * 0.5f);
+    canvas_view_size = view_size;
 
     // Defer the fit until the window has been laid out; on the first frame the
     // dock node has not been sized yet and the view is a few pixels wide.

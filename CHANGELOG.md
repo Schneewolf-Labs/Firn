@@ -32,6 +32,9 @@ section into the next version.
   by GIMP, Krita and MyPaint. Save As suggests .ora for layered images
   and autosave uses it; the classic format stays supported for files
   meant for the original.
+- File > Revert loads the saved file again and drops every change, asking
+  first when there is anything to lose.
+- View > Zoom to Selection fills the window with the selection.
 - Edit menu: Copy Merged (Ctrl+Shift+C) copies the composite rather than
   the active layer; Paste Into Selection (Ctrl+Shift+L) scales the
   clipboard to the selection and paints it through its shape; Repeat
