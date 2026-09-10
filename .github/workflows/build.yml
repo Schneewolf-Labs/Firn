@@ -10,23 +10,57 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install dependencies
-        run: sudo apt-get update && sudo apt-get install -y libsdl2-dev libgl-dev ninja-build
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libsdl2-dev libgl-dev ninja-build xvfb libgl1-mesa-dri fonts-dejavu-core
       - name: Configure
         run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
       - name: Build
         run: cmake --build build
-      - name: Test
+      - name: Unit tests
         run: ctest --test-dir build --output-on-failure
+      - name: Smoke test (drives the app under Xvfb)
+        run: xvfb-run -a --server-args="-screen 0 1400x900x24" python3 scripts/smoke.py build
+      - name: Package
+        run: cd build && cpack -G TGZ
+      - uses: actions/upload-artifact@v4
+        with:
+          name: firn-linux
+          path: build/Firn-*.tar.gz
 
   windows:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Cache vcpkg packages
+        uses: actions/cache@v4
+        with:
+          path: C:/vcpkg/installed
+          key: vcpkg-${{ runner.os }}-sdl2-x64
       - name: Install SDL2
         run: vcpkg install sdl2:x64-windows
       - name: Configure
         run: cmake -S . -B build -A x64 -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
       - name: Build
         run: cmake --build build --config Release
-      - name: Test
+      - name: Unit tests
         run: ctest --test-dir build -C Release --output-on-failure
+      - name: Package
+        run: cd build; cpack -G ZIP -C Release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: firn-windows
+          path: build/Firn-*.zip
+
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: brew install sdl2 ninja
+      - name: Configure
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+      - name: Build
+        run: cmake --build build
+      - name: Unit tests
+        run: ctest --test-dir build --output-on-failure

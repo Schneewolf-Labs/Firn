@@ -61,7 +61,14 @@ add_dependencies(firn firn_version)
 target_compile_definitions(firn PRIVATE FIRN_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 target_link_libraries(firn PRIVATE firncore imgui SDL2::SDL2 OpenGL::GL)
 if(WIN32)
-  # Plain main(); SDL's own entry point is not used.
+  # Plain main(); SDL's own entry point is not used. A GUI subsystem keeps
+  # the console window away; the entry point still runs the plain main().
   target_compile_definitions(firn PRIVATE SDL_MAIN_HANDLED)
   target_sources(firn PRIVATE ${CMAKE_SOURCE_DIR}/assets/firn.rc)
+  set_target_properties(firn PROPERTIES WIN32_EXECUTABLE TRUE)
+  if(MSVC)
+    target_link_options(firn PRIVATE /ENTRY:mainCRTStartup)
+  else()
+    target_link_options(firn PRIVATE -mwindows -Wl,-e,mainCRTStartup)
+  endif()
 endif()

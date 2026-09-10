@@ -2,6 +2,9 @@
 
 # Firn
 
+[![build](https://github.com/Schneewolf-Labs/Firn/actions/workflows/build.yml/badge.svg)](https://github.com/Schneewolf-Labs/Firn/actions/workflows/build.yml)
+[![release](https://img.shields.io/github/v/release/Schneewolf-Labs/Firn?include_prereleases)](https://github.com/Schneewolf-Labs/Firn/releases)
+
 A native Linux (and Windows) raster image editor in C++, using Dear ImGui on
 SDL2 + OpenGL 3 for the UI. A Schneewolf Labs project.
 
@@ -24,6 +27,22 @@ WindowsInstall/   backup of the original program (gitignored, reference only)
 The original's structure is mirrored on purpose. It was built as a command
 layer (`JascCmd*.dll`, one per menu category) driving a document model, with
 tools (`JascTool*.dll`) and palettes on top. See `docs/COMMANDS.md`.
+
+## Download
+
+Packages for every tagged version are on the
+[Releases](https://github.com/Schneewolf-Labs/Firn/releases) page:
+
+- **Linux:** `Firn-<version>-x86_64.AppImage` (make it executable and run
+  it; SDL2 is bundled) or `Firn-<version>-Linux-x86_64.tar.gz` (needs the
+  system's SDL2; unpack and run `bin/firn`).
+- **Windows:** `Firn-<version>-Windows-AMD64.zip` with `firn.exe`,
+  `firn-convert.exe` and `SDL2.dll` in `bin/`.
+- **macOS:** `Firn-<version>-Darwin-arm64.tar.gz` (needs `brew install sdl2`).
+
+`SHA256SUMS.txt` lists the checksums. Every push to `main` also leaves
+Linux and Windows packages as workflow artifacts on the Actions page for
+trying the latest changes.
 
 ## Build
 
@@ -49,6 +68,21 @@ Install it (the app, `firn-convert`, a desktop entry and the icon):
 cmake --install build --prefix ~/.local      # per user: ~/.local/bin/firn
 sudo cmake --install build                   # system wide: /usr/local
 ```
+
+## Testing and releasing
+
+`ctest` runs the core tests and the native-format corpus. `scripts/smoke.py`
+drives the real app through its socket driver (make an image, paint, add
+layers and a vector shape, blur, select, save, reopen, convert) and is what
+CI runs under Xvfb on every push. To cut a release:
+
+```sh
+scripts/release.sh 0.2.0    # bumps the version, dates CHANGELOG.md, commits, tags v0.2.0, pushes
+```
+
+The tag triggers `.github/workflows/release.yml`, which builds the
+AppImage, tarballs and Windows zip, checks them, and publishes a GitHub
+release whose notes are that version's CHANGELOG section.
 
 
 ## File formats

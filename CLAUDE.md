@@ -191,7 +191,13 @@ docs/    notes on the original: command inventory, module mapping, FORMAT.md
   through the native format; the current selection itself is not stored.
 - The toolbar and status bar (`app/src/ui/Toolbar.cpp`) sit outside the
   dock space; the canvas reports cursor facts to the status bar.
-- CI (`.github/workflows/build.yml`) builds and tests on Linux and Windows.
+- CI (`.github/workflows/build.yml`) builds and tests on Linux, Windows and
+  macOS, runs `scripts/smoke.py` (the app under Xvfb through the driver)
+  on Linux, and uploads packages built with CPack. Tags `vX.Y.Z` run
+  `.github/workflows/release.yml` (AppImage via linuxdeploy, tarballs, zip,
+  checksums, GitHub release with the CHANGELOG section as notes);
+  `scripts/release.sh` makes the tag. Keep CHANGELOG.md's Unreleased
+  section current.
   Keep the code portable: no GCC-only flags outside the `if(NOT MSVC)`
   blocks, NOMINMAX is defined project-wide, `main()` is plain (SDL's
   entry point is disabled).
