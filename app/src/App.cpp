@@ -22,6 +22,15 @@ App::App() : tools(make_default_tools()) {
     apply_config();
 }
 
+firn::raster::Symmetry App::symmetry() const {
+    firn::raster::Symmetry s;
+    s.mode = static_cast<firn::raster::Symmetry::Mode>(std::clamp(symmetry_mode, 0, 5));
+    s.count = std::clamp(symmetry_count, 2, 64);
+    s.cx = symmetry_x >= 0.0f || !doc ? symmetry_x : doc->width() * 0.5f;
+    s.cy = symmetry_y >= 0.0f || !doc ? symmetry_y : doc->height() * 0.5f;
+    return s;
+}
+
 void App::apply_config() {
     show_rulers = config.show_rulers;
     show_grid = config.show_grid;

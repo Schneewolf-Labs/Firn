@@ -159,6 +159,21 @@ for. Ranked by value per effort; work top to bottom, tick as they land.
       strip over the workspace, windows kept inside it, zoom in every title, and a
       right-click menu on tabs and window titles (Image Information, fit, save, close)
 
+## 13. Borrowed from the open-source editors (2026-09-10)
+
+Ideas taken from studying GIMP and Krita (reimplemented, not copied):
+
+- [x] Heal Brush (seamless clone per stamp)
+- [x] Brush smoothing: Basic, Weighted, Stabilizer
+- [x] Color to Alpha
+- [x] Symmetry painting: mirror axes, rotational, kaleidoscope
+- [ ] Foreground Select (matting from a rough scribble)
+- [ ] Unified transform gizmo (move, scale, rotate, shear, perspective in one tool)
+- [ ] Color smudge brush (paint that mixes with what it passes over)
+- [ ] Perspective and vanishing-point assistants for the brushes
+- [ ] Non-destructive filter layers
+- [ ] Layer styles (drop shadow, glow, bevel, stroke) kept editable
+
 ## Dropped (not worth the effort for this port)
 
 - Art Media layers and tools (oil brush, chalk, pastel, palette knife,

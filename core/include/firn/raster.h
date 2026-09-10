@@ -52,6 +52,19 @@ struct Brush {
 // offset. Filter: a per-pixel function of the existing pixel (retouch tools).
 enum class StrokeMode { Paint, Erase, Clone, Filter, Heal };
 
+// Symmetry painting: every stamp is repeated mirrored across a vertical
+// axis (Horizontal), a horizontal axis (Vertical) or both through
+// (cx, cy), or rotated `count` times about that point (Rotational;
+// Kaleidoscope adds a mirrored copy of each rotation).
+struct Symmetry {
+    enum class Mode { None, Horizontal, Vertical, Both, Rotational, Kaleidoscope };
+    Mode mode = Mode::None;
+    float cx = 0.0f, cy = 0.0f;
+    int count = 6;
+    // Every point a stamp at (x, y) lands on, the original first.
+    std::vector<std::pair<float, float>> points(float x, float y) const;
+};
+
 // A brush stroke in progress. Same semantics as the original: opacity is per stroke, so
 // overlapping stamps do not build up. Coverage accumulates as max() into a
 // mask and the result is base composited with color*mask*opacity.
@@ -68,6 +81,9 @@ public:
     void stamp_at(float x, float y, float pressure = 1.0f) { apply_pressure(pressure); stamp(x, y); }
     // What pen pressure drives: the stamp size, the coverage, both, or nothing.
     void set_pressure_response(bool size, bool opacity) { pressure_size_ = size; pressure_alpha_ = opacity; }
+    // Repeats every stamp per `s` (see Symmetry). Coverage still maxes, so
+    // copies meeting at the axis do not build up.
+    void set_symmetry(const Symmetry& s) { symmetry_ = s; }
 
     // Clone source: `src` must outlive the stroke; a destination pixel (x, y)
     // takes src(x + ox, y + oy). Heal uses the same source but blends its
@@ -85,8 +101,10 @@ public:
     const Image& base() const { return base_; }
 
 private:
-    void stamp(float cx, float cy);
+    void stamp(float cx, float cy);      // fans out per symmetry_
+    void stamp_one(float cx, float cy);
     void stamp_tip(float cx, float cy);
+    Symmetry symmetry_;
     Image base_;
     Brush brush_;
     Color color_;

@@ -20,6 +20,9 @@ section into the next version.
   (seamless clone per stamp), next to the Clone Brush.
 - Brush smoothing in Tool Options: Basic (averaged points), Weighted
   (inertia) and Stabilizer (the brush trails the cursor on a string).
+- Symmetry painting in Tool Options for every brush: Horizontal, Vertical,
+  Both, Rotational (2 to 32 copies) and Kaleidoscope, about the image
+  center or a point placed by clicking; the axes are drawn on the canvas.
 - Adjust > Color to Alpha: a chosen color becomes transparency.
 - Pen tablets: pressure drives the brush size and/or opacity (Tool
   Options), the eraser end switches to the Eraser tool and back, tilt is

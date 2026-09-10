@@ -273,6 +273,13 @@ struct App {
     bool pen_size = true, pen_opacity = false;   // what pressure drives (Config)
     int smooth_mode = 0;                          // brush stroke smoothing: 0 none, 1 basic, 2 weighted, 3 stabilizer
     float smooth_amount = 30.0f;
+    // Symmetry painting (raster::Symmetry): mode index, rotational copies,
+    // axis center in image pixels (negative = the image center), and a
+    // one-shot "next click places the center" flag.
+    int symmetry_mode = 0, symmetry_count = 6;
+    float symmetry_x = -1.0f, symmetry_y = -1.0f;
+    bool symmetry_place = false;
+    firn::raster::Symmetry symmetry() const;
     int pen_prev_tool = -1;                      // tool to restore when the eraser tip lifts
     void pen_tick();                             // per frame: presence timeout, eraser tip switching
     // Autosave and recovery (app/src/Autosave.cpp)

@@ -85,7 +85,40 @@ void Stroke::apply_pressure(float p) {
     alpha_scale_ = pressure_alpha_ ? p : 1.0f;
 }
 
+std::vector<std::pair<float, float>> Symmetry::points(float x, float y) const {
+    std::vector<std::pair<float, float>> out{{x, y}};
+    switch (mode) {
+        case Mode::None: break;
+        case Mode::Horizontal: out.emplace_back(2 * cx - x, y); break;
+        case Mode::Vertical: out.emplace_back(x, 2 * cy - y); break;
+        case Mode::Both:
+            out.emplace_back(2 * cx - x, y);
+            out.emplace_back(x, 2 * cy - y);
+            out.emplace_back(2 * cx - x, 2 * cy - y);
+            break;
+        case Mode::Rotational:
+        case Mode::Kaleidoscope: {
+            const int n = std::max(count, 1);
+            const float dx = x - cx, dy = y - cy;
+            out.clear();
+            for (int k = 0; k < n; ++k) {
+                const float a = 6.28318530718f * static_cast<float>(k) / static_cast<float>(n);
+                const float c = std::cos(a), s = std::sin(a);
+                out.emplace_back(cx + dx * c - dy * s, cy + dx * s + dy * c);
+                if (mode == Mode::Kaleidoscope) out.emplace_back(cx + dx * c + dy * s, cy + dx * s - dy * c);
+            }
+            break;
+        }
+    }
+    return out;
+}
+
 void Stroke::stamp(float cx, float cy) {
+    if (symmetry_.mode == Symmetry::Mode::None) { stamp_one(cx, cy); return; }
+    for (const auto& [x, y] : symmetry_.points(cx, cy)) stamp_one(x, y);
+}
+
+void Stroke::stamp_one(float cx, float cy) {
     if (brush_.tip && brush_.tip->width > 0) { stamp_tip(cx, cy); return; }
     const float r = std::max(brush_.size * size_scale_ * 0.5f, 0.5f);
     const float inner = r * std::clamp(brush_.hardness, 0.0f, 1.0f);

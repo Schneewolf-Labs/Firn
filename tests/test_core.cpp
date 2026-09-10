@@ -1370,6 +1370,33 @@ static void test_text_objects_survive_native_save() {
     CHECK(std::abs(rx0 - qx0) < 2.0f && std::abs(ry0 - qy0) < 2.0f && std::abs(rx1 - qx1) < 2.0f && std::abs(ry1 - qy1) < 2.0f);
 }
 
+static void test_symmetry() {
+    // Both: a stamp near one corner lands in all four quadrants of a 64x64 image.
+    Image img(64, 64, {0, 0, 0, 0});
+    raster::Brush b; b.size = 6; b.hardness = 1.0f;
+    raster::Stroke st(img, b, {255, 0, 0, 255}, raster::StrokeMode::Paint);
+    raster::Symmetry sym; sym.mode = raster::Symmetry::Mode::Both; sym.cx = 32; sym.cy = 32;
+    st.set_symmetry(sym);
+    st.add_point(10, 10);
+    Image out = img;
+    st.render(out);
+    CHECK(out.get(10, 10).a == 255 && out.get(54, 10).a == 255 && out.get(10, 54).a == 255 && out.get(54, 54).a == 255);
+    CHECK(out.get(32, 32).a == 0);
+    // Rotational, 4 copies: (10, 32) maps onto the other three compass points.
+    Image img2(64, 64, {0, 0, 0, 0});
+    raster::Stroke st2(img2, b, {255, 0, 0, 255}, raster::StrokeMode::Paint);
+    sym.mode = raster::Symmetry::Mode::Rotational; sym.count = 4;
+    st2.set_symmetry(sym);
+    st2.add_point(10, 32);
+    Image out2 = img2;
+    st2.render(out2);
+    CHECK(out2.get(10, 32).a == 255 && out2.get(32, 10).a == 255 && out2.get(54, 32).a == 255 && out2.get(32, 54).a == 255);
+    CHECK(out2.get(10, 10).a == 0);
+    // Kaleidoscope doubles the copies; the ones on the mirror line coincide.
+    raster::Symmetry kal; kal.mode = raster::Symmetry::Mode::Kaleidoscope; kal.cx = 32; kal.cy = 32; kal.count = 6;
+    CHECK(kal.points(10, 20).size() == 12);
+}
+
 static void test_heal_and_color_to_alpha() {
     // Heal: a bright source patch onto a dark target keeps the target's tone at the rim.
     Image target(40, 40, Color{40, 40, 40, 255});
@@ -2236,6 +2263,7 @@ int main() {
     test_webp_roundtrip();
     test_stroke_pressure();
     test_heal_and_color_to_alpha();
+    test_symmetry();
     test_vector_core();
     test_history_limit();
     test_brush_texture();

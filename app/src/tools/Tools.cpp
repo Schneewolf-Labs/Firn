@@ -123,6 +123,10 @@ public:
 
     void on_press(App& app, const ToolInput& in, ImGuiMouseButton b) override {
         if (!app.active_is_raster()) { if (app.doc && app.active_layer() >= 0) app.status = "Select a raster layer to paint on."; return; }
+        if (app.symmetry_place) {   // Tool Options "Place": this click sets the symmetry center.
+            app.symmetry_x = in.img_x; app.symmetry_y = in.img_y; app.symmetry_place = false;
+            return;
+        }
         // Clone: right-click sets the source point.
         if ((kind_ == Kind::Clone || kind_ == Kind::Heal) && b == ImGuiMouseButton_Right) {
             src_x_ = in.img_x; src_y_ = in.img_y; has_src_ = true; first_stroke_ = true;
@@ -231,6 +235,7 @@ public:
         if (filter) stroke_->set_filter(std::move(filter));
         if (area_filter) stroke_->set_area_filter(std::move(area_filter));
         stroke_->set_pressure_response(app.pen_size, app.pen_opacity);
+        stroke_->set_symmetry(app.symmetry());
         smooth_x_ = in.img_x; smooth_y_ = in.img_y; history_.clear();
         last_x_ = in.img_x; last_y_ = in.img_y; last_pressure_ = in.pressure;
         stroke_->add_point(in.img_x, in.img_y, in.pressure);
@@ -377,6 +382,22 @@ public:
             ImGui::SetNextItemWidth(90);
             float ts = app.brush.texture_strength * 100.0f;
             if (ImGui::SliderFloat("Strength", &ts, 0.0f, 100.0f, "%.0f%%")) app.brush.texture_strength = ts / 100.0f;
+        }
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(110);
+        ImGui::Combo("Symmetry", &app.symmetry_mode, "None\0Horizontal\0Vertical\0Both\0Rotational\0Kaleidoscope\0");
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Every stamp is repeated across the axes through the center point (Place, or the image center).");
+        if (app.symmetry_mode != 0) {
+            if (app.symmetry_mode >= 4) {
+                ImGui::SameLine();
+                ImGui::SetNextItemWidth(90);
+                ImGui::SliderInt("##symcount", &app.symmetry_count, 2, 32, "%d copies");
+            }
+            ImGui::SameLine();
+            if (ImGui::SmallButton(app.symmetry_place ? "Click the image..." : "Place")) app.symmetry_place = !app.symmetry_place;
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("The next click on the image sets the symmetry center.");
+            ImGui::SameLine();
+            if (ImGui::SmallButton("Center")) { app.symmetry_x = app.symmetry_y = -1.0f; app.symmetry_place = false; }
         }
         switch (kind_) {
             case Kind::Airbrush: {

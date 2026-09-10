@@ -414,6 +414,24 @@ void App::draw_canvas_view(ImVec2 view_pos, ImVec2 view_size) {
             if (sy >= view_pos.y && sy <= view_pos.y + view_size.y) dl->AddLine(ImVec2(std::max(p0.x, view_pos.x), sy), ImVec2(std::min(p1.x, view_pos.x + view_size.x), sy), gc);
         }
     }
+    // Symmetry axes for the painting tools.
+    if (symmetry_mode != 0) {
+        const firn::raster::Symmetry sym = symmetry();
+        const ImVec2 c(p0.x + sym.cx * zoom, p0.y + sym.cy * zoom);
+        const ImU32 sc = IM_COL32(80, 160, 255, 200);
+        const float x0 = std::max(p0.x, view_pos.x), x1 = std::min(p1.x, view_pos.x + view_size.x);
+        const float y0 = std::max(p0.y, view_pos.y), y1 = std::min(p1.y, view_pos.y + view_size.y);
+        if (sym.mode == firn::raster::Symmetry::Mode::Horizontal || sym.mode == firn::raster::Symmetry::Mode::Both) dl->AddLine(ImVec2(c.x, y0), ImVec2(c.x, y1), sc);
+        if (sym.mode == firn::raster::Symmetry::Mode::Vertical || sym.mode == firn::raster::Symmetry::Mode::Both) dl->AddLine(ImVec2(x0, c.y), ImVec2(x1, c.y), sc);
+        if (sym.mode == firn::raster::Symmetry::Mode::Rotational || sym.mode == firn::raster::Symmetry::Mode::Kaleidoscope) {
+            const float len = std::max(view_size.x, view_size.y);
+            for (int k = 0; k < sym.count; ++k) {
+                const float a = 6.28318530718f * static_cast<float>(k) / static_cast<float>(sym.count);
+                dl->AddLine(c, ImVec2(c.x + std::cos(a) * len, c.y + std::sin(a) * len), IM_COL32(80, 160, 255, 90));
+            }
+            dl->AddCircle(c, 6.0f, sc, 0, 1.5f);
+        }
+    }
     if ((hovered || active_button >= 0 || tool().overlay_always()) && !guide_busy) tool().draw_overlay(*this, in);
 
     // Guides.
