@@ -329,6 +329,7 @@ void App::select_tool(int index) {
     if (index < 0 || index >= static_cast<int>(tools.size()) || index == tool_index) return;
     tool().cancel(*this);
     active_button = -1;
+    prev_tool_index = tool_index;
     tool_index = index;
 }
 

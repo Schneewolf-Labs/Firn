@@ -232,7 +232,12 @@ std::string App::do_command(const std::string& name, const Value& p, bool* ok) {
         (flag("IsHorizontal", true) ? guides_h() : guides_v()).push_back(static_cast<float>(num("Position", 0)));
         return json::dump(result_ok());
     }
-    if (name == "ShowGuides") { show_guides = !show_guides; return json::dump(result_ok()); }
+    if (name == "ShowGuides" || name == "ShowGrid") {
+        bool& flagref = name == "ShowGrid" ? show_grid : show_guides;
+        const std::string want = p.get(name.c_str()).as_string("Toggle");
+        flagref = want == "Show" ? true : want == "Hide" ? false : !flagref;
+        return json::dump(result_ok());
+    }
 
     // --- layers ---
     if (name == "NewRasterLayer" || name == "NewVectorLayer" || name == "NewLayerGroup") {
@@ -479,7 +484,158 @@ std::string App::do_command(const std::string& name, const Value& p, bool* ok) {
     if (name == "HistogramEqualize") return adjust("Histogram Equalize", adjust::histogram_equalize);
     if (name == "HistogramStretch") return adjust("Histogram Stretch", adjust::histogram_stretch);
 
+    // --- commands the bundled scripts use, with their parameter names ---
+    if (name == "SelectPreviousTool") {
+        if (prev_tool_index < 0) { *ok = false; return std::string("no previous tool"); }
+        select_tool(prev_tool_index);
+        return json::dump(result_ok());
+    }
+    if (name == "FloatSelection") {
+        if (auto e = need_doc(); !e.empty()) return e;
+        if (!doc->has_selection()) { *ok = false; return std::string("no selection"); }
+        promote_selection_to_layer(true);
+        return json::dump(result_ok());
+    }
+    if (name == "SavePalette") {
+        const std::string path = p.get("SavePaletteFileName").as_string("");
+        if (path.empty()) { *ok = false; return std::string("SavePalette needs SavePaletteFileName"); }
+        save_palette(path);
+        return json::dump(result_ok());
+    }
+    // The original's script runner batches undo; we always record one entry
+    // per command, so there is nothing to switch on.
+    if (name == "EnableOptimizedScriptUndo") return json::dump(result_ok());
+
+    if (name == "PasteIntoSelection") { if (auto e = need_doc(); !e.empty()) return e; paste_into_selection(); return json::dump(result_ok()); }
+    if (name == "MaskShowAll") {
+        if (auto e = need_doc(); !e.empty()) return e;
+        layer_set_mask("New Mask Layer", Mask(doc->width(), doc->height(), 255));
+        return json::dump(result_ok());
+    }
+    if (name == "SplitToRGB" || name == "SplitToHSL" || name == "SplitToCMYK") {
+        if (auto e = need_doc(); !e.empty()) return e;
+        image_split_channels(name == "SplitToRGB" ? 0 : name == "SplitToHSL" ? 1 : 2);
+        return json::dump(result_ok());
+    }
+    if (name == "SelectTool") {
+        // The original's tool names; ours differ in a few places.
+        std::string want = p.get("Tool").as_string("");
+        static const std::pair<const char*, const char*> alias[] = {
+            {"Paintbrush", "Paint Brush"}, {"Airbrush", "Airbrush"}, {"Mover", "Move"}, {"Dropper", "Dropper"},
+            {"CloneBrush", "Clone Brush"}, {"ColorReplacer", "Color Replacer"}, {"ScratchRemover", "Scratch Remover"},
+            {"RedEye", "Red-eye Removal"}, {"FloodFill", "Flood Fill"}, {"PictureTube", "Picture Tube"},
+            {"PresetShapes", "Preset Shape"}, {"VectorObjectSelector", "Object Selector"}, {"Text", "Text"},
+            {"Freehand", "Freehand Selection"}, {"MagicWand", "Magic Wand"}, {"WarpBrush", "Warp Brush"},
+            {"MeshWarp", "Mesh Warp"}, {"Straighten", "Straighten"}, {"PerspectiveCorrection", "Perspective Correction"}};
+        for (const auto& a : alias) if (want == a.first) { want = a.second; break; }
+        for (size_t i = 0; i < tools.size(); ++i)
+            if (want == tools[i]->name()) { select_tool(static_cast<int>(i)); return json::dump(result_ok()); }
+        *ok = false;
+        return "no tool named " + want;
+    }
+    if (name == "SelectSmooth") {
+        if (auto e = need_doc(); !e.empty()) return e;
+        if (!doc->has_selection()) { *ok = false; return std::string("no selection"); }
+        Mask m = doc->selection();
+        mask::smooth(m, static_cast<int>(num("SmoothAmount", 50)), flag("PreserveCorners", false));
+        if (flag("Antialias", false)) mask::shape_antialias(m, true, true);
+        set_selection("Smooth Selection", std::move(m));
+        return json::dump(result_ok());
+    }
+    if (name == "SelectSaveAlpha") {
+        if (auto e = need_doc(); !e.empty()) return e;
+        if (!doc->has_selection()) { *ok = false; return std::string("no selection"); }
+        const std::string alpha = p.get("AlphaName").as_string("Selection #" + std::to_string(doc->alpha_channels().size() + 1));
+        auto& channels = doc->alpha_channels();
+        for (auto& ch : channels)
+            if (ch.name == alpha) {
+                if (!flag("Overwrite", false)) { *ok = false; return "an alpha channel named " + alpha + " already exists"; }
+                ch.mask = doc->selection();
+                return json::dump(result_ok());
+            }
+        channels.push_back({alpha, doc->selection()});
+        return json::dump(result_ok());
+    }
+    if (name == "SelectLoadAlpha") {
+        if (auto e = need_doc(); !e.empty()) return e;
+        const auto& channels = doc->alpha_channels();
+        if (channels.empty()) { *ok = false; return std::string("the image has no alpha channels"); }
+        const std::string alpha = p.get("AlphaName").as_string("");
+        size_t index = static_cast<size_t>(std::max(0.0, num("AlphaIndex", 0)));
+        if (!alpha.empty()) {
+            bool found = false;
+            for (size_t i = 0; i < channels.size(); ++i) if (channels[i].name == alpha) { index = i; found = true; break; }
+            if (!found) { *ok = false; return "no alpha channel named " + alpha; }
+        }
+        if (index >= channels.size()) { *ok = false; return std::string("alpha channel out of range"); }
+        Mask m = channels[index].mask;
+        if (flag("Invert", false)) mask::invert(m);
+        const std::string mode = p.get("SelectionOperation").as_string("Replace");
+        if (mode != "Replace" && doc->has_selection()) {
+            Mask combined = doc->selection();
+            mask::combine(combined, m, mode == "Add" ? mask::Combine::Add : mode == "Subtract" ? mask::Combine::Subtract : mask::Combine::Intersect);
+            m = std::move(combined);
+        }
+        set_selection("Load Selection From Alpha Channel", std::move(m));
+        return json::dump(result_ok());
+    }
+
     // --- effects ---
+    if (name == "BrushStrokes")
+        // Our filter takes length, density, width and opacity; the original's
+        // bristle, angle, color and softness settings have no equivalent.
+        return adjust("Brush Strokes", [len = static_cast<int>(num("Length", 15)), den = static_cast<int>(num("Density", 26)),
+                                        w = static_cast<int>(num("Width", 6)), op = static_cast<int>(num("Opacity", 0))](Image& i) { effects::brush_strokes(i, len, den, w, op, 1); });
+    if (name == "InnerBevel") {
+        const Mask* sel = doc && doc->has_selection() ? &doc->selection() : nullptr;
+        return adjust("Inner Bevel", [region = sel ? sel->data() : nullptr, w = static_cast<int>(num("Width", 8)),
+                                      ang = static_cast<float>(num("Angle", 315)), d = static_cast<float>(num("Depth", 20)),
+                                      amb = static_cast<float>(num("Ambience", 0))](Image& i) { effects::inner_bevel(i, region, w, ang, d, amb); });
+    }
+    if (name == "BlurAverage") return adjust("Average", [r = std::max(1, static_cast<int>(num("Aperture", 3)) / 2)](Image& i) { raster::box_blur(i, r); });
+    if (name == "GlowingEdges") return adjust("Glowing Edges", [in = static_cast<int>(num("Intensity", 50)), sh = static_cast<int>(num("Sharpness", 50))](Image& i) { effects::glowing_edges(i, in, sh); });
+    if (name == "ColoredEdges") return adjust("Colored Edges", [lum = static_cast<int>(num("Luminance", 50)), b = static_cast<int>(num("Blur", 3)), c = color_param(p.get("Color"), {0, 0, 0, 255})](Image& i) { effects::colored_edges(i, lum, b, c); });
+    if (name == "SaltAndPepper")
+        // "Agressive" is the original's spelling; the scripts use it verbatim.
+        return adjust("Salt and Pepper Filter", [sz = static_cast<int>(num("SpeckSize", 3)), sn = static_cast<int>(num("Sensitivity", 5)),
+                                                 lower = flag("IncludeAllLowerSizes", true), agg = flag("Agressive", false)](Image& i) { photo::salt_and_pepper(i, sz, sn, lower, agg); });
+    if (name == "JPEGArtifactRemoval") {
+        static const char* kStrength[] = {"Low", "Normal", "High", "Maximum"};
+        const std::string want = p.get("Strength").as_string("Normal");
+        int strength = 1;
+        for (int i = 0; i < 4; ++i) if (want == kStrength[i]) strength = i;
+        return adjust("JPEG Artifact Removal", [strength, cr = static_cast<int>(num("RestoreCrispness", 50))](Image& i) { photo::jpeg_artifact_removal(i, strength, cr); });
+    }
+    if (name == "DigitalCameraNoiseRemoval")
+        // One strength from the three detail sliders, which is what our filter takes.
+        return adjust("Digital Camera Noise Removal",
+                      [st = static_cast<int>((num("SmallDetails", 50) + num("MediumDetails", 50) + num("LargeDetails", 50)) / 3.0),
+                       bl = static_cast<int>(num("Blending", 70)), sh = static_cast<int>(num("Sharpening", 0))](Image& i) { photo::noise_removal(i, st, bl, sh); });
+    if (name == "ColorAdjustCurves") {
+        std::vector<std::pair<float, float>> pts;
+        const Value& rgb = p.get("CurveParams.RGB");
+        for (size_t i = 0; i < rgb.size(); ++i)
+            if (rgb[i].size() >= 2) pts.emplace_back(static_cast<float>(rgb[i][0].as_number()), static_cast<float>(rgb[i][1].as_number()));
+        if (pts.size() < 2) pts = {{0, 0}, {255, 255}};
+        return adjust("Curves", [pts](Image& i) { adjust::apply_lut(i, adjust::curve_lut(pts)); });
+    }
+    if (name == "ColorAdjustHueMap") {
+        adjust::HueMap m;
+        const Value& shifts = p.get("HueShift");
+        for (size_t i = 0; i < shifts.size() && i < 10; ++i) m.shift[i] = static_cast<int>(shifts[i].as_number());
+        m.saturation = static_cast<int>(num("SaturationShift", 0));
+        m.lightness = static_cast<int>(num("LightnessShift", 0));
+        return adjust("Hue Map", [m](Image& i) { adjust::hue_map(i, m); });
+    }
+    if (name == "HistogramAdjustment") {
+        // The luminance channel's clip limits, gamma and output range as a LUT.
+        const Value& ch = p.get("LuminanceChannel");
+        const int low = static_cast<int>(ch.get("LowClipLimit").as_number(0)), high = static_cast<int>(ch.get("HighClipLimit").as_number(255));
+        const float gamma = static_cast<float>(ch.get("Gamma").as_number(1.0));
+        const int out_low = static_cast<int>(ch.get("MinOutput").as_number(0)), out_high = static_cast<int>(ch.get("MaxOutput").as_number(255));
+        return adjust("Histogram Adjustment", [=](Image& i) { adjust::apply_lut(i, adjust::levels_lut(low, gamma, high, out_low, out_high)); });
+    }
+
     if (name == "GaussianBlur") return adjust("Gaussian Blur", [r = static_cast<float>(num("Radius", 1))](Image& i) { raster::gaussian_blur(i, r); });
     if (name == "Blur") return adjust("Blur", effects::soften);
     if (name == "BlurMore") return adjust("Blur More", effects::blur_more);

@@ -32,6 +32,14 @@ section into the next version.
   by GIMP, Krita and MyPaint. Save As suggests .ora for layered images
   and autosave uses it; the classic format stays supported for files
   meant for the original.
+- Scripting: 26 more of the original's commands run, taking it from 69 to
+  95 of the 115 names its own bundled scripts use. Selections (smooth,
+  save and load alpha channels, float), tools (select by name, previous
+  tool), channel splitting, masks, paste into selection, palettes, grid
+  and guide visibility, and the effects Glowing Edges, Colored Edges,
+  Brush Strokes, Inner Bevel, Average, Salt and Pepper, JPEG Artifact
+  Removal, Digital Camera Noise Removal, Curves, Hue Map and Histogram
+  Adjustment.
 - Layers palette: double-clicking a layer's name renames it in place
   (its other settings stay behind Properties in the right-click menu).
 - File > Revert loads the saved file again and drops every change, asking

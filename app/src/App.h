@@ -654,6 +654,7 @@ struct App {
     bool active_is_raster() const;      // false for groups and when nothing is active
     Tool& tool() { return *tools[tool_index]; }
     void select_tool(int index);
+    int prev_tool_index = -1;      // for the scripts' SelectPreviousTool
     void zoom_about(ImVec2 screen, float factor);
 
     // Selections and clipboard
