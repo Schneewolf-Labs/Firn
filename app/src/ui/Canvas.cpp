@@ -441,6 +441,39 @@ void App::draw_canvas_view(ImVec2 view_pos, ImVec2 view_size) {
         for (float g : guides_v) { const float sx = p0.x + g * zoom; if (sx >= view_pos.x && sx <= view_pos.x + view_size.x) dl->AddLine(ImVec2(sx, view_pos.y), ImVec2(sx, view_pos.y + view_size.y), gc); }
     }
 
+    // Painting assistants: vanishing points with rays toward the cursor,
+    // rulers as lines across the view.
+    if (show_assistants && !assistants.empty()) {
+        const ImU32 ac = IM_COL32(255, 140, 0, 220), faint = IM_COL32(255, 140, 0, 90);
+        auto long_line = [&](ImVec2 a, ImVec2 b, ImU32 col) {   // the line through a and b across the view
+            float dx = b.x - a.x, dy = b.y - a.y;
+            const float len = std::hypot(dx, dy);
+            if (len < 1e-3f) return;
+            dx /= len; dy /= len;
+            const float reach = view_size.x + view_size.y;
+            dl->AddLine(ImVec2(a.x - dx * reach, a.y - dy * reach), ImVec2(a.x + dx * reach, a.y + dy * reach), col);
+        };
+        const int hover_i = (hovered && assistant_snap) ? nearest_assistant(in.img_x, in.img_y) : -1;
+        for (size_t i = 0; i < assistants.size(); ++i) {
+            const Assistant& a = assistants[i];
+            const ImVec2 p(p0.x + a.x0 * zoom, p0.y + a.y0 * zoom), q(p0.x + a.x1 * zoom, p0.y + a.y1 * zoom);
+            const bool hot = static_cast<int>(i) == hover_i;
+            if (a.kind == Assistant::Kind::VanishingPoint) {
+                dl->AddCircle(p, 6.0f, ac, 0, 2.0f);
+                for (int k = 0; k < 8; ++k) {
+                    const float ang = k * 3.14159265f / 4.0f;
+                    dl->AddLine(ImVec2(p.x + std::cos(ang) * 8, p.y + std::sin(ang) * 8), ImVec2(p.x + std::cos(ang) * 22, p.y + std::sin(ang) * 22), faint);
+                }
+                if (hot) long_line(p, in.screen, faint);
+            } else {
+                long_line(p, q, a.kind == Assistant::Kind::Ruler ? ac : faint);
+                dl->AddLine(p, q, ac, 2.0f);
+                dl->AddCircleFilled(p, 4.0f, ac); dl->AddCircleFilled(q, 4.0f, ac);
+                if (hot && a.kind == Assistant::Kind::Parallel) long_line(in.screen, ImVec2(in.screen.x + (q.x - p.x), in.screen.y + (q.y - p.y)), faint);
+            }
+        }
+    }
+
     // Marching ants along the selection boundary. Each unit edge is one
     // segment; color alternates along the outline and cycles with time.
     sync_ants();

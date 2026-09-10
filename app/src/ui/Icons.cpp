@@ -94,6 +94,10 @@ void draw_tool_icon(ImDrawList* dl, const char* name, ImVec2 p, float size, ImU3
         for (int i = 0; i <= 2; ++i) { const float t = 0.15f + i * 0.35f; g.line(0.15f, t, 0.85f, t); }
         g.line(0.15f, 0.15f, 0.15f, 0.85f); g.line(0.85f, 0.15f, 0.85f, 0.85f);
         g.poly({0.5f, 0.15f, 0.62f, 0.35f, 0.4f, 0.6f, 0.5f, 0.85f}, false);
+    } else if (is("Assistant")) {
+        // Lines converging on a vanishing point.
+        g.line(0.15f, 0.2f, 0.85f, 0.5f); g.line(0.15f, 0.5f, 0.85f, 0.5f); g.line(0.15f, 0.8f, 0.85f, 0.5f);
+        g.fill_circle(0.85f, 0.5f, 0.09f);
     } else if (is("Selection")) {
         g.dashed_rect(0.12f, 0.2f, 0.88f, 0.8f);
     } else if (is("Freehand Selection")) {

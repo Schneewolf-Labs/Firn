@@ -20,6 +20,9 @@ section into the next version.
   (seamless clone per stamp), next to the Clone Brush.
 - Brush smoothing in Tool Options: Basic (averaged points), Weighted
   (inertia) and Stabilizer (the brush trails the cursor on a string).
+- Painting assistants (Assistant tool in the View group): vanishing points,
+  parallel rulers and rulers placed on the image; the brushes follow the
+  nearest one while View > Snap to Assistants is on. Per image, like guides.
 - Color Smudge brush (Paint group): paints the foreground color while
   dragging along what it passes over. Length sets how far the carried
   color goes, Color rate how much paint each stamp adds, and Dulling mode

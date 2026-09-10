@@ -170,7 +170,7 @@ Ideas taken from studying GIMP and Krita (reimplemented, not copied):
 - [x] Foreground Select (matting from a rough scribble)
 - [x] Unified transform gizmo (Deform: selection-aware, pivot, numeric entry, flips)
 - [x] Color smudge brush (paint that mixes with what it passes over)
-- [ ] Perspective and vanishing-point assistants for the brushes
+- [x] Perspective and vanishing-point assistants for the brushes
 - [ ] Non-destructive filter layers
 - [ ] Layer styles (drop shadow, glow, bevel, stroke) kept editable
 

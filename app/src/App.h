@@ -31,6 +31,16 @@
 // owns pixels.
 // Everything that belongs to one open image. The current document's copy
 // lives directly in App's members; inactive ones are parked in App::docs.
+// Painting assistants (per document, like guides): the brushes constrain
+// their strokes to them while Snap to Assistants is on. A vanishing point
+// makes strokes run toward it, a parallel ruler gives them its direction,
+// a ruler holds them on its own line.
+struct Assistant {
+    enum class Kind { VanishingPoint, Parallel, Ruler };
+    Kind kind = Kind::VanishingPoint;
+    float x0 = 0, y0 = 0, x1 = 0, y1 = 0;   // image coords; the point is (x0, y0)
+};
+
 struct DocState {
     std::unique_ptr<firn::Document> doc;
     firn::CommandStack history;
@@ -41,6 +51,7 @@ struct DocState {
     bool fit_requested = true;
     firn::raster::Rect crop_rect;
     std::vector<float> guides_h, guides_v;  // image-space y / x positions
+    std::vector<Assistant> assistants;
     // Windowed view: a stable id for the ImGui window, its texture while the
     // document is parked, and whether it has been placed in the workspace.
     int uid = 0;
@@ -95,6 +106,13 @@ struct App {
     // Guide being dragged: kind 0 none, 1 horizontal, 2 vertical; index -1 = new
     int guide_drag_kind = 0, guide_drag_index = -1;
     void snap_point(float& x, float& y) const;
+    std::vector<Assistant> assistants;      // current document's painting assistants
+    bool show_assistants = true, assistant_snap = true;
+    int assistant_kind = 0;                 // Assistant tool: what a click or drag creates
+    // The assistant a stroke starting at (sx, sy) should follow (-1 = none).
+    int nearest_assistant(float sx, float sy) const;
+    // Moves (x, y) onto assistant `i`'s line for a stroke that started at (sx, sy).
+    void assist_point(int i, float sx, float sy, float& x, float& y) const;
 
     // Canvas view
     GLuint canvas_tex = 0;

@@ -236,14 +236,20 @@ public:
         if (area_filter) stroke_->set_area_filter(std::move(area_filter));
         stroke_->set_pressure_response(app.pen_size, app.pen_opacity);
         stroke_->set_symmetry(app.symmetry());
-        smooth_x_ = in.img_x; smooth_y_ = in.img_y; history_.clear();
-        last_x_ = in.img_x; last_y_ = in.img_y; last_pressure_ = in.pressure;
-        stroke_->add_point(in.img_x, in.img_y, in.pressure);
+        // Assistants: the stroke follows the nearest one from where it starts.
+        assist_ = app.assistant_snap ? app.nearest_assistant(in.img_x, in.img_y) : -1;
+        float sx = in.img_x, sy = in.img_y;
+        if (assist_ >= 0 && app.assistants[assist_].kind == Assistant::Kind::Ruler) app.assist_point(assist_, sx, sy, sx, sy);
+        assist_sx_ = sx; assist_sy_ = sy;
+        smooth_x_ = sx; smooth_y_ = sy; history_.clear();
+        last_x_ = sx; last_y_ = sy; last_pressure_ = in.pressure;
+        stroke_->add_point(sx, sy, in.pressure);
         flush(app);
     }
     void on_drag(App& app, const ToolInput& in, ImGuiMouseButton) override {
         if (!stroke_) return;
         float x = in.img_x, y = in.img_y;
+        if (assist_ >= 0) app.assist_point(assist_, assist_sx_, assist_sy_, x, y);
         smooth_point(app, in, x, y);
         stroke_->add_point(x, y, in.pressure);
         last_x_ = x; last_y_ = y; last_pressure_ = in.pressure;
@@ -252,8 +258,10 @@ public:
     void on_release(App& app, const ToolInput& in, ImGuiMouseButton) override {
         if (!stroke_ || !app.doc) return;
         // Smoothing lags behind the cursor; finish the line to where the pen lifted.
-        if (app.smooth_mode != 0 && (std::abs(in.img_x - last_x_) > 0.5f || std::abs(in.img_y - last_y_) > 0.5f)) {
-            stroke_->add_point(in.img_x, in.img_y, in.pressure);
+        float ex = in.img_x, ey = in.img_y;
+        if (assist_ >= 0) app.assist_point(assist_, assist_sx_, assist_sy_, ex, ey);
+        if (app.smooth_mode != 0 && (std::abs(ex - last_x_) > 0.5f || std::abs(ey - last_y_) > 0.5f)) {
+            stroke_->add_point(ex, ey, in.pressure);
             flush(app);
         }
         app.commit_pixels(layer_, name(), stroke_->base(), app.paint_pixels(layer_));
@@ -447,11 +455,81 @@ private:
     float last_x_ = 0, last_y_ = 0, last_pressure_ = 1.0f;
     float smooth_x_ = 0, smooth_y_ = 0;
     std::vector<std::pair<float, float>> history_;
+    int assist_ = -1;                       // assistant this stroke follows
+    float assist_sx_ = 0, assist_sy_ = 0;   // where it started
     // Clone state
     bool has_src_ = false, first_stroke_ = true;
     float src_x_ = 0, src_y_ = 0;
     int off_x_ = 0, off_y_ = 0;
     Image clone_src_;
+};
+
+// --- Assistant -----------------------------------------------------------
+// Places painting assistants: click for a vanishing point, drag for a
+// parallel ruler or a ruler; drag a handle to move one, right-click to
+// remove it. The brushes follow them while View > Snap to Assistants is on.
+
+class AssistantTool : public Tool {
+public:
+    const char* category() const override { return "View"; }
+    const char* name() const override { return "Assistant"; }
+    bool overlay_always() const override { return true; }
+    void on_press(App& app, const ToolInput& in, ImGuiMouseButton b) override {
+        if (!app.doc) return;
+        const float tol = 8.0f / std::max(in.zoom, 0.01f);
+        int hit = -1, handle = 0;
+        for (size_t i = 0; i < app.assistants.size(); ++i) {
+            const Assistant& a = app.assistants[i];
+            if (std::hypot(in.img_x - a.x0, in.img_y - a.y0) <= tol) { hit = static_cast<int>(i); handle = 0; }
+            else if (a.kind != Assistant::Kind::VanishingPoint && std::hypot(in.img_x - a.x1, in.img_y - a.y1) <= tol) { hit = static_cast<int>(i); handle = 1; }
+        }
+        if (b == ImGuiMouseButton_Right) {
+            if (hit >= 0) app.assistants.erase(app.assistants.begin() + hit);
+            return;
+        }
+        if (hit >= 0) { drag_ = hit; handle_ = handle; return; }
+        Assistant a;
+        a.kind = static_cast<Assistant::Kind>(std::clamp(app.assistant_kind, 0, 2));
+        a.x0 = a.x1 = in.img_x; a.y0 = a.y1 = in.img_y;
+        app.assistants.push_back(a);
+        drag_ = static_cast<int>(app.assistants.size()) - 1;
+        handle_ = a.kind == Assistant::Kind::VanishingPoint ? 0 : 1;
+        fresh_ = true;
+    }
+    void on_drag(App& app, const ToolInput& in, ImGuiMouseButton) override {
+        if (drag_ < 0 || drag_ >= static_cast<int>(app.assistants.size())) return;
+        Assistant& a = app.assistants[drag_];
+        if (handle_ == 0) {
+            if (a.kind == Assistant::Kind::VanishingPoint) { a.x0 = in.img_x; a.y0 = in.img_y; }
+            else { a.x0 = in.img_x; a.y0 = in.img_y; }
+        } else { a.x1 = in.img_x; a.y1 = in.img_y; }
+    }
+    void on_release(App& app, const ToolInput&, ImGuiMouseButton) override {
+        // A ruler needs two distinct ends; a click alone makes none.
+        if (fresh_ && drag_ >= 0 && drag_ < static_cast<int>(app.assistants.size())) {
+            Assistant& a = app.assistants[drag_];
+            if (a.kind != Assistant::Kind::VanishingPoint && std::hypot(a.x1 - a.x0, a.y1 - a.y0) < 2.0f) app.assistants.erase(app.assistants.begin() + drag_);
+        }
+        drag_ = -1; fresh_ = false;
+    }
+    void cancel(App&) override { drag_ = -1; fresh_ = false; }
+    void draw_options(App& app) override {
+        ImGui::SetNextItemWidth(140);
+        ImGui::Combo("Kind", &app.assistant_kind, "Vanishing Point\0Parallel Ruler\0Ruler\0");
+        ImGui::SameLine();
+        ImGui::Checkbox("Snap brushes", &app.assistant_snap);
+        ImGui::SameLine();
+        ImGui::Checkbox("Show", &app.show_assistants);
+        ImGui::SameLine();
+        if (ImGui::SmallButton("Clear")) app.assistants.clear();
+        ImGui::SameLine();
+        ImGui::TextDisabled(app.assistant_kind == 0 ? "Click to place a vanishing point; drag a point to move it; right-click removes it."
+                                                    : "Drag to lay a ruler; drag an end to move it; right-click an end removes it.");
+    }
+
+private:
+    int drag_ = -1, handle_ = 0;
+    bool fresh_ = false;
 };
 
 // --- Smudge / Push -----------------------------------------------------
@@ -1524,6 +1602,7 @@ std::vector<std::unique_ptr<Tool>> make_default_tools() {
     std::vector<std::unique_ptr<Tool>> t;
     t.push_back(std::make_unique<PanTool>());
     t.push_back(std::make_unique<ZoomTool>());
+    t.push_back(std::make_unique<AssistantTool>());
     t.push_back(std::make_unique<MoveTool>());
     t.push_back(std::make_unique<CropTool>());
     auto warp = make_warp_tools();   // 0 Warp Brush, 1 Mesh Warp, 2 Scratch Remover, 3 Object Remover
