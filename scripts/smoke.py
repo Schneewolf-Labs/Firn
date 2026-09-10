@@ -29,7 +29,7 @@ def check(cond, what):
         failures.append(what)
 
 def field(state, name):
-    m = re.search(name + r'=("([^"]*)"|(\S+))', state)
+    m = re.search(r'(?<![A-Za-z_])' + name + r'=("([^"]*)"|(\S+))', state)
     if not m:
         return None
     return m.group(2) if m.group(2) is not None else m.group(3)
