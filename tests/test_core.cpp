@@ -1386,6 +1386,13 @@ static void test_zip() {
     CHECK(ar.files.size() == 3 && ar.find("mimetype") && *ar.find("mimetype") == std::vector<uint8_t>({'a', 'b', 'c'}));
     CHECK(ar.find("data/big.bin") && *ar.find("data/big.bin") == big);
     CHECK(ar.find("empty") && ar.find("empty")->empty());
+    // The index reads names without inflating anything; extract does one entry.
+    zip::Index index;
+    CHECK(zip::open(bytes.data(), bytes.size(), index, &err) && index.items.size() == 3);
+    CHECK(index.find("data/big.bin") && index.find("data/big.bin")->usize == big.size());
+    CHECK(!index.find("nope"));
+    std::vector<uint8_t> one;
+    CHECK(zip::extract(bytes.data(), bytes.size(), *index.find("data/big.bin"), one, &err) && one == big);
     // The mimetype entry is stored first and uncompressed, as OpenRaster requires.
     CHECK(std::memcmp(bytes.data() + 30, "mimetype", 8) == 0 && bytes[8] == 0 && std::memcmp(bytes.data() + 38, "abc", 3) == 0);
 }
@@ -1501,6 +1508,14 @@ static void test_openraster() {
     CHECK(back->guides_v().size() == 2 && back->guides_v()[1] == 20.0f);
     CHECK(back->assistants().size() == 2 && back->assistants()[0].kind == Assistant::Kind::VanishingPoint && back->assistants()[0].x0 == 30);
     CHECK(back->assistants()[1].kind == Assistant::Kind::Ruler && back->assistants()[1].y1 == 4);
+    // The thumbnail is readable on its own, without the layers.
+    { const std::string tmp = tmp_path("firn_test_thumb.ora");
+      std::ofstream f(tmp, std::ios::binary);
+      f.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+      f.close();
+      auto thumb = io::load_ora_thumbnail(tmp);
+      CHECK(thumb && thumb->width() == 32 && thumb->height() == 24);
+      std::remove(tmp.c_str()); }
     CHECK(back->group_end(2) == 5);
     // The composites agree.
     const Image a = doc.composite(), b = back->composite();
@@ -1567,6 +1582,37 @@ static void test_layer_styles() {
     doc.composite_into(part, dirty);
     const Image full = doc.composite();
     CHECK(std::memcmp(part.data(), full.data(), full.size_bytes()) == 0);
+    // A style on a group works from the group's composite, not its members.
+    {
+        Document g(60, 60);
+        g.add_layer("Background").pixels.fill({128, 128, 128, 255});
+        Layer& grp = g.add_layer("Group");
+        grp.type = LayerType::Group;
+        grp.style.stroke = true;
+        grp.style.stroke_width = 2;
+        grp.style.stroke_color = {255, 0, 0, 255};
+        Layer& left = g.add_layer("Left");
+        left.depth = 1;
+        left.pixels = Image(60, 60, {0, 0, 0, 0});
+        for (int y = 20; y < 40; ++y) for (int x = 20; x < 30; ++x) left.pixels.set(x, y, {255, 255, 255, 255});
+        Layer& right = g.add_layer("Right");
+        right.depth = 1;
+        right.pixels = Image(60, 60, {0, 0, 0, 0});
+        for (int y = 20; y < 40; ++y) for (int x = 30; x < 40; ++x) right.pixels.set(x, y, {255, 255, 255, 255});
+        const Image gc = g.composite();
+        CHECK(gc.get(30, 30).r == 255 && gc.get(30, 30).g == 255);   // the seam between the members is not stroked
+        CHECK(gc.get(41, 30).r == 255 && gc.get(41, 30).g == 0);     // the group's outline is
+        CHECK(gc.get(5, 5).r == 128);
+        // Partial recomposite matches the whole.
+        g.take_dirty();
+        g.layer(2).pixels.set(25, 25, {0, 0, 0, 255});
+        g.touch({25, 25, 26, 26});
+        Image part = gc;
+        g.composite_into(part, g.take_dirty());
+        const Image whole = g.composite();
+        CHECK(std::memcmp(part.data(), whole.data(), whole.size_bytes()) == 0);
+    }
+
     // Styles survive the native format through the stash.
     const std::vector<uint8_t> bytes = io::save_psp_to_memory(doc);
     std::string err;

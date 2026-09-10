@@ -38,8 +38,11 @@ struct LayerStyle {
     static LayerStyle from_json(const json::Value& v);
 };
 
-// Renders `src` (a document-sized layer) with its style over `r`; the
-// result is r-sized (pixel (0, 0) at r's origin), straight alpha.
-Image render_layer_style(const Image& src, const LayerStyle& st, const raster::Rect& r);
+// Renders `src` with its style over `r` (document coordinates); `src`'s
+// pixel (0, 0) sits at document (sox, soy), so a group's composite can be
+// styled from a buffer covering only the part being drawn. The result is
+// r-sized (pixel (0, 0) at r's origin), straight alpha. `src` must already
+// cover `r` grown by st.reach() wherever those pixels exist.
+Image render_layer_style(const Image& src, int sox, int soy, const LayerStyle& st, const raster::Rect& r);
 
 }  // namespace firn

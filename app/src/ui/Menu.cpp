@@ -469,7 +469,7 @@ void App::draw_layer_menu_items() {
         if (doc->layer(layer).is_adjustment()) open_adjustment_dialog(layer, false);
         else open_layer_properties();
     }
-    if (ImGui::MenuItem("Layer Styles...", nullptr, false, has_any_layer && (doc->layer(layer).is_raster() || doc->layer(layer).is_vector()))) open_layer_styles(layer);
+    if (ImGui::MenuItem("Layer Styles...", nullptr, false, has_any_layer && !doc->layer(layer).is_adjustment())) open_layer_styles(layer);
     ImGui::Separator();
     if (ImGui::BeginMenu("Mask", has_any_layer && doc->layer(layer).has_mask())) {
         bool on = doc->layer(layer).mask_enabled;

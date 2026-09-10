@@ -104,17 +104,22 @@ LayerStyle LayerStyle::from_json(const json::Value& v) {
     return s;
 }
 
-Image render_layer_style(const Image& src, const LayerStyle& st, const raster::Rect& rect) {
-    const raster::Rect r = rect.clipped(src.width(), src.height());
+Image render_layer_style(const Image& src, int sox, int soy, const LayerStyle& st, const raster::Rect& rect) {
+    // The source covers this part of the document.
+    const raster::Rect bounds{sox, soy, sox + src.width(), soy + src.height()};
+    auto clip = [&](const raster::Rect& v) {
+        return raster::Rect{std::max(v.x0, bounds.x0), std::max(v.y0, bounds.y0), std::min(v.x1, bounds.x1), std::min(v.y1, bounds.y1)};
+    };
+    const raster::Rect r = clip(rect);
     Image out(std::max(r.x1 - r.x0, 0), std::max(r.y1 - r.y0, 0), {0, 0, 0, 0});
     if (r.empty()) return out;
-    // Work over the rect padded by the reach, clipped to the image.
+    // Work over the rect padded by the reach, clipped to what the source has.
     const int reach = st.reach();
-    const raster::Rect rp = raster::Rect{r.x0 - reach, r.y0 - reach, r.x1 + reach, r.y1 + reach}.clipped(src.width(), src.height());
+    const raster::Rect rp = clip({r.x0 - reach, r.y0 - reach, r.x1 + reach, r.y1 + reach});
     const int pw = rp.x1 - rp.x0, ph = rp.y1 - rp.y0;
     std::vector<float> A(static_cast<size_t>(pw) * ph);
     for (int y = 0; y < ph; ++y)
-        for (int x = 0; x < pw; ++x) A[static_cast<size_t>(y) * pw + x] = src.get(rp.x0 + x, rp.y0 + y).a / 255.0f;
+        for (int x = 0; x < pw; ++x) A[static_cast<size_t>(y) * pw + x] = src.get(rp.x0 + x - sox, rp.y0 + y - soy).a / 255.0f;
 
     std::vector<float> shadow, glow, inner, stroked, bevel_blur;
     if (st.drop_shadow) {
@@ -147,7 +152,7 @@ Image render_layer_style(const Image& src, const LayerStyle& st, const raster::R
             if (st.drop_shadow) over(d, st.shadow_color, shadow[i] * st.shadow_opacity);
             if (st.outer_glow) over(d, st.glow_color, glow[i] * (1.0f - a) * st.glow_opacity * 1.5f);
             if (st.stroke) over(d, st.stroke_color, std::max(stroked[i] - a, 0.0f) * st.stroke_opacity);
-            over(d, src.get(x, y), 1.0f);
+            over(d, src.get(x - sox, y - soy), 1.0f);
             if (st.inner_glow) over(d, st.inner_glow_color, inner[i] * a * st.inner_glow_opacity * 1.5f);
             if (st.bevel && a > 0.0f) {
                 // Lit slope of the blurred shape: highlight facing the light, shadow away from it.

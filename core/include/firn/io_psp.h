@@ -37,6 +37,9 @@ bool adjustment_from_bytes(const uint8_t* data, size_t size, Adjustment& out);
 bool is_ora_extension(const std::string& path);
 std::unique_ptr<Document> load_ora(const std::string& path, std::string* err, std::vector<std::string>* warnings);
 std::unique_ptr<Document> load_ora_from_memory(const uint8_t* data, size_t size, std::string* err, std::vector<std::string>* warnings);
+// The thumbnail an OpenRaster file carries, without inflating its layers
+// (the file dialog's preview); nullopt when there is none.
+std::optional<Image> load_ora_thumbnail(const std::string& path);
 std::vector<uint8_t> save_ora_to_memory(const Document& doc);
 bool save_ora(const Document& doc, const std::string& path, std::string* err);
 // Photoshop PSD/PSB import (core/src/io_psd.cpp): layers, groups, masks, 8 and 16 bit RGB or grayscale.

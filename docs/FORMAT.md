@@ -284,7 +284,9 @@ each ruler guide and `<firn:assistant kind x0 y0 x1 y1>` each painting
 assistant. Reading honors
 offsets, hidden layers, nested stacks and 16-bit PNGs from other editors;
 unsupported operators are reported as warnings and composited Normal.
-The zip reader and writer are `core/src/zip.cpp` (store and deflate only).
+The zip reader and writer are `core/src/zip.cpp` (store and deflate only);
+`zip::open` reads just the central directory so the file dialog can pull
+`Thumbnails/thumbnail.png` out of a large file without inflating its layers.
 
 ## Firn stash
 

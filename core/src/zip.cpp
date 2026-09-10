@@ -76,7 +76,12 @@ const std::vector<uint8_t>* Archive::find(const std::string& name) const {
     return nullptr;
 }
 
-bool read(const uint8_t* data, size_t size, Archive& out, std::string* err) {
+const Index::Item* Index::find(const std::string& name) const {
+    for (const auto& i : items) if (i.name == name) return &i;
+    return nullptr;
+}
+
+bool open(const uint8_t* data, size_t size, Index& out, std::string* err) {
     auto fail = [&](const char* m) { if (err) *err = m; return false; };
     if (size < 22) return fail("not a zip file");
     // End of central directory: scan back over a possible comment.
@@ -87,26 +92,44 @@ bool read(const uint8_t* data, size_t size, Archive& out, std::string* err) {
     size_t cd = get32(data + eocd + 16);
     for (uint32_t i = 0; i < count; ++i) {
         if (cd + 46 > size || get32(data + cd) != 0x02014b50u) return fail("zip: bad central directory");
-        const uint16_t method = get16(data + cd + 10);
-        const uint32_t csize = get32(data + cd + 20), usize = get32(data + cd + 24);
+        Index::Item item;
+        item.method = get16(data + cd + 10);
+        item.csize = get32(data + cd + 20);
+        item.usize = get32(data + cd + 24);
         const uint16_t nlen = get16(data + cd + 28), xlen = get16(data + cd + 30), clen = get16(data + cd + 32);
-        const uint32_t local = get32(data + cd + 42);
+        item.offset = get32(data + cd + 42);
         if (cd + 46 + nlen > size) return fail("zip: bad entry name");
-        std::string name(reinterpret_cast<const char*>(data + cd + 46), nlen);
+        item.name.assign(reinterpret_cast<const char*>(data + cd + 46), nlen);
         cd += 46 + nlen + xlen + clen;
-        if (local + 30 > size || get32(data + local) != 0x04034b50u) return fail("zip: bad local header");
-        const size_t body = local + 30 + get16(data + local + 26) + get16(data + local + 28);
-        if (body + csize > size) return fail("zip: truncated entry");
+        out.items.push_back(std::move(item));
+    }
+    return true;
+}
+
+bool extract(const uint8_t* data, size_t size, const Index::Item& item, std::vector<uint8_t>& out, std::string* err) {
+    auto fail = [&](const char* m) { if (err) *err = m; return false; };
+    if (item.offset + 30 > size || get32(data + item.offset) != 0x04034b50u) return fail("zip: bad local header");
+    const size_t body = item.offset + 30 + get16(data + item.offset + 26) + get16(data + item.offset + 28);
+    if (body + item.csize > size) return fail("zip: truncated entry");
+    if (item.method == 0) out.assign(data + body, data + body + item.csize);
+    else if (item.method == 8) {
+        int outlen = 0;
+        char* raw = item.csize ? stbi_zlib_decode_noheader_malloc(reinterpret_cast<const char*>(data + body), static_cast<int>(item.csize), &outlen) : nullptr;
+        if (item.csize && !raw) return fail("zip: inflate failed");
+        if (raw) { out.assign(raw, raw + outlen); std::free(raw); }
+        else out.clear();
+    } else return fail("zip: unsupported compression method");
+    if (out.size() != item.usize) return fail("zip: size mismatch");
+    return true;
+}
+
+bool read(const uint8_t* data, size_t size, Archive& out, std::string* err) {
+    Index index;
+    if (!open(data, size, index, err)) return false;
+    for (const Index::Item& item : index.items) {
         std::vector<uint8_t> bytes;
-        if (method == 0) bytes.assign(data + body, data + body + csize);
-        else if (method == 8) {
-            int outlen = 0;
-            char* raw = csize ? stbi_zlib_decode_noheader_malloc(reinterpret_cast<const char*>(data + body), static_cast<int>(csize), &outlen) : nullptr;
-            if (csize && !raw) return fail("zip: inflate failed");
-            if (raw) { bytes.assign(raw, raw + outlen); std::free(raw); }
-        } else return fail("zip: unsupported compression method");
-        if (bytes.size() != usize) return fail("zip: size mismatch");
-        out.files.emplace_back(std::move(name), std::move(bytes));
+        if (!extract(data, size, item, bytes, err)) return false;
+        out.files.emplace_back(item.name, std::move(bytes));
     }
     return true;
 }

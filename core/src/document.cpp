@@ -301,9 +301,18 @@ void Document::composite_region(Image& out, int ox, int oy, size_t from, size_t 
         if (L.type == LayerType::Group) {
             const size_t end = group_end(li);
             if (L.visible && L.opacity > 0.0f && end > li + 1) {
-                Image inner(r.x1 - r.x0, r.y1 - r.y0, {0, 0, 0, 0});
-                composite_region(inner, r.x0, r.y0, li + 1, std::min(end - 1, to), r);
-                blend_layer(out, ox, oy, inner, r.x0, r.y0, L, r);
+                // A styled group needs its members beyond `r` as well, so the
+                // style has the shape its shadow and glow grow from.
+                const int reach = L.style.any() ? L.style.reach() : 0;
+                const raster::Rect rp = raster::Rect{r.x0 - reach, r.y0 - reach, r.x1 + reach, r.y1 + reach}.clipped(width_, height_);
+                Image inner(rp.x1 - rp.x0, rp.y1 - rp.y0, {0, 0, 0, 0});
+                composite_region(inner, rp.x0, rp.y0, li + 1, std::min(end - 1, to), rp);
+                if (reach || L.style.any()) {
+                    const Image styled = render_layer_style(inner, rp.x0, rp.y0, L.style, r);
+                    blend_layer(out, ox, oy, styled, r.x0, r.y0, L, r);
+                } else {
+                    blend_layer(out, ox, oy, inner, rp.x0, rp.y0, L, r);
+                }
             }
             li = end;
             continue;
@@ -318,7 +327,7 @@ void Document::composite_region(Image& out, int ox, int oy, size_t from, size_t 
         }
         if (L.visible && L.opacity > 0.0f && !L.pixels.empty()) {
             if (L.style.any()) {
-                const Image styled = render_layer_style(L.pixels, L.style, r);
+                const Image styled = render_layer_style(L.pixels, 0, 0, L.style, r);
                 blend_layer(out, ox, oy, styled, r.x0, r.y0, L, r);
             } else {
                 blend_layer(out, ox, oy, L.pixels, 0, 0, L, r);

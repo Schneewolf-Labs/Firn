@@ -33,8 +33,9 @@ section into the next version.
   meant for the original.
 - Layer Styles (Layers > Layer Styles, also in the layer's right-click
   menu): drop shadow, outer glow, inner glow, stroke and bevel rendered
-  from the layer's shape at composite time and kept editable; the palette
-  tags styled layers [fx]. Kept in the native format through the Firn
+  from the layer's shape at composite time and kept editable, on raster
+  and vector layers and on groups (where the style follows the group's
+  combined shape, not its members'); the palette tags styled layers [fx]. Kept in the native format through the Firn
   stash; the original shows the layer without them.
 - Filter layers (Layers > New Filter Layer): Gaussian Blur, Average and
   Unsharp Mask applied live to everything below, with a mask and opacity

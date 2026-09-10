@@ -37,7 +37,7 @@ bool slider(const char* label, float& v, float lo, float hi, const char* fmt = "
 void App::open_layer_styles(int layer) {
     if (!doc || layer < 0 || layer >= static_cast<int>(doc->layer_count())) return;
     const Layer& L = doc->layer(layer);
-    if (!L.is_raster() && !L.is_vector()) { status = "Layer styles apply to raster and vector layers."; return; }
+    if (!L.is_raster() && !L.is_vector() && L.type != LayerType::Group) { status = "Layer styles apply to raster, vector and group layers."; return; }
     style_layer_index = layer;
     style_before = L.style;
     show_layer_styles_dialog = true;

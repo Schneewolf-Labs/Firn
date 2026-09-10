@@ -405,6 +405,24 @@ bool is_ora_extension(const std::string& path) {
     return ext == "ora";
 }
 
+std::optional<Image> load_ora_thumbnail(const std::string& path) {
+    std::ifstream f(path, std::ios::binary);
+    if (!f) return std::nullopt;
+    const std::vector<uint8_t> bytes((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+    zip::Index index;
+    if (!zip::open(bytes.data(), bytes.size(), index)) return std::nullopt;
+    // The thumbnail first; the merged image is the fallback. Either way only
+    // that one entry is inflated, so browsing a folder stays cheap.
+    for (const char* name : {"Thumbnails/thumbnail.png", "mergedimage.png"}) {
+        const zip::Index::Item* item = index.find(name);
+        if (!item) continue;
+        std::vector<uint8_t> data;
+        if (!zip::extract(bytes.data(), bytes.size(), *item, data)) continue;
+        if (auto img = load_memory(data.data(), data.size())) return img;
+    }
+    return std::nullopt;
+}
+
 std::vector<uint8_t> save_ora_to_memory(const Document& doc) {
     OraWriter w{doc, {}, 0, {}};
     return w.build();
