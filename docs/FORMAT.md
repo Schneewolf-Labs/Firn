@@ -261,6 +261,29 @@ channel blocks: a layer block whose saved rect is empty and that has no
 channel data (what the original's own "empty layer" looks like) makes the
 original hang on "Reading".
 
+## OpenRaster (.ora): the project format
+
+Firn's own project format is OpenRaster (`core/src/io_ora.cpp`), the open
+layered format GIMP, Krita and MyPaint share: a zip whose first entry is
+the stored `mimetype` (`image/openraster`), then `stack.xml`, one PNG per
+layer under `data/`, `mergedimage.png` and `Thumbnails/thumbnail.png`.
+Layers are listed top first; a `<stack>` inside the stack is a group.
+Every layer carries `name`, `src`, `x`, `y`, `opacity`, `visibility` and a
+`composite-op` (the SVG operators; blend modes without one, such as
+Dissolve, fall back to `svg:src-over`).
+
+Firn-only data lives in `firn:` attributes and elements that other readers
+ignore: `firn:blend` (the exact blend mode name), `firn:background`,
+`firn:mask` (a gray PNG, plus `firn:mask-enabled`), `firn:style` (the
+layer style as JSON), `firn:type` = `vector` (`firn:vector`: the native
+vector extension block bytes), `adjustment` (`firn:adjustment`: the native
+adjustment extension bytes) or `filter` (`firn:filter`: JSON parameters);
+16-bit layers are 16-bit PNGs; `<firn:icc src>` holds the color profile
+and `<firn:channel name src>` each saved selection. Reading honors
+offsets, hidden layers, nested stacks and 16-bit PNGs from other editors;
+unsupported operators are reported as warnings and composited Normal.
+The zip reader and writer are `core/src/zip.cpp` (store and deflate only).
+
 ## Firn stash
 
 Things this format has no place for ride in the creator block's

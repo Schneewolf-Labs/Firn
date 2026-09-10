@@ -18,6 +18,7 @@ ROOT = drive.ROOT
 BUILD = sys.argv[1] if len(sys.argv) > 1 else os.path.join(ROOT, "build")
 OUT = tempfile.mkdtemp(prefix="firn-smoke-")
 PSP = os.path.join(OUT, "smoke.pspimage")
+ORA = os.path.join(OUT, "smoke.ora")
 PNG = os.path.join(OUT, "smoke.png")
 CONVERTED = os.path.join(OUT, "converted.png")
 
@@ -87,6 +88,10 @@ def main():
         st = run(s, ["open:" + PSP, "state"])
         check(field(st, "docs") == "2", "native file reopened as a second document")
         check(field(st, "layers") == "3" and field(st, "size") == "320x200", "reopened file keeps three layers at 320x200")
+
+        st = run(s, ["save:" + ORA, "open:" + ORA, "state"])
+        check(os.path.exists(ORA) and os.path.getsize(ORA) > 1000, "OpenRaster file written")
+        check(field(st, "docs") == "3" and field(st, "layers") == "3" and field(st, "size") == "320x200", "OpenRaster file reopened with three layers at 320x200")
 
         st = run(s, ['do IncreaseColorsTo16Bit {}', "state"])
         check(field(st, "depth") == "16", "16 bits per channel")

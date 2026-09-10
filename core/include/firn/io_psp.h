@@ -26,6 +26,19 @@ std::unique_ptr<Document> load_psp_from_memory(const uint8_t* data, size_t size,
 std::unique_ptr<Document> load_document(const std::string& path, std::string* err, std::vector<std::string>* warnings);
 
 bool is_psp_extension(const std::string& path);
+// The native format's vector layer and adjustment layer payloads as byte
+// strings, so other containers (OpenRaster) can carry them unchanged.
+std::vector<uint8_t> vector_objects_to_bytes(const std::vector<vec::Object>& objects);
+bool vector_objects_from_bytes(const uint8_t* data, size_t size, std::vector<vec::Object>& out);
+std::vector<uint8_t> adjustment_to_bytes(const Adjustment& a);
+bool adjustment_from_bytes(const uint8_t* data, size_t size, Adjustment& out);
+// OpenRaster (core/src/io_ora.cpp): Firn's project format, readable by
+// the other open-source editors; Firn-only data rides in extension attributes.
+bool is_ora_extension(const std::string& path);
+std::unique_ptr<Document> load_ora(const std::string& path, std::string* err, std::vector<std::string>* warnings);
+std::unique_ptr<Document> load_ora_from_memory(const uint8_t* data, size_t size, std::string* err, std::vector<std::string>* warnings);
+std::vector<uint8_t> save_ora_to_memory(const Document& doc);
+bool save_ora(const Document& doc, const std::string& path, std::string* err);
 // Photoshop PSD/PSB import (core/src/io_psd.cpp): layers, groups, masks, 8 and 16 bit RGB or grayscale.
 std::unique_ptr<Document> load_psd(const std::string& path, std::string* err, std::vector<std::string>* warnings);
 bool is_psd_extension(const std::string& path);

@@ -19,6 +19,7 @@
 #include "firn/icc.h"
 #include "firn/io.h"
 #include "firn/io_psp.h"
+#include "firn/zip.h"
 #include "firn/mask.h"
 #include "firn/raster.h"
 #include "firn/raster16.h"
@@ -1370,6 +1371,116 @@ static void test_text_objects_survive_native_save() {
     CHECK(std::abs(rx0 - qx0) < 2.0f && std::abs(ry0 - qy0) < 2.0f && std::abs(rx1 - qx1) < 2.0f && std::abs(ry1 - qy1) < 2.0f);
 }
 
+static void test_zip() {
+    std::vector<zip::Entry> entries;
+    entries.push_back({"mimetype", std::vector<uint8_t>{'a', 'b', 'c'}, true});
+    std::vector<uint8_t> big(100000);
+    for (size_t i = 0; i < big.size(); ++i) big[i] = static_cast<uint8_t>((i * 7) % 13);
+    entries.push_back({"data/big.bin", big, false});
+    entries.push_back({"empty", {}, false});
+    const std::vector<uint8_t> bytes = zip::write(entries);
+    CHECK(bytes.size() < big.size() / 2);   // deflated
+    zip::Archive ar;
+    std::string err;
+    CHECK(zip::read(bytes.data(), bytes.size(), ar, &err));
+    CHECK(ar.files.size() == 3 && ar.find("mimetype") && *ar.find("mimetype") == std::vector<uint8_t>({'a', 'b', 'c'}));
+    CHECK(ar.find("data/big.bin") && *ar.find("data/big.bin") == big);
+    CHECK(ar.find("empty") && ar.find("empty")->empty());
+    // The mimetype entry is stored first and uncompressed, as OpenRaster requires.
+    CHECK(std::memcmp(bytes.data() + 30, "mimetype", 8) == 0 && bytes[8] == 0 && std::memcmp(bytes.data() + 38, "abc", 3) == 0);
+}
+
+static void test_openraster() {
+    // A document using everything: background, a 16-bit layer, a masked
+    // group with two members, a vector layer, an adjustment layer, a filter
+    // layer, a style, a saved selection and a profile.
+    Document doc(32, 24);
+    Layer& bg = doc.add_layer("Background");
+    bg.background = true;
+    bg.pixels.fill({200, 100, 50, 255});
+    Layer& deep = doc.add_layer("Deep");
+    { Image16 d(32, 24); for (size_t i = 0; i < d.size(); i += 4) { d.data()[i] = 1000; d.data()[i + 1] = 2000; d.data()[i + 2] = 3000; d.data()[i + 3] = 40000; } deep.set_deep(std::move(d)); }
+    deep.blend = BlendMode::Multiply;
+    deep.opacity = 0.5f;
+    Layer& group = doc.add_layer("Group");
+    group.type = LayerType::Group;
+    group.mask = mask::rectangle(32, 24, 0, 0, 16, 24, false);
+    Layer& m1 = doc.add_layer("Member 1");
+    m1.depth = 1;
+    m1.pixels = Image(32, 24, {0, 0, 0, 0});
+    m1.pixels.set(3, 3, {10, 20, 30, 255});
+    m1.visible = false;
+    m1.blend = BlendMode::Dissolve;   // no SVG operator: restored from firn:blend
+    Layer& m2 = doc.add_layer("Member 2");
+    m2.depth = 1;
+    m2.pixels = Image(32, 24, {0, 0, 0, 0});
+    m2.style.drop_shadow = true;
+    Layer& vec_layer = doc.add_layer("Shapes");
+    vec_layer.type = LayerType::Vector;
+    { vec::Object rect = vec::make_rectangle(4, 4, 16, 12); rect.fill.kind = vec::PaintStyle::Kind::Solid; rect.fill.color = {0, 255, 0, 255}; vec_layer.objects.push_back(rect); }
+    vec_layer.pixels = Image(32, 24, {0, 0, 0, 0});
+    doc.rasterize_vector_layer(5);
+    Layer& adj = doc.add_layer("Invert");
+    adj.type = LayerType::Adjustment;
+    adj.adjustment.kind = Adjustment::Kind::Invert;
+    Layer& filt = doc.add_layer("Blur");
+    filt.type = LayerType::Adjustment;
+    filt.adjustment.kind = Adjustment::Kind::GaussianBlur;
+    filt.adjustment.blur_radius = 2.5f;
+    doc.alpha_channels().push_back({"Saved 1", mask::rectangle(32, 24, 2, 2, 10, 10, false)});
+    doc.set_icc(std::vector<uint8_t>{1, 2, 3, 4, 5});
+
+    const std::vector<uint8_t> bytes = io::save_ora_to_memory(doc);
+    std::string err;
+    std::vector<std::string> warnings;
+    auto back = io::load_ora_from_memory(bytes.data(), bytes.size(), &err, &warnings);
+    CHECK(back && err.empty());
+    CHECK(back->width() == 32 && back->height() == 24 && back->layer_count() == 8);
+    CHECK(back->layer(0).background && back->layer(0).pixels.get(5, 5).r == 200);
+    CHECK(back->layer(1).is_deep() && back->layer(1).deep->data()[3] == 40000 && back->layer(1).blend == BlendMode::Multiply && std::abs(back->layer(1).opacity - 0.5f) < 1e-3f);
+    CHECK(back->layer(2).type == LayerType::Group && back->layer(2).has_mask() && back->layer(2).mask.at(3, 3) == 255 && back->layer(2).mask.at(20, 3) == 0);
+    CHECK(back->layer(3).depth == 1 && !back->layer(3).visible && back->layer(3).blend == BlendMode::Dissolve && back->layer(3).pixels.get(3, 3).b == 30);
+    CHECK(back->layer(4).depth == 1 && back->layer(4).style.drop_shadow);
+    CHECK(back->layer(5).is_vector() && back->layer(5).objects.size() == 1 && back->layer(5).pixels.get(8, 8).a == 255);
+    CHECK(back->layer(6).is_adjustment() && back->layer(6).adjustment.kind == Adjustment::Kind::Invert);
+    CHECK(back->layer(7).is_adjustment() && back->layer(7).adjustment.kind == Adjustment::Kind::GaussianBlur && std::abs(back->layer(7).adjustment.blur_radius - 2.5f) < 1e-4f);
+    CHECK(back->alpha_channels().size() == 1 && back->alpha_channels()[0].name == "Saved 1" && back->alpha_channels()[0].mask.at(5, 5) == 255);
+    CHECK(back->icc() == std::vector<uint8_t>({1, 2, 3, 4, 5}));
+    CHECK(back->group_end(2) == 5);
+    // The composites agree.
+    const Image a = doc.composite(), b = back->composite();
+    int diff = 0;
+    for (size_t i = 0; i < a.size_bytes(); ++i) diff = std::max(diff, std::abs(a.data()[i] - b.data()[i]));
+    CHECK(diff <= 1);
+
+    // A file as another editor writes it: offsets, hidden layers, SVG operators, nested stacks.
+    Image tile(4, 4, {255, 0, 0, 255});
+    std::vector<zip::Entry> entries;
+    entries.push_back({"mimetype", std::vector<uint8_t>(std::begin("image/openraster"), std::end("image/openraster") - 1), true});
+    const std::string xml =
+        "<?xml version='1.0' encoding='UTF-8'?>\n"
+        "<image version=\"0.0.1\" w=\"10\" h=\"8\">\n"
+        "  <stack>\n"
+        "    <layer name=\"Top &amp; tile\" src=\"data/t.png\" x=\"6\" y=\"5\" opacity=\"0.25\" visibility=\"hidden\" composite-op=\"svg:multiply\"/>\n"
+        "    <stack name=\"Folder\" opacity=\"1.0\">\n"
+        "      <layer name=\"Inner\" src=\"data/t.png\" x=\"-2\" y=\"-2\" composite-op=\"svg:src-over\" selected=\"true\"/>\n"
+        "    </stack>\n"
+        "    <layer name=\"Base\" src=\"data/t.png\" x=\"0\" y=\"0\" composite-op=\"svg:plus\"/>\n"
+        "  </stack>\n"
+        "</image>\n";
+    entries.push_back({"stack.xml", std::vector<uint8_t>(xml.begin(), xml.end()), false});
+    entries.push_back({"data/t.png", io::encode_png(tile), false});
+    const std::vector<uint8_t> foreign = zip::write(entries);
+    warnings.clear();
+    auto f = io::load_ora_from_memory(foreign.data(), foreign.size(), &err, &warnings);
+    CHECK(f && f->layer_count() == 4);
+    CHECK(f->layer(0).name == "Base" && f->layer(0).blend == BlendMode::Normal && warnings.size() == 1);   // svg:plus unsupported
+    CHECK(f->layer(1).type == LayerType::Group && f->layer(1).name == "Folder");
+    CHECK(f->layer(2).depth == 1 && f->layer(2).name == "Inner" && f->layer(2).pixels.get(1, 1).r == 255 && f->layer(2).pixels.get(2, 2).a == 0);   // placed at -2,-2
+    CHECK(f->layer(3).name == "Top & tile" && !f->layer(3).visible && f->layer(3).blend == BlendMode::Multiply && std::abs(f->layer(3).opacity - 0.25f) < 1e-3f);
+    CHECK(f->layer(3).pixels.get(6, 5).r == 255 && f->layer(3).pixels.get(5, 5).a == 0 && f->layer(3).pixels.get(9, 7).r == 255);
+}
+
 static void test_layer_styles() {
     // A white square on a transparent layer over a gray background, with a
     // drop shadow and a red stroke.
@@ -2397,6 +2508,8 @@ int main() {
     test_compound_and_mask_warp();
     test_filter_layers();
     test_layer_styles();
+    test_zip();
+    test_openraster();
     test_vector_core();
     test_history_limit();
     test_brush_texture();

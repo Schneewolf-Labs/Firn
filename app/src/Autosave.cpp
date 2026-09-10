@@ -1,6 +1,6 @@
 // Autosave and crash recovery. Every few minutes (Preferences), each
 // modified document is snapshotted and written on a background thread to
-// <config>/autosave/<uid>.pspimage with a sidecar naming its title and
+// <config>/autosave/<uid>.ora with a sidecar naming its title and
 // path. A normal save or close removes the file; at startup, leftover
 // files mean a crash, and a prompt offers to reopen them.
 #include <atomic>
@@ -32,7 +32,7 @@ std::string autosave_dir() {
 // left by an earlier run never collide with this run's.
 const std::string kSession = std::to_string(std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count());
 std::string key_for(int uid) { return kSession + "-" + std::to_string(uid); }
-std::string autosave_path(const std::string& key) { return autosave_dir() + "/" + key + ".pspimage"; }
+std::string autosave_path(const std::string& key) { return autosave_dir() + "/" + key + ".ora"; }
 std::string sidecar_path(const std::string& key) { return autosave_dir() + "/" + key + ".txt"; }
 
 }  // namespace
@@ -85,7 +85,7 @@ void App::check_recovery() {
     recover_files.clear();
     std::error_code ec;
     for (const auto& de : fs::directory_iterator(autosave_dir(), fs::directory_options::skip_permission_denied, ec)) {
-        if (!de.is_regular_file(ec) || de.path().extension() != ".pspimage") continue;
+        if (!de.is_regular_file(ec) || (de.path().extension() != ".ora" && de.path().extension() != ".pspimage")) continue;
         RecoverEntry e;
         e.file = de.path().string();
         e.key = de.path().stem().string();

@@ -109,6 +109,11 @@ docs/    notes on the original: command inventory, module mapping, FORMAT.md
   original where one exists (A pan, Z zoom, S selection, E dropper, B brush,
   X eraser, F fill). L freehand and W magic wand are ours; the original put
   those on the S flyout.
+- **OpenRaster (.ora)** is the project format (`core/src/io_ora.cpp`,
+  zip in `core/src/zip.cpp`): everything the Document holds round-trips,
+  Firn-only data goes in `firn:` attributes (docs/FORMAT.md, "OpenRaster").
+  The classic native format stays fully supported for the original; add
+  new Firn-only state to both the .ora writer and the Firn stash.
 - **Native format reading** lives in `core/src/io_psp.cpp`; `docs/FORMAT.md`
   is the reference and must be updated when the reader learns a new block.
   `tests/test_psp_corpus.cpp` loads every sample under `WindowsInstall/`

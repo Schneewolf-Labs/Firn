@@ -11,6 +11,8 @@ add_library(firncore STATIC
   src/vector.cpp
   src/adjustment.cpp
   src/layerstyle.cpp
+  src/zip.cpp
+  src/io_ora.cpp
   src/photo.cpp
   src/effects_geo.cpp
   src/effects_art.cpp

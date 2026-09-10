@@ -96,6 +96,13 @@ release whose notes are that version's CHANGELOG section.
 
 ## File formats
 
+Projects are saved as **OpenRaster** (`.ora`), the open layered format
+GIMP, Krita and MyPaint also read and write; everything Firn knows about
+(layers, groups, masks, vector objects, adjustment and filter layers,
+layer styles, 16-bit layers, color profiles, saved selections) survives a
+round trip. Firn-only details ride in extension attributes other editors
+ignore.
+
 Opens PNG, JPEG, BMP, TGA, GIF and PNM through stb, and the original
 program's native container (`.PspImage`, plus `.PspTube` and `.PspFrame`,
 which share it) with layers, positions, opacity, blend modes and visibility.

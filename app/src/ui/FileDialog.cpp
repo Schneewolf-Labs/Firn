@@ -117,7 +117,7 @@ void FileDialog::load_thumbnail(Entry& e) {
     if (e.size > 64u * 1024 * 1024) return;  // too big to decode for a thumbnail
     std::optional<firn::Image> img;
     std::string err;
-    if (firn::io::is_psp_extension(path.string())) {
+    if (firn::io::is_psp_extension(path.string()) || firn::io::is_ora_extension(path.string()) || firn::io::is_psd_extension(path.string())) {
         std::vector<std::string> warnings;
         auto d = firn::io::load_document(path.string(), &err, &warnings);
         if (d) img = d->composite();
@@ -168,7 +168,8 @@ namespace {
 
 // Display names for the "Save as type" list; anything else shows its extension.
 const char* type_label(const std::string& ext) {
-    if (ext == "pspimage") return "Firn image (*.pspimage)";
+    if (ext == "ora") return "OpenRaster image (*.ora)";
+    if (ext == "pspimage") return "Classic image (*.pspimage)";
     if (ext == "png") return "PNG (*.png)";
     if (ext == "jpg") return "JPEG (*.jpg, *.jpeg)";
     if (ext == "jpeg") return nullptr;  // folded into jpg

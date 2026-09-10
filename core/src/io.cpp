@@ -112,7 +112,18 @@ void png_chunk(std::vector<uint8_t>& out, const char* type, const std::vector<ui
 }
 }  // namespace
 
-bool save_png16(const Image16& img, const std::string& path, std::string* err) {
+std::optional<Image16> load16_memory(const uint8_t* data, size_t size) {
+    if (!stbi_is_16_bit_from_memory(data, static_cast<int>(size))) return std::nullopt;
+    int w = 0, h = 0, n = 0;
+    stbi_us* px = stbi_load_16_from_memory(data, static_cast<int>(size), &w, &h, &n, 4);
+    if (!px) return std::nullopt;
+    Image16 img(w, h);
+    std::memcpy(img.data(), px, img.size() * 2);
+    stbi_image_free(px);
+    return img;
+}
+
+std::vector<uint8_t> encode_png16(const Image16& img) {
     // Filter type 0 rows of big-endian RGBA16, deflated with stb's encoder.
     const size_t row = static_cast<size_t>(img.width()) * 8;
     std::vector<uint8_t> raw((row + 1) * img.height());
@@ -125,7 +136,7 @@ bool save_png16(const Image16& img, const std::string& path, std::string* err) {
     int zlen = 0;
     // Big images take a lighter compression level: several times faster for a few percent of size.
     unsigned char* z = stbi_zlib_compress(raw.data(), static_cast<int>(raw.size()), &zlen, raw.size() > (32u << 20) ? 4 : 8);
-    if (!z) { if (err) *err = "deflate failed"; return false; }
+    if (!z) return {};
     std::vector<uint8_t> out{0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A};
     std::vector<uint8_t> ihdr;
     auto be32 = [&](uint32_t v) { ihdr.push_back(static_cast<uint8_t>(v >> 24)); ihdr.push_back(static_cast<uint8_t>(v >> 16)); ihdr.push_back(static_cast<uint8_t>(v >> 8)); ihdr.push_back(static_cast<uint8_t>(v)); };
@@ -135,6 +146,12 @@ bool save_png16(const Image16& img, const std::string& path, std::string* err) {
     png_chunk(out, "IDAT", std::vector<uint8_t>(z, z + zlen));
     STBIW_FREE(z);
     png_chunk(out, "IEND", {});
+    return out;
+}
+
+bool save_png16(const Image16& img, const std::string& path, std::string* err) {
+    const std::vector<uint8_t> out = encode_png16(img);
+    if (out.empty()) { if (err) *err = "deflate failed"; return false; }
     std::ofstream f(path, std::ios::binary);
     if (!f) { if (err) *err = "cannot write " + path; return false; }
     f.write(reinterpret_cast<const char*>(out.data()), static_cast<std::streamsize>(out.size()));
@@ -321,12 +338,12 @@ bool save(const Image& img, const std::string& path, std::string* err, int jpeg_
 }
 
 const std::vector<std::string>& load_extensions() {
-    static const std::vector<std::string> v{"pspimage", "psp", "psptube", "pspframe", "psd", "psb", "png", "jpg", "jpeg", "webp", "bmp", "tga", "gif", "pnm", "ppm", "pgm"};
+    static const std::vector<std::string> v{"ora", "pspimage", "psp", "psptube", "pspframe", "psd", "psb", "png", "jpg", "jpeg", "webp", "bmp", "tga", "gif", "pnm", "ppm", "pgm"};
     return v;
 }
 
 const std::vector<std::string>& save_extensions() {
-    static const std::vector<std::string> v{"pspimage", "png", "jpg", "jpeg", "webp", "bmp", "tga"};
+    static const std::vector<std::string> v{"ora", "pspimage", "png", "jpg", "jpeg", "webp", "bmp", "tga"};
     return v;
 }
 

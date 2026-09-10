@@ -268,7 +268,13 @@ bool App::save_document(const std::string& path) {
     if (current_doc >= 0 && current_doc < static_cast<int>(docs.size())) { docs[current_doc].autosave_cursor = saved_cursor; autosave_forget(docs[current_doc].uid); }
     config.touch_recent(path);
     status = "Saved " + path;
-    if (!io::is_psp_extension(path) && doc->layer_count() > 1) status += "\nFlattened: only .PspImage keeps layers.";
+    if (!io::is_psp_extension(path) && !io::is_ora_extension(path) && doc->layer_count() > 1) status += "\nFlattened: only .ora and .pspimage keep layers.";
+    else if (io::is_psp_extension(path)) {
+        bool extras = false;
+        for (size_t i = 0; i < doc->layer_count(); ++i) extras |= doc->layer(i).style.any() || (doc->layer(i).is_adjustment() && doc->layer(i).adjustment.is_filter());
+        if (extras) status += "\nClassic format: filter layers and layer styles are kept for Firn only; the original shows the layers without them.";
+        if (!doc->icc().empty()) status += "\nClassic format: the color profile is not stored (.ora keeps it).";
+    }
     return true;
 }
 
@@ -280,14 +286,15 @@ void App::request_open() {
 void App::request_save_as() {
     if (!doc) return;
     file_op = PendingFileOp::SaveAs;
-    // Layered documents default to the native container; single-layer ones keep their format.
+    // Layered documents default to the project format (.ora); a classic
+    // file stays classic; single-layer ones keep their format.
     std::string suggested = doc_path.empty() ? "untitled" : doc_path;
     const bool layered = doc->layer_count() > 1 || !doc->layer(0).background;
-    if (doc_path.empty() || (layered && !io::is_psp_extension(doc_path))) {
+    if (doc_path.empty() || (layered && !io::is_psp_extension(doc_path) && !io::is_ora_extension(doc_path))) {
         const auto dot = suggested.rfind('.');
         const auto slash = suggested.find_last_of("/\\");
         if (dot != std::string::npos && (slash == std::string::npos || dot > slash)) suggested.resize(dot);
-        suggested += layered ? ".pspimage" : ".png";
+        suggested += layered ? ".ora" : ".png";
     }
     file_dialog.open(FileDialog::Mode::Save, "Save As", io::save_extensions(), suggested);
 }

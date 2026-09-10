@@ -173,6 +173,7 @@ Ideas taken from studying GIMP and Krita (reimplemented, not copied):
 - [x] Perspective and vanishing-point assistants for the brushes
 - [x] Non-destructive filter layers (Gaussian Blur, Average, Unsharp Mask)
 - [x] Layer styles (drop shadow, glow, bevel, stroke) kept editable
+- [x] OpenRaster (.ora) as the project format; the classic format kept for the original
 
 ## Dropped (not worth the effort for this port)
 

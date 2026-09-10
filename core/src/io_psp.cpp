@@ -1243,6 +1243,7 @@ bool is_psd_extension(const std::string& path) {
 }
 
 std::unique_ptr<Document> load_document(const std::string& path, std::string* err, std::vector<std::string>* warnings) {
+    if (is_ora_extension(path)) return load_ora(path, err, warnings);
     if (is_psp_extension(path)) return load_psp(path, err, warnings);
     if (is_psd_extension(path)) return load_psd(path, err, warnings);
     if (auto deep = load16(path, nullptr)) {
@@ -1921,6 +1922,50 @@ std::vector<uint8_t> save_psp_to_memory(const Document& doc) {
     return w.out;
 }
 
+std::vector<uint8_t> vector_objects_to_bytes(const std::vector<vec::Object>& objects) {
+    Writer ext;
+    ext.u32(8); ext.u32(static_cast<uint32_t>(objects.size()));
+    uint32_t next_id = 1;
+    for (const vec::Object& o : objects) {
+        vec::Object copy = o;
+        copy.file_flags = next_id++;
+        ext.bytes(write_shape(copy));
+    }
+    Writer b;
+    b.block(kVectorExtBlock, ext.out);
+    return b.out;
+}
+
+bool vector_objects_from_bytes(const uint8_t* data, size_t size, std::vector<vec::Object>& out) {
+    const Reader r{data, size};
+    bool any = false;
+    for (const Block& vb : blocks(r, 0, size)) {
+        if (vb.id != kVectorExtBlock || !r.ok(vb.start, 8)) continue;
+        any = true;
+        const size_t vchunk = r.u32(vb.start);
+        for (const Block& sb : blocks(r, vb.start + vchunk, vb.end)) {
+            if (sb.id != kShapeBlock) continue;
+            vec::Object o;
+            if (read_shape(r, sb, o)) out.push_back(std::move(o));
+        }
+    }
+    return any;
+}
+
+std::vector<uint8_t> adjustment_to_bytes(const Adjustment& a) {
+    Writer ext;
+    ext.u32(6); ext.u16(static_cast<int>(a.kind));
+    ext.bytes(adjustment_definition(a));
+    return ext.out;
+}
+
+bool adjustment_from_bytes(const uint8_t* data, size_t size, Adjustment& out) {
+    if (size < 6) return false;
+    const Reader r{data, size};
+    read_adjustment(r, Block{kAdjustmentExtBlock, 0, size}, out);
+    return true;
+}
+
 bool save_psp(const Document& doc, const std::string& path, std::string* err) {
     const std::vector<uint8_t> data = save_psp_to_memory(doc);
     std::ofstream f(path, std::ios::binary);
@@ -1932,6 +1977,7 @@ bool save_psp(const Document& doc, const std::string& path, std::string* err) {
 }
 
 bool save_document(const Document& doc, const std::string& path, std::string* err, int jpeg_quality) {
+    if (is_ora_extension(path)) return save_ora(doc, path, err);
     if (is_psp_extension(path)) return save_psp(doc, path, err);
     if (doc.bit_depth() == 16) {
         std::string ext = path.substr(path.find_last_of('.') == std::string::npos ? path.size() : path.find_last_of('.') + 1);

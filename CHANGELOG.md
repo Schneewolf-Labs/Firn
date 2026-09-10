@@ -24,6 +24,12 @@ section into the next version.
   (seamless clone per stamp), next to the Clone Brush.
 - Brush smoothing in Tool Options: Basic (averaged points), Weighted
   (inertia) and Stabilizer (the brush trails the cursor on a string).
+- OpenRaster (.ora) is Firn's project format: read and written with every
+  layer kind, masks, vector objects, adjustment and filter layers, layer
+  styles, 16-bit layers, color profiles and saved selections, and readable
+  by GIMP, Krita and MyPaint. Save As suggests .ora for layered images
+  and autosave uses it; the classic format stays supported for files
+  meant for the original.
 - Layer Styles (Layers > Layer Styles, also in the layer's right-click
   menu): drop shadow, outer glow, inner glow, stroke and bevel rendered
   from the layer's shape at composite time and kept editable; the palette

@@ -15,7 +15,9 @@ std::optional<Image> load_memory(const uint8_t* data, size_t size, std::string* 
 std::vector<uint8_t> encode_png(const Image& img);
 // 16-bit PNG (and other 16-bit files stb reads): nullopt when the file has 8-bit channels.
 std::optional<Image16> load16(const std::string& path, std::string* err = nullptr);
+std::optional<Image16> load16_memory(const uint8_t* data, size_t size);   // nullopt for 8-bit data
 bool save_png16(const Image16& img, const std::string& path, std::string* err = nullptr);
+std::vector<uint8_t> encode_png16(const Image16& img);   // empty on failure
 // Embedded ICC profile of a PNG (iCCP) or JPEG (APP2), empty when none.
 std::vector<uint8_t> read_icc(const std::string& path);
 // Adds a profile to an already written PNG or JPEG file in place.
