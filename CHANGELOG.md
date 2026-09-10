@@ -16,6 +16,10 @@ section into the next version.
 - HiDPI: the UI follows the display's scale factor (drawable ratio on
   macOS and Wayland, DPI on Windows, GDK_SCALE / QT_SCALE_FACTOR / Xft.dpi
   on X11), with a UI scale setting in Preferences and FIRN_UI_SCALE to force it.
+- Pen tablets: pressure drives the brush size and/or opacity (Tool
+  Options), the eraser end switches to the Eraser tool and back, tilt is
+  read where reported. XInput2 on X11, pointer messages on Windows, tablet
+  events on macOS; Wayland sessions get no pressure yet.
 - WebP read and write (lossless or lossy with a quality choice), bundled
   through libwebp at build time.
 - Photoshop PSD/PSB import: layers with opacity, blend modes, visibility,

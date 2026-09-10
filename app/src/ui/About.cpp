@@ -7,6 +7,7 @@
 
 #include "App.h"
 #include "Config.h"
+#include "Tablet.h"
 #include "Version.h"
 #include "firn/io.h"
 #include "imgui.h"
@@ -82,6 +83,7 @@ void App::draw_about_dialog() {
     ImGui::Text("Dear ImGui %s (docking), SDL %d.%d.%d, %s", IMGUI_VERSION, linked.major, linked.minor, linked.patch, platform());
     ImGui::TextUnformatted(about_gl.c_str());
     ImGui::Text("Settings: %s", Config::directory().c_str());
+    ImGui::Text("Pen input: %s%s", tablet::backend(), pen.present ? " (pen seen)" : "");
     if (doc) ImGui::Text("Open images: %zu", docs.size());
     ImGui::Separator();
     ImGui::TextUnformatted("github.com/Schneewolf-Labs/Firn");

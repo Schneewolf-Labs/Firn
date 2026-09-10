@@ -61,10 +61,13 @@ public:
     Stroke(const Image& base, Brush brush, Color color, StrokeMode mode, const Mask* clip = nullptr);
 
     // Add a point (image coordinates, sub-pixel ok). Stamps are placed along
-    // the segment from the previous point at the brush spacing.
-    void add_point(float x, float y);
+    // the segment from the previous point at the brush spacing. `pressure`
+    // (0..1, from a pen) scales the stamps per set_pressure_response.
+    void add_point(float x, float y, float pressure = 1.0f);
     // One stamp regardless of spacing (airbrush ticks while the mouse rests).
-    void stamp_at(float x, float y) { stamp(x, y); }
+    void stamp_at(float x, float y, float pressure = 1.0f) { apply_pressure(pressure); stamp(x, y); }
+    // What pen pressure drives: the stamp size, the coverage, both, or nothing.
+    void set_pressure_response(bool size, bool opacity) { pressure_size_ = size; pressure_alpha_ = opacity; }
 
     // Clone source: `src` must outlive the stroke; a destination pixel (x, y)
     // takes src(x + ox, y + oy).
@@ -95,8 +98,11 @@ private:
     std::vector<float> mask_;
     Rect pending_;
     bool has_last_ = false;
-    float last_x_ = 0, last_y_ = 0;
+    float last_x_ = 0, last_y_ = 0, last_pressure_ = 1.0f;
     float carry_ = 0;  // distance left over from the previous segment
+    bool pressure_size_ = false, pressure_alpha_ = false;
+    float size_scale_ = 1.0f, alpha_scale_ = 1.0f;   // from the current pressure
+    void apply_pressure(float p);
 };
 
 // 4-connected flood fill from (x,y). Pixels whose max channel difference to

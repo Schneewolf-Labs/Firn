@@ -320,6 +320,9 @@ void App::draw_canvas_view(ImVec2 view_pos, ImVec2 view_size) {
     in.img_x = (io.MousePos.x - p0.x) / zoom;
     in.img_y = (io.MousePos.y - p0.y) / zoom;
     in.inside = in.img_x >= 0 && in.img_y >= 0 && in.img_x < img_w && in.img_y < img_h;
+    // A pen in use drives pressure; a tablet that reports 0 while the button
+    // is down still paints faintly rather than not at all.
+    in.pressure = pen.present ? std::max(pen.pressure, active_button >= 0 ? 0.02f : 0.0f) : 1.0f;
     in.dl = dl;
 
     if (tool().wants_snap() && (snap_to_guides || snap_to_grid)) snap_point(in.img_x, in.img_y);

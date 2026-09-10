@@ -38,6 +38,7 @@ void App::apply_config() {
         for (DocState& d : docs) d.tex_revision = ~0ull;
     }
     image_windows = config.image_windows;
+    pen_size = config.pen_size; pen_opacity = config.pen_opacity;
     apply_theme(config.theme);
     // Library folders may have changed: rescan on next use.
     tubes_loaded = brush_tips_loaded = textures_loaded = false;
@@ -716,6 +717,21 @@ void App::set_selection_edit(bool on) {
         if (!after.any()) after = Mask();
         set_selection("Edit Selection", std::move(after));
         overlay_tex_revision = ~0ull;
+    }
+}
+
+// Pen presence fades after a few seconds without reports; the eraser tip
+// picks the Eraser tool and puts the previous tool back when it lifts.
+void App::pen_tick() {
+    if (pen.present && ImGui::GetTime() - pen.last_seen > 3.0) { pen.present = false; pen.eraser = false; }
+    if (active_button >= 0) return;   // never switch tools mid-gesture
+    const bool on_eraser = std::strcmp(tool().name(), "Eraser") == 0;
+    if (pen.present && pen.eraser && !on_eraser && pen_prev_tool < 0) {
+        for (size_t i = 0; i < tools.size(); ++i)
+            if (std::strcmp(tools[i]->name(), "Eraser") == 0) { pen_prev_tool = tool_index; select_tool(static_cast<int>(i)); break; }
+    } else if ((!pen.eraser || !pen.present) && pen_prev_tool >= 0) {
+        if (on_eraser) select_tool(pen_prev_tool);
+        pen_prev_tool = -1;
     }
 }
 

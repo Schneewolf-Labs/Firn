@@ -79,9 +79,15 @@ static inline float texture_weight(const Brush& b, int x, int y) {
     return 1.0f - b.texture_strength * (1.0f - t);
 }
 
+void Stroke::apply_pressure(float p) {
+    p = std::clamp(p, 0.0f, 1.0f);
+    size_scale_ = pressure_size_ ? std::max(0.05f, p) : 1.0f;
+    alpha_scale_ = pressure_alpha_ ? p : 1.0f;
+}
+
 void Stroke::stamp(float cx, float cy) {
     if (brush_.tip && brush_.tip->width > 0) { stamp_tip(cx, cy); return; }
-    const float r = std::max(brush_.size * 0.5f, 0.5f);
+    const float r = std::max(brush_.size * size_scale_ * 0.5f, 0.5f);
     const float inner = r * std::clamp(brush_.hardness, 0.0f, 1.0f);
     const int w = base_.width(), h = base_.height();
     Rect box{static_cast<int>(std::floor(cx - r)), static_cast<int>(std::floor(cy - r)),
@@ -98,7 +104,7 @@ void Stroke::stamp(float cx, float cy) {
             else if (brush_.hardness >= 1.0f || r - inner < 1.0f) cov = std::clamp(r + 0.5f - d, 0.0f, 1.0f);
             else cov = std::clamp((r - d) / (r - inner), 0.0f, 1.0f);
             if (cov <= 0.0f) continue;
-            cov *= texture_weight(brush_, x, y);
+            cov *= texture_weight(brush_, x, y) * alpha_scale_;
             float& m = mask_[static_cast<size_t>(y) * w + x];
             m = brush_.accumulate ? std::min(1.0f, m + cov * brush_.flow) : std::max(m, cov);
         }
@@ -110,7 +116,7 @@ void Stroke::stamp(float cx, float cy) {
 // size, sampled bilinearly, centered on (cx, cy).
 void Stroke::stamp_tip(float cx, float cy) {
     const BrushTip& tip = *brush_.tip;
-    const float scale = std::max(brush_.size, 1.0f) / std::max(tip.width, tip.height);
+    const float scale = std::max(brush_.size * size_scale_, 1.0f) / std::max(tip.width, tip.height);
     const float tw = tip.width * scale, th = tip.height * scale;
     const int w = base_.width(), h = base_.height();
     Rect box{static_cast<int>(std::floor(cx - tw * 0.5f)), static_cast<int>(std::floor(cy - th * 0.5f)),
@@ -133,7 +139,7 @@ void Stroke::stamp_tip(float cx, float cy) {
         for (int x = box.x0; x < box.x1; ++x) {
             const float u = ((x + 0.5f) - (cx - tw * 0.5f)) / scale - 0.5f;
             const float v = ((y + 0.5f) - (cy - th * 0.5f)) / scale - 0.5f;
-            const float cov = std::clamp(sample(u, v), 0.0f, 1.0f) * texture_weight(brush_, x, y);
+            const float cov = std::clamp(sample(u, v), 0.0f, 1.0f) * texture_weight(brush_, x, y) * alpha_scale_;
             if (cov <= 0.0f) continue;
             float& m = mask_[static_cast<size_t>(y) * w + x];
             m = brush_.accumulate ? std::min(1.0f, m + cov * brush_.flow) : std::max(m, cov);
@@ -141,26 +147,32 @@ void Stroke::stamp_tip(float cx, float cy) {
     pending_ = pending_.united(box);
 }
 
-void Stroke::add_point(float x, float y) {
+void Stroke::add_point(float x, float y, float pressure) {
     if (!has_last_) {
+        apply_pressure(pressure);
         stamp(x, y);
         has_last_ = true;
         last_x_ = x;
         last_y_ = y;
+        last_pressure_ = pressure;
         return;
     }
-    const float spacing = std::max(brush_.size * brush_.step, 0.5f);
     const float dx = x - last_x_, dy = y - last_y_;
     const float len = std::sqrt(dx * dx + dy * dy);
-    if (len <= 0.0f) return;
-    float t = spacing - carry_;
+    if (len <= 0.0f) { last_pressure_ = pressure; return; }
+    // Pressure ramps from the previous point to this one; spacing follows the size.
+    float t = std::max(brush_.size * size_scale_ * brush_.step, 0.5f) - carry_;
+    float spacing = 0.5f;
     while (t <= len) {
+        apply_pressure(last_pressure_ + (pressure - last_pressure_) * (t / len));
         stamp(last_x_ + dx * (t / len), last_y_ + dy * (t / len));
+        spacing = std::max(brush_.size * size_scale_ * brush_.step, 0.5f);
         t += spacing;
     }
     carry_ = len - (t - spacing);
     last_x_ = x;
     last_y_ = y;
+    last_pressure_ = pressure;
 }
 
 Rect Stroke::render(Image& dst) {

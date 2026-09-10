@@ -229,14 +229,15 @@ public:
         if (mode == raster::StrokeMode::Clone) stroke_->set_clone_source(&clone_src_, off_x_, off_y_);
         if (filter) stroke_->set_filter(std::move(filter));
         if (area_filter) stroke_->set_area_filter(std::move(area_filter));
-        last_x_ = in.img_x; last_y_ = in.img_y;
-        stroke_->add_point(in.img_x, in.img_y);
+        stroke_->set_pressure_response(app.pen_size, app.pen_opacity);
+        last_x_ = in.img_x; last_y_ = in.img_y; last_pressure_ = in.pressure;
+        stroke_->add_point(in.img_x, in.img_y, in.pressure);
         flush(app);
     }
     void on_drag(App& app, const ToolInput& in, ImGuiMouseButton) override {
         if (!stroke_) return;
-        stroke_->add_point(in.img_x, in.img_y);
-        last_x_ = in.img_x; last_y_ = in.img_y;
+        stroke_->add_point(in.img_x, in.img_y, in.pressure);
+        last_x_ = in.img_x; last_y_ = in.img_y; last_pressure_ = in.pressure;
         flush(app);
     }
     void on_release(App& app, const ToolInput&, ImGuiMouseButton) override {
@@ -255,7 +256,7 @@ public:
     void draw_overlay(App& app, const ToolInput& in) override {
         // Airbrush keeps spraying while the button is held, even at rest.
         if (kind_ == Kind::Airbrush && stroke_ && app.doc) {
-            stroke_->stamp_at(last_x_, last_y_);
+            stroke_->stamp_at(last_x_, last_y_, last_pressure_);
             flush(app);
         }
         const float r = app.brush.size * 0.5f * in.zoom;
@@ -281,6 +282,16 @@ public:
     void draw_options(App& app) override {
         ImGui::SetNextItemWidth(140);
         ImGui::SliderFloat("Size", &app.brush.size, 1.0f, 500.0f, "%.0f", ImGuiSliderFlags_Logarithmic);
+        if (app.pen.present) {
+            ImGui::SameLine();
+            ImGui::TextDisabled("Pen %d%%%s", static_cast<int>(app.pen.pressure * 100 + 0.5f), app.pen.eraser ? " (eraser)" : "");
+        }
+        ImGui::SameLine();
+        ImGui::TextUnformatted("Pressure:");
+        ImGui::SameLine();
+        if (ImGui::Checkbox("Size##pen", &app.pen_size)) { app.config.pen_size = app.pen_size; app.config.save(); }
+        ImGui::SameLine();
+        if (ImGui::Checkbox("Opacity##pen", &app.pen_opacity)) { app.config.pen_opacity = app.pen_opacity; app.config.save(); }
         ImGui::SameLine();
         ImGui::SetNextItemWidth(100);
         float hard = app.brush.hardness * 100.0f;
@@ -369,7 +380,7 @@ private:
     Kind kind_;
     size_t layer_ = 0;
     std::unique_ptr<raster::Stroke> stroke_;
-    float last_x_ = 0, last_y_ = 0;
+    float last_x_ = 0, last_y_ = 0, last_pressure_ = 1.0f;
     // Clone state
     bool has_src_ = false, first_stroke_ = true;
     float src_x_ = 0, src_y_ = 0;

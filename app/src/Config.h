@@ -16,6 +16,7 @@ struct Config {
     int undo_memory_mb = 1024;        // pixel snapshots kept by the history, per document
     int autosave_minutes = 5;         // 0 = off
     float ui_scale = 0.0f;            // 0 = follow the display's scale factor
+    bool pen_size = true, pen_opacity = false;   // what pen pressure drives in the brushes
     int checker_size = 12;            // transparency checkerboard cell, in screen px
     int new_width = 800, new_height = 600;
     bool color_managed_display = true;   // convert tagged images to sRGB for the screen

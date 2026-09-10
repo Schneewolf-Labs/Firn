@@ -185,6 +185,10 @@ docs/    notes on the original: command inventory, module mapping, FORMAT.md
   state); `App::display_needs_transform` converts the composite to sRGB
   for the canvas texture; `io::read_icc` / `io::embed_icc` handle PNG and
   JPEG.
+- **Pen input** (`app/src/Tablet.cpp`, `Tablet_mac.mm`): per-platform
+  backends fill `App::pen` (pressure, tilt, eraser); the canvas copies
+  pressure into `ToolInput` and `raster::Stroke` scales stamps per
+  `set_pressure_response`. The driver simulates it (`set:pen_pressure`).
 - **Materials**: `App::material_style(fg)` turns the color plus
   `App::Material` (gradient/pattern, optional texture, transparent switch)
   into a `vec::PaintStyle`; the flood fill, shape, line and text tools all

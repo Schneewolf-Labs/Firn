@@ -70,6 +70,14 @@ cmake --install build --prefix ~/.local      # per user: ~/.local/bin/firn
 sudo cmake --install build                   # system wide: /usr/local
 ```
 
+## Pen tablets
+
+Pressure changes the brush size, the opacity, or both (Tool Options of any
+brush), and the eraser end of the pen picks the Eraser tool. Pressure is read
+straight from the platform: XInput2 on X11 (build with `libxi-dev` installed),
+pointer messages on Windows, tablet events on macOS. Wayland sessions do
+not report pressure yet. Help > About says which backend is active.
+
 ## Testing and releasing
 
 `ctest` runs the core tests and the native-format corpus. `scripts/smoke.py`

@@ -21,6 +21,7 @@
 #include "firn/text.h"
 #include "firn/vector.h"
 #include "Config.h"
+#include "Tablet.h"
 #include "tools/Tool.h"
 #include "ui/FileDialog.h"
 #include "ui/Theme.h"
@@ -265,6 +266,11 @@ struct App {
     int kal_petals = 6; float kal_angle = 0, kal_radius = 50;
     float sun_x = 0.5f, sun_y = 0.5f, sun_brightness = 0.8f, sun_ray_brightness = 0.6f; int sun_rays = 12; float sun_color[3] = {1, 1, 0.9f};
     bool show_info_dialog = false;
+    // Pen tablet (app/src/Tablet.cpp): pressure, tilt, eraser tip.
+    PenState pen;
+    bool pen_size = true, pen_opacity = false;   // what pressure drives (Config)
+    int pen_prev_tool = -1;                      // tool to restore when the eraser tip lifts
+    void pen_tick();                             // per frame: presence timeout, eraser tip switching
     // Autosave and recovery (app/src/Autosave.cpp)
     double autosave_last = 0.0;
     struct RecoverEntry { std::string file, title, original_path, key; };

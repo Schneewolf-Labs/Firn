@@ -13,6 +13,7 @@ struct ToolInput {
     ImVec2 origin;                 // screen position of image pixel (0,0)
     float zoom = 1.0f;
     bool inside = false;           // cursor over the image rect
+    float pressure = 1.0f;         // pen pressure 0..1 (1 for a mouse)
     ImDrawList* dl = nullptr;      // canvas draw list, for overlays
 };
 

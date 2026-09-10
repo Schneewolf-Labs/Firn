@@ -1370,6 +1370,30 @@ static void test_text_objects_survive_native_save() {
     CHECK(std::abs(rx0 - qx0) < 2.0f && std::abs(ry0 - qy0) < 2.0f && std::abs(rx1 - qx1) < 2.0f && std::abs(ry1 - qy1) < 2.0f);
 }
 
+static void test_stroke_pressure() {
+    Image base(64, 64, Color{0, 0, 0, 0});
+    raster::Brush b;
+    b.size = 20.0f; b.hardness = 1.0f;
+    raster::Stroke full(base, b, {255, 0, 0, 255}, raster::StrokeMode::Paint);
+    full.set_pressure_response(true, true);
+    full.add_point(32, 32, 1.0f);
+    Image out_full = base;
+    full.render(out_full);
+    raster::Stroke light(base, b, {255, 0, 0, 255}, raster::StrokeMode::Paint);
+    light.set_pressure_response(true, true);
+    light.add_point(32, 32, 0.5f);
+    Image out_light = base;
+    light.render(out_light);
+    // Full pressure reaches radius 10; half pressure stops near radius 5 and paints at half coverage.
+    CHECK(out_full.get(41, 32).a == 255 && out_light.get(41, 32).a == 0);
+    CHECK(out_light.get(33, 32).a > 100 && out_light.get(33, 32).a < 160);
+    raster::Stroke none(base, b, {255, 0, 0, 255}, raster::StrokeMode::Paint);   // pressure ignored by default
+    none.add_point(32, 32, 0.2f);
+    Image out_none = base;
+    none.render(out_none);
+    CHECK(out_none.get(41, 32).a == 255);
+}
+
 static void test_webp_roundtrip() {
     Image img(9, 7);
     for (int y = 0; y < 7; ++y) for (int x = 0; x < 9; ++x) img.set(x, y, {static_cast<uint8_t>(x * 28), static_cast<uint8_t>(y * 36), 77, static_cast<uint8_t>(x == 4 ? 128 : 255)});
@@ -2182,6 +2206,7 @@ int main() {
     test_text_objects_survive_native_save();
     test_psd_import();
     test_webp_roundtrip();
+    test_stroke_pressure();
     test_vector_core();
     test_history_limit();
     test_brush_texture();

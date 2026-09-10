@@ -13,6 +13,7 @@
 
 #include "App.h"
 #include "Drive.h"
+#include "Tablet.h"
 #include "Config.h"
 #include "firn/io.h"
 #include "imgui.h"
@@ -159,6 +160,7 @@ int main(int argc, char** argv) {
     }
     app.check_recovery();
     app.autosave_last = 0.0;
+    tablet::init(window);
 
     while (!app.quit) {
         SDL_Event event;
@@ -166,6 +168,7 @@ int main(int argc, char** argv) {
             // While scripted, the real pointer must not reach the UI.
             if (driver.active() && (event.type == SDL_MOUSEMOTION || event.type == SDL_MOUSEBUTTONDOWN || event.type == SDL_MOUSEBUTTONUP || event.type == SDL_MOUSEWHEEL)) continue;
             ImGui_ImplSDL2_ProcessEvent(&event);
+            if (event.type == SDL_SYSWMEVENT) tablet::syswm(event, app.pen);
             if (event.type == SDL_QUIT) app.request_quit();
             // Files dropped onto the window open as documents (one per file).
             if (event.type == SDL_DROPFILE && event.drop.file) {
@@ -189,6 +192,8 @@ int main(int argc, char** argv) {
 
         app.handle_shortcuts();
         app.autosave_tick();
+        tablet::poll(app.pen);
+        app.pen_tick();
         app.sync_canvas_texture();
 
         // Toolbar above and status bar below the dock space.

@@ -40,6 +40,7 @@ add_executable(firn
   src/Config.cpp
   src/Clipboard.cpp
   src/Autosave.cpp
+  src/Tablet.cpp
   src/ui/Canvas.cpp
   src/ui/Palettes.cpp
   src/ui/Menu.cpp
@@ -63,6 +64,23 @@ add_dependencies(firn firn_version)
 # Lets a development build find the sample tubes in the (gitignored) backup.
 target_compile_definitions(firn PRIVATE FIRN_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 target_link_libraries(firn PRIVATE firncore imgui SDL2::SDL2 OpenGL::GL)
+# Pen tablets: XInput2 on X11 (optional at build time), pointer messages on
+# Windows, NSEvent tablet data on macOS.
+if(UNIX AND NOT APPLE)
+  find_package(X11)
+  if(X11_FOUND AND X11_Xi_FOUND)
+    target_compile_definitions(firn PRIVATE FIRN_HAVE_XI2)
+    target_link_libraries(firn PRIVATE X11::X11 X11::Xi)
+    message(STATUS "Pen tablets: XInput2")
+  else()
+    message(STATUS "Pen tablets: libxi not found, pressure disabled")
+  endif()
+endif()
+if(APPLE)
+  enable_language(OBJCXX)
+  target_sources(firn PRIVATE src/Tablet_mac.mm)
+  target_link_libraries(firn PRIVATE "-framework Cocoa")
+endif()
 if(WIN32)
   # Plain main(); SDL's own entry point is not used. A GUI subsystem keeps
   # the console window away; the entry point still runs the plain main().
