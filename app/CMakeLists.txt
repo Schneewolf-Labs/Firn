@@ -39,6 +39,7 @@ add_executable(firn
   src/Script.cpp
   src/Config.cpp
   src/Clipboard.cpp
+  src/Autosave.cpp
   src/ui/Canvas.cpp
   src/ui/Palettes.cpp
   src/ui/Menu.cpp

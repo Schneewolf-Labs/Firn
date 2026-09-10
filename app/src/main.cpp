@@ -124,6 +124,8 @@ int main(int argc, char** argv) {
     if (argc > 1) {
         if (!app.open_document(argv[1])) std::fprintf(stderr, "%s\n", app.status.c_str());
     }
+    app.check_recovery();
+    app.autosave_last = 0.0;
 
     while (!app.quit) {
         SDL_Event event;
@@ -153,6 +155,7 @@ int main(int argc, char** argv) {
         ImGui::NewFrame();
 
         app.handle_shortcuts();
+        app.autosave_tick();
         app.sync_canvas_texture();
 
         // Toolbar above and status bar below the dock space.

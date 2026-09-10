@@ -47,6 +47,7 @@ struct DocState {
     uint64_t tex_revision = ~0ull;
     bool placed = false;
     ImVec2 win_pos, win_size;         // last frame's window rect, for keeping it inside the workspace
+    size_t autosave_cursor = static_cast<size_t>(-1);   // history cursor at the last autosave
 };
 
 struct App {
@@ -264,6 +265,16 @@ struct App {
     int kal_petals = 6; float kal_angle = 0, kal_radius = 50;
     float sun_x = 0.5f, sun_y = 0.5f, sun_brightness = 0.8f, sun_ray_brightness = 0.6f; int sun_rays = 12; float sun_color[3] = {1, 1, 0.9f};
     bool show_info_dialog = false;
+    // Autosave and recovery (app/src/Autosave.cpp)
+    double autosave_last = 0.0;
+    struct RecoverEntry { std::string file, title, original_path, key; };
+    std::vector<RecoverEntry> recover_files;
+    bool show_recovery_dialog = false;
+    void autosave_tick();
+    void autosave_forget(int uid);
+    void autosave_forget(const std::string& key);
+    void check_recovery();
+    void draw_recovery_dialog();
     bool show_about_dialog = false;
     bool show_shortcuts_dialog = false;
     void draw_shortcuts_dialog();       // Help > Keyboard Shortcuts (app/src/ui/About.cpp)

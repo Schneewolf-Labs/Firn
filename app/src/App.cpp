@@ -135,6 +135,7 @@ void App::close_document(int index, bool force) {
     if (index < 0 || index >= static_cast<int>(docs.size())) return;
     if (!force && document_modified(index)) { pending_close = index; return; }
     if (docs[index].tex) { glDeleteTextures(1, &docs[index].tex); docs[index].tex = 0; }
+    autosave_forget(docs[index].uid);   // closing (or discarding) ends the need for a recovery copy
     if (index == current_doc) {
         tool().cancel(*this);
         preview_cancel();
@@ -218,6 +219,7 @@ bool App::save_document(const std::string& path) {
     doc_path = path;
     { const auto slash = path.find_last_of("/\\"); doc_title = slash == std::string::npos ? path : path.substr(slash + 1); }
     saved_cursor = history.cursor();
+    if (current_doc >= 0 && current_doc < static_cast<int>(docs.size())) { docs[current_doc].autosave_cursor = saved_cursor; autosave_forget(docs[current_doc].uid); }
     config.touch_recent(path);
     status = "Saved " + path;
     if (!io::is_psp_extension(path) && doc->layer_count() > 1) status += "\nFlattened: only .PspImage keeps layers.";

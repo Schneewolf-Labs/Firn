@@ -13,6 +13,9 @@ section into the next version.
   included: they reopen as editable text here and in the original.
 - Effects > Effect Browser: every adjustment and effect previewed on the
   active layer with its current settings; click a tile to open its dialog.
+- Autosave: modified images are written in the background every few
+  minutes (Preferences, default 5) to the config folder; after a crash
+  the next start offers to recover them.
 - System clipboard: Copy puts the selection on the OS clipboard as an
   image, and Paste As New Image / Layer take images copied in other
   programs (Windows clipboard, xclip on X11, wl-clipboard on Wayland,
