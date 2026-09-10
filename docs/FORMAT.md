@@ -268,6 +268,8 @@ layered format GIMP, Krita and MyPaint share: a zip whose first entry is
 the stored `mimetype` (`image/openraster`), then `stack.xml`, one PNG per
 layer under `data/`, `mergedimage.png` and `Thumbnails/thumbnail.png`.
 Layers are listed top first; a `<stack>` inside the stack is a group.
+Each layer is stored as just its content box with `x`/`y` giving its
+position, and the PNG entries are stored rather than deflated again.
 Every layer carries `name`, `src`, `x`, `y`, `opacity`, `visibility` and a
 `composite-op` (the SVG operators; blend modes without one, such as
 Dissolve, fall back to `svg:src-over`).

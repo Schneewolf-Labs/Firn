@@ -15,6 +15,7 @@
 #include "firn/io.h"
 #include "firn/json.h"
 #include "firn/raster.h"
+#include "firn/raster16.h"
 #include "firn/zip.h"
 
 namespace firn::io {
@@ -182,7 +183,9 @@ struct OraWriter {
 
     std::string add_file(const std::string& stem, const std::string& ext, std::vector<uint8_t> bytes) {
         const std::string name = "data/" + stem + std::to_string(counter++) + "." + ext;
-        entries.push_back({name, std::move(bytes), false});
+        // PNGs are deflated already; running the zip's deflate over them
+        // costs a second on a big project and saves nothing.
+        entries.push_back({name, std::move(bytes), ext == "png"});
         return name;
     }
 
@@ -203,6 +206,7 @@ struct OraWriter {
         out += "    <layer";
         common_attrs(L);
         std::string src;
+        int ox = 0, oy = 0;
         if (L.is_adjustment() && L.adjustment.is_filter()) {
             const Adjustment& a = L.adjustment;
             json::Value f = json::Value::object();
@@ -217,10 +221,15 @@ struct OraWriter {
         } else {
             if (L.is_vector()) out += " firn:type=\"vector\" firn:vector=\"" + add_file("vector", "bin", vector_objects_to_bytes(L.objects)) + "\"";
             if (L.background) out += " firn:background=\"1\"";
-            if (L.is_deep()) src = add_file("layer", "png", encode_png16(*L.deep));
-            else src = add_file("layer", "png", encode_png(L.pixels));
+            // Only the part of the layer that holds anything is stored, with
+            // its offset, the way the other editors write it.
+            raster::Rect box = raster::content_bounds(L.pixels).clipped(L.pixels.width(), L.pixels.height());
+            if (box.empty()) box = {0, 0, 1, 1};
+            ox = box.x0; oy = box.y0;
+            if (L.is_deep()) src = add_file("layer", "png", encode_png16(raster16::crop(*L.deep, box)));
+            else src = add_file("layer", "png", encode_png(raster::crop(L.pixels, box)));
         }
-        out += " src=\"" + src + "\" x=\"0\" y=\"0\"/>\n";
+        out += " src=\"" + src + "\" x=\"" + std::to_string(ox) + "\" y=\"" + std::to_string(oy) + "\"/>\n";
     }
 
     // Emits layers [from, to) top first; groups become nested stacks.
@@ -274,10 +283,10 @@ struct OraWriter {
         out += "</image>\n";
         entries.push_back({"stack.xml", std::vector<uint8_t>(out.begin(), out.end()), false});
         const Image flat = doc.composite();
-        entries.push_back({"mergedimage.png", encode_png(flat), false});
+        entries.push_back({"mergedimage.png", encode_png(flat), true});
         const float scale = std::min(1.0f, 256.0f / std::max(1, std::max(flat.width(), flat.height())));
         const Image thumb = scale < 1.0f ? raster::resample(flat, std::max(1, static_cast<int>(flat.width() * scale)), std::max(1, static_cast<int>(flat.height() * scale)), raster::Filter::Bilinear) : flat;
-        entries.push_back({"Thumbnails/thumbnail.png", encode_png(thumb), false});
+        entries.push_back({"Thumbnails/thumbnail.png", encode_png(thumb), true});
         return zip::write(entries);
     }
 };
@@ -354,6 +363,7 @@ struct OraReader {
         if (!img) { if (warnings) warnings->push_back("Layer \"" + L.name + "\": missing image " + n.attr_or("src", "")); return; }
         const int ox = static_cast<int>(n.number("x", 0)), oy = static_cast<int>(n.number("y", 0));
         if (deep && ox == 0 && oy == 0 && deep->width() == doc.width() && deep->height() == doc.height()) { L.set_deep(std::move(*deep)); return; }
+
         for (int y = 0; y < img->height(); ++y) {
             const int dy = y + oy;
             if (dy < 0 || dy >= doc.height()) continue;

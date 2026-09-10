@@ -1544,6 +1544,33 @@ static void test_openraster() {
     CHECK(back->guides_v().size() == 2 && back->guides_v()[1] == 20.0f);
     CHECK(back->assistants().size() == 2 && back->assistants()[0].kind == Assistant::Kind::VanishingPoint && back->assistants()[0].x0 == 30);
     CHECK(back->assistants()[1].kind == Assistant::Kind::Ruler && back->assistants()[1].y1 == 4);
+    // A layer is stored as just its content box plus an offset, and a 16-bit
+    // one still comes back at 16 bits.
+    {
+        Document small(200, 200);
+        small.add_layer("Background").pixels.fill({0, 0, 0, 255});
+        Layer& dot = small.add_layer("Dot");
+        Image16 d(200, 200);
+        for (size_t k = 0; k < d.size(); ++k) d.data()[k] = 0;
+        for (int y = 100; y < 110; ++y)
+            for (int x = 150; x < 160; ++x) {
+                uint16_t* px = d.data() + (static_cast<size_t>(y) * 200 + x) * 4;
+                px[0] = 65535; px[1] = 300; px[2] = 700; px[3] = 65535;
+            }
+        dot.set_deep(std::move(d));
+        const std::vector<uint8_t> ob = io::save_ora_to_memory(small);
+        zip::Archive sar;
+        CHECK(zip::read(ob.data(), ob.size(), sar, &err));
+        std::string sxml;
+        { const std::vector<uint8_t>* x2 = sar.find("stack.xml"); CHECK(x2); sxml.assign(x2->begin(), x2->end()); }
+        CHECK(sxml.find("x=\"150\" y=\"100\"") != std::string::npos);   // stored at its offset
+        auto sback = io::load_ora_from_memory(ob.data(), ob.size(), &err, nullptr);
+        CHECK(sback && sback->layer_count() == 2 && sback->layer(1).is_deep());
+        const uint16_t* got = sback->layer(1).deep->data() + (static_cast<size_t>(104) * 200 + 154) * 4;
+        CHECK(got[0] == 65535 && got[1] == 300 && got[3] == 65535);
+        CHECK(sback->layer(1).deep->data()[3] == 0);   // outside the box stays clear
+    }
+
     // The thumbnail is readable on its own, without the layers.
     { const std::string tmp = tmp_path("firn_test_thumb.ora");
       std::ofstream f(tmp, std::ios::binary);
