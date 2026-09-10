@@ -1370,6 +1370,29 @@ static void test_text_objects_survive_native_save() {
     CHECK(std::abs(rx0 - qx0) < 2.0f && std::abs(ry0 - qy0) < 2.0f && std::abs(rx1 - qx1) < 2.0f && std::abs(ry1 - qy1) < 2.0f);
 }
 
+static void test_webp_roundtrip() {
+    Image img(9, 7);
+    for (int y = 0; y < 7; ++y) for (int x = 0; x < 9; ++x) img.set(x, y, {static_cast<uint8_t>(x * 28), static_cast<uint8_t>(y * 36), 77, static_cast<uint8_t>(x == 4 ? 128 : 255)});
+    const std::string path = tmp_path("firn_test.webp");
+    std::string err;
+    CHECK(io::save(img, path, &err, 100));   // lossless
+    auto back = io::load(path, &err);
+    CHECK(back && back->width() == 9 && back->height() == 7);
+    if (back) { bool same = true; for (size_t i = 0; i < img.size_bytes(); ++i) same = same && img.data()[i] == back->data()[i]; CHECK(same); }
+    CHECK(io::save(img, path, &err, 80));    // lossy still opens with the same size
+    auto lossy = io::load(path, &err);
+    CHECK(lossy && lossy->width() == 9 && lossy->get(4, 0).a > 100);
+    auto doc = io::load_document(path, &err, nullptr);
+    CHECK(doc && doc->width() == 9);
+    // An ICC profile rides in the container's ICCP chunk.
+    const std::vector<uint8_t> prof = icc::encode(icc::adobe_rgb(), "Adobe RGB (1998)");
+    CHECK(io::embed_icc(path, prof, &err));
+    CHECK(io::read_icc(path) == prof);
+    auto tagged = io::load(path, &err);
+    CHECK(tagged && tagged->width() == 9);
+    std::remove(path.c_str());
+}
+
 static void test_psd_import() {
     // A 4x2 RGB 8-bit PSD: a group holding one layer, then a plain layer on top, raw channels.
     std::vector<uint8_t> d;
@@ -2158,6 +2181,7 @@ int main() {
     test_snapshot_crop_and_undo_budget();
     test_text_objects_survive_native_save();
     test_psd_import();
+    test_webp_roundtrip();
     test_vector_core();
     test_history_limit();
     test_brush_texture();

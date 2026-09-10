@@ -650,8 +650,16 @@ void App::draw_dialogs() {
     }
 
     if (ImGui::BeginPopupModal("JPEG Options", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
-        ImGui::SliderInt("Quality", &jpeg_quality, 1, 100);
-        ImGui::TextDisabled("Layers are flattened; transparency becomes white.");
+        const bool webp = pending_jpeg_path.size() > 5 && pending_jpeg_path.compare(pending_jpeg_path.size() - 5, 5, ".webp") == 0;
+        if (webp) {
+            bool lossless = jpeg_quality >= 100;
+            if (ImGui::Checkbox("Lossless", &lossless)) jpeg_quality = lossless ? 100 : 90;
+            if (!lossless) ImGui::SliderInt("Quality", &jpeg_quality, 1, 99);
+            ImGui::TextDisabled("Layers are flattened; transparency is kept.");
+        } else {
+            ImGui::SliderInt("Quality", &jpeg_quality, 1, 100);
+            ImGui::TextDisabled("Layers are flattened; transparency becomes white.");
+        }
         if (ImGui::Button("Save") || ImGui::IsKeyPressed(ImGuiKey_Enter, false) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter, false)) {
             const std::string p = pending_jpeg_path;
             ImGui::CloseCurrentPopup();

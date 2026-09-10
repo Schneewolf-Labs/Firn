@@ -387,7 +387,7 @@ void Driver::before_frame(App& app, SDL_Window* window) {
                 break;
             }
             case Step::Adjust: if (!app.open_adjust_by_title(s.text.c_str())) { steps_.clear(); ack("error no dialog titled " + s.text); return; } consumed_frame = true; break;
-            case Step::Save: if (!app.save_document(s.text)) { steps_.clear(); ack("error " + app.status); return; } consumed_frame = true; break;
+            case Step::Save: app.pending_jpeg_path = s.text;  /* no quality prompt while driving */ if (!app.save_document(s.text)) { steps_.clear(); ack("error " + app.status); return; } consumed_frame = true; break;
             case Step::Open: if (!app.open_document(s.text)) { steps_.clear(); ack("error " + app.status); return; } consumed_frame = true; break;
             case Step::Drop: {
                 SDL_Event e{};

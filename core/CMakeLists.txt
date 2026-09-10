@@ -23,7 +23,8 @@ add_library(firncore STATIC
 )
 target_include_directories(firncore PUBLIC include)
 find_package(Threads REQUIRED)
-target_link_libraries(firncore PRIVATE stb PUBLIC Threads::Threads)
+target_link_libraries(firncore PRIVATE stb webp libwebpmux PUBLIC Threads::Threads)
+target_include_directories(firncore PRIVATE ${libwebp_SOURCE_DIR}/src)
 # Vendored stb headers are not ours to fix.
 if(NOT MSVC)
   set_source_files_properties(src/io.cpp src/io_psp.cpp src/text.cpp PROPERTIES COMPILE_OPTIONS "-Wno-missing-field-initializers;-Wno-unused-function")

@@ -16,6 +16,8 @@ section into the next version.
 - HiDPI: the UI follows the display's scale factor (drawable ratio on
   macOS and Wayland, DPI on Windows, GDK_SCALE / QT_SCALE_FACTOR / Xft.dpi
   on X11), with a UI scale setting in Preferences and FIRN_UI_SCALE to force it.
+- WebP read and write (lossless or lossy with a quality choice), bundled
+  through libwebp at build time.
 - Photoshop PSD/PSB import: layers with opacity, blend modes, visibility,
   masks and groups (8 and 16 bit RGB or grayscale; 16-bit files read at 8 bits).
 - Autosave: modified images are written in the background every few

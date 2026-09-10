@@ -19,7 +19,7 @@ and maps its module layout onto this repo.
 ## Build and test
 
 ```sh
-cmake -S . -B build -G Ninja      # fetches Dear ImGui on first configure
+cmake -S . -B build -G Ninja      # fetches Dear ImGui and libwebp on first configure
 cmake --build build
 ctest --test-dir build --output-on-failure   # core tests + native-format corpus
 ./build/app/firn [image.png]

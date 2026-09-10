@@ -204,7 +204,7 @@ bool App::save_document(const std::string& path) {
         const auto dot = path.rfind('.');
         std::string ext = dot == std::string::npos ? "" : path.substr(dot + 1);
         for (char& c : ext) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-        if ((ext == "jpg" || ext == "jpeg") && pending_jpeg_path != path) {
+        if ((ext == "jpg" || ext == "jpeg" || ext == "webp") && pending_jpeg_path != path) {
             pending_jpeg_path = path;
             show_jpeg_dialog = true;
             return false;

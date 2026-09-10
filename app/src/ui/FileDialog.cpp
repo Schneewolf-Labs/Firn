@@ -172,6 +172,7 @@ const char* type_label(const std::string& ext) {
     if (ext == "png") return "PNG (*.png)";
     if (ext == "jpg") return "JPEG (*.jpg, *.jpeg)";
     if (ext == "jpeg") return nullptr;  // folded into jpg
+    if (ext == "webp") return "WebP (*.webp)";
     if (ext == "bmp") return "Windows bitmap (*.bmp)";
     if (ext == "tga") return "Targa (*.tga)";
     return ext.c_str();

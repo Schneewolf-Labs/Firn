@@ -13,7 +13,29 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb/stb_image_write.h"
 
+#include "webp/decode.h"
+#include "webp/encode.h"
+#include "webp/mux.h"
+
 namespace firn::io {
+
+namespace {
+
+bool is_webp(const uint8_t* data, size_t size) {
+    return size >= 12 && std::memcmp(data, "RIFF", 4) == 0 && std::memcmp(data + 8, "WEBP", 4) == 0;
+}
+
+std::optional<Image> decode_webp(const uint8_t* data, size_t size, std::string* err) {
+    int w = 0, h = 0;
+    if (!WebPGetInfo(data, size, &w, &h)) { if (err) *err = "not a WebP image"; return std::nullopt; }
+    Image img(w, h);
+    if (!WebPDecodeRGBAInto(data, size, img.data(), img.size_bytes(), w * 4)) { if (err) *err = "WebP decode failed"; return std::nullopt; }
+    return img;
+}
+
+std::vector<uint8_t> read_file(const std::string& path);   // defined with the ICC helpers below
+
+}  // namespace
 
 std::vector<uint8_t> encode_png(const Image& img) {
     int len = 0;
@@ -26,6 +48,7 @@ std::vector<uint8_t> encode_png(const Image& img) {
 }
 
 std::optional<Image> load_memory(const uint8_t* data, size_t size, std::string* err) {
+    if (is_webp(data, size)) return decode_webp(data, size, err);
     int w = 0, h = 0, n = 0;
     unsigned char* px = stbi_load_from_memory(data, static_cast<int>(size), &w, &h, &n, 4);
     if (!px) {
@@ -39,6 +62,15 @@ std::optional<Image> load_memory(const uint8_t* data, size_t size, std::string* 
 }
 
 std::optional<Image> load(const std::string& path, std::string* err) {
+    {
+        // WebP by signature, whatever the extension.
+        std::ifstream f(path, std::ios::binary);
+        uint8_t head[12] = {};
+        if (f && f.read(reinterpret_cast<char*>(head), 12) && is_webp(head, 12)) {
+            const std::vector<uint8_t> bytes = read_file(path);
+            return decode_webp(bytes.data(), bytes.size(), err);
+        }
+    }
     int w = 0, h = 0, n = 0;
     unsigned char* px = stbi_load(path.c_str(), &w, &h, &n, 4);
     if (!px) {
@@ -117,6 +149,17 @@ uint32_t rd32(const uint8_t* p) { return static_cast<uint32_t>(p[0]) << 24 | sta
 
 std::vector<uint8_t> read_icc(const std::string& path) {
     const std::vector<uint8_t> d = read_file(path);
+    if (is_webp(d.data(), d.size())) {
+        // The ICCP chunk of the WebP container.
+        std::vector<uint8_t> out;
+        WebPData data{d.data(), d.size()};
+        if (WebPMux* mux = WebPMuxCreate(&data, 0)) {
+            WebPData icc{};
+            if (WebPMuxGetChunk(mux, "ICCP", &icc) == WEBP_MUX_OK && icc.size) out.assign(icc.bytes, icc.bytes + icc.size);
+            WebPMuxDelete(mux);
+        }
+        return out;
+    }
     if (d.size() > 8 && d[0] == 0x89 && d[1] == 'P') {
         size_t p = 8;
         while (p + 12 <= d.size()) {
@@ -162,6 +205,19 @@ std::vector<uint8_t> read_icc(const std::string& path) {
 bool embed_icc(const std::string& path, const std::vector<uint8_t>& icc, std::string* err) {
     if (icc.empty()) return true;
     std::vector<uint8_t> d = read_file(path);
+    if (is_webp(d.data(), d.size())) {
+        WebPData data{d.data(), d.size()};
+        WebPMux* mux = WebPMuxCreate(&data, 1);
+        if (!mux) { if (err) *err = "cannot rewrite the WebP container"; return false; }
+        WebPData chunk{icc.data(), icc.size()};
+        WebPData assembled{};
+        const bool ok = WebPMuxSetChunk(mux, "ICCP", &chunk, 1) == WEBP_MUX_OK && WebPMuxAssemble(mux, &assembled) == WEBP_MUX_OK;
+        WebPMuxDelete(mux);
+        if (!ok) { if (err) *err = "cannot add the profile to the WebP file"; return false; }
+        const std::vector<uint8_t> out(assembled.bytes, assembled.bytes + assembled.size);
+        WebPDataClear(&assembled);
+        return write_file(path, out) || (err && (*err = "cannot write " + path, false));
+    }
     if (d.size() > 8 && d[0] == 0x89 && d[1] == 'P') {
         // Insert an iCCP chunk right after IHDR.
         const uint32_t ihdr_len = rd32(&d[8]);
@@ -236,6 +292,18 @@ bool save(const Image& img, const std::string& path, std::string* err, int jpeg_
     const std::string ext = ext_of(path);
     int ok = 0;
     if (ext == "png") return save_png(img, path, err);
+    if (ext == "webp") {
+        // Quality 100 means lossless, as the dialog offers; below that, lossy at that quality.
+        uint8_t* out = nullptr;
+        const size_t n = jpeg_quality >= 100 ? WebPEncodeLosslessRGBA(img.data(), img.width(), img.height(), img.width() * 4, &out)
+                                             : WebPEncodeRGBA(img.data(), img.width(), img.height(), img.width() * 4, static_cast<float>(std::clamp(jpeg_quality, 1, 99)), &out);
+        if (!n || !out) { if (err) *err = "WebP encode failed"; return false; }
+        std::ofstream f(path, std::ios::binary);
+        const bool written = f && f.write(reinterpret_cast<const char*>(out), static_cast<std::streamsize>(n));
+        WebPFree(out);
+        if (!written && err) *err = "cannot write " + path;
+        return written;
+    }
     if (ext == "jpg" || ext == "jpeg") {
         auto rgb = to_rgb_on_white(img);
         ok = stbi_write_jpg(path.c_str(), img.width(), img.height(), 3, rgb.data(), std::clamp(jpeg_quality, 1, 100));
@@ -253,12 +321,12 @@ bool save(const Image& img, const std::string& path, std::string* err, int jpeg_
 }
 
 const std::vector<std::string>& load_extensions() {
-    static const std::vector<std::string> v{"pspimage", "psp", "psptube", "pspframe", "psd", "psb", "png", "jpg", "jpeg", "bmp", "tga", "gif", "pnm", "ppm", "pgm"};
+    static const std::vector<std::string> v{"pspimage", "psp", "psptube", "pspframe", "psd", "psb", "png", "jpg", "jpeg", "webp", "bmp", "tga", "gif", "pnm", "ppm", "pgm"};
     return v;
 }
 
 const std::vector<std::string>& save_extensions() {
-    static const std::vector<std::string> v{"pspimage", "png", "jpg", "jpeg", "bmp", "tga"};
+    static const std::vector<std::string> v{"pspimage", "png", "jpg", "jpeg", "webp", "bmp", "tga"};
     return v;
 }
 
