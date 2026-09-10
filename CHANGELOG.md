@@ -24,6 +24,11 @@ section into the next version.
   (seamless clone per stamp), next to the Clone Brush.
 - Brush smoothing in Tool Options: Basic (averaged points), Weighted
   (inertia) and Stabilizer (the brush trails the cursor on a string).
+- Layer Styles (Layers > Layer Styles, also in the layer's right-click
+  menu): drop shadow, outer glow, inner glow, stroke and bevel rendered
+  from the layer's shape at composite time and kept editable; the palette
+  tags styled layers [fx]. Kept in the native format through the Firn
+  stash; the original shows the layer without them.
 - Filter layers (Layers > New Filter Layer): Gaussian Blur, Average and
   Unsharp Mask applied live to everything below, with a mask and opacity
   like adjustment layers; edits underneath recomposite only the touched

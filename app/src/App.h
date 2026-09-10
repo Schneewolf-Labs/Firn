@@ -561,6 +561,12 @@ struct App {
     void layer_new_adjustment(firn::Adjustment::Kind kind);
     void open_adjustment_dialog(int layer, bool created);
     void draw_adjustment_layer_dialog();
+    // Layer Styles dialog (app/src/ui/LayerStyles.cpp): edits the layer live, commits on OK.
+    void open_layer_styles(int layer);
+    void draw_layer_styles_dialog();
+    bool show_layer_styles_dialog = false;
+    int style_layer_index = -1;
+    firn::LayerStyle style_before;
     bool show_adjust_layer_dialog = false;
     int adj_layer_index = -1;
     bool adj_layer_created = false;

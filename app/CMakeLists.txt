@@ -49,6 +49,7 @@ add_executable(firn
   src/ui/TextDialog.cpp
   src/ui/VectorDialog.cpp
   src/ui/AdjustmentLayer.cpp
+  src/ui/LayerStyles.cpp
   src/ui/ImageMenu.cpp
   src/ui/Toolbar.cpp
   src/ui/Icons.cpp

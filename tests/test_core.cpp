@@ -1370,6 +1370,46 @@ static void test_text_objects_survive_native_save() {
     CHECK(std::abs(rx0 - qx0) < 2.0f && std::abs(ry0 - qy0) < 2.0f && std::abs(rx1 - qx1) < 2.0f && std::abs(ry1 - qy1) < 2.0f);
 }
 
+static void test_layer_styles() {
+    // A white square on a transparent layer over a gray background, with a
+    // drop shadow and a red stroke.
+    Document doc(60, 60);
+    doc.add_layer("Background").pixels.fill({128, 128, 128, 255});
+    Layer& top = doc.add_layer("Square");
+    top.pixels = Image(60, 60, {0, 0, 0, 0});
+    for (int y = 20; y < 40; ++y) for (int x = 20; x < 40; ++x) top.pixels.set(x, y, {255, 255, 255, 255});
+    LayerStyle st;
+    st.drop_shadow = true; st.shadow_offset_x = 6; st.shadow_offset_y = 6; st.shadow_blur = 1.0f; st.shadow_opacity = 1.0f;
+    st.stroke = true; st.stroke_width = 2; st.stroke_color = {255, 0, 0, 255};
+    CommandStack stack;
+    stack.run(doc, std::make_unique<SetLayerStyleCommand>(1, LayerStyle(), st));
+    Image c = doc.composite();
+    CHECK(c.get(30, 30).r == 255);                                   // the square itself
+    CHECK(c.get(41, 30).r == 255 && c.get(41, 30).g == 0);           // stroke just outside the edge
+    CHECK(c.get(44, 44).r < 60);                                     // shadow below and right, outside the stroke
+    CHECK(c.get(5, 5).r == 128);                                     // untouched background
+    stack.undo(doc);
+    CHECK(doc.composite().get(41, 30).r == 128);
+    stack.redo(doc);
+    // Partial recomposite of a rect matches the full composite.
+    doc.take_dirty();
+    doc.layer(1).pixels.set(25, 25, {0, 0, 0, 255});
+    doc.touch({25, 25, 26, 26});
+    const raster::Rect dirty = doc.take_dirty();
+    CHECK(dirty.x1 - dirty.x0 > 10);
+    Image part = c;
+    doc.composite_into(part, dirty);
+    const Image full = doc.composite();
+    CHECK(std::memcmp(part.data(), full.data(), full.size_bytes()) == 0);
+    // Styles survive the native format through the stash.
+    const std::vector<uint8_t> bytes = io::save_psp_to_memory(doc);
+    std::string err;
+    auto back = io::load_psp_from_memory(bytes.data(), bytes.size(), &err, nullptr);
+    CHECK(back && back->layer_count() == 2 && back->layer(1).style == st);
+    // JSON round trip is exact.
+    CHECK(LayerStyle::from_json(st.to_json()) == st);
+}
+
 static void test_filter_layers() {
     // A blur filter layer softens the edge of what lies below it.
     Document doc(40, 40);
@@ -2356,6 +2396,7 @@ int main() {
     test_foreground_select();
     test_compound_and_mask_warp();
     test_filter_layers();
+    test_layer_styles();
     test_vector_core();
     test_history_limit();
     test_brush_texture();

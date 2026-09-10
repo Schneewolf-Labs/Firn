@@ -856,6 +856,13 @@ void apply_firn_stash(const Reader& r, const Block& creator, Document& doc) {
         a.unsharp_strength = static_cast<int>(f.get("unsharp_strength").as_number(a.unsharp_strength));
         a.unsharp_clipping = static_cast<int>(f.get("unsharp_clipping").as_number(a.unsharp_clipping));
     }
+    const json::Value& styles = v.get("styles");
+    for (size_t i = 0; i < styles.size(); ++i) {
+        const json::Value& e = styles[i];
+        const int idx = static_cast<int>(e.get("layer").as_number(-1));
+        if (idx < 0 || idx >= static_cast<int>(doc.layer_count())) continue;
+        doc.layer(idx).style = LayerStyle::from_json(e.get("style"));
+    }
     doc.touch();
 }
 
@@ -875,10 +882,20 @@ std::string firn_stash(const Document& doc) {
         f.set("unsharp_clipping", json::Value::number(a.unsharp_clipping));
         filters.push(std::move(f));
     }
-    if (filters.size() == 0) return {};
+    json::Value styles = json::Value::array();
+    for (size_t i = 0; i < doc.layer_count(); ++i) {
+        const Layer& L = doc.layer(i);
+        if (!L.style.any()) continue;
+        json::Value e = json::Value::object();
+        e.set("layer", json::Value::number(static_cast<double>(i)));
+        e.set("style", L.style.to_json());
+        styles.push(std::move(e));
+    }
+    if (filters.size() == 0 && styles.size() == 0) return {};
     json::Value root = json::Value::object();
     root.set("firn", json::Value::number(1));
-    root.set("filters", std::move(filters));
+    if (filters.size()) root.set("filters", std::move(filters));
+    if (styles.size()) root.set("styles", std::move(styles));
     return json::dump(root);
 }
 

@@ -469,6 +469,7 @@ void App::draw_layer_menu_items() {
         if (doc->layer(layer).is_adjustment()) open_adjustment_dialog(layer, false);
         else open_layer_properties();
     }
+    if (ImGui::MenuItem("Layer Styles...", nullptr, false, has_any_layer && (doc->layer(layer).is_raster() || doc->layer(layer).is_vector()))) open_layer_styles(layer);
     ImGui::Separator();
     if (ImGui::BeginMenu("Mask", has_any_layer && doc->layer(layer).has_mask())) {
         bool on = doc->layer(layer).mask_enabled;
@@ -509,6 +510,7 @@ void App::draw_dialogs() {
     draw_text_dialog();
     draw_vector_dialogs();
     draw_adjustment_layer_dialog();
+    draw_layer_styles_dialog();
     draw_image_dialogs();
     draw_material_dialog();
     draw_about_dialog();

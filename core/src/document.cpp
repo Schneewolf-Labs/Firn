@@ -269,7 +269,11 @@ void Document::apply_filter_layer(Image& out, int ox, int oy, size_t from, size_
 
 int Document::filter_reach() const {
     int reach = 0;
-    for (const auto& L : layers_) if (L->visible && L->is_adjustment() && L->adjustment.is_filter()) reach += L->adjustment.reach();
+    for (const auto& L : layers_) {
+        if (!L->visible) continue;
+        if (L->is_adjustment() && L->adjustment.is_filter()) reach += L->adjustment.reach();
+        if (L->style.any()) reach = std::max(reach, L->style.reach());
+    }
     return reach;
 }
 
@@ -312,7 +316,14 @@ void Document::composite_region(Image& out, int ox, int oy, size_t from, size_t 
             ++li;
             continue;
         }
-        if (L.visible && L.opacity > 0.0f && !L.pixels.empty()) blend_layer(out, ox, oy, L.pixels, 0, 0, L, r);
+        if (L.visible && L.opacity > 0.0f && !L.pixels.empty()) {
+            if (L.style.any()) {
+                const Image styled = render_layer_style(L.pixels, L.style, r);
+                blend_layer(out, ox, oy, styled, r.x0, r.y0, L, r);
+            } else {
+                blend_layer(out, ox, oy, L.pixels, 0, 0, L, r);
+            }
+        }
         ++li;
     }
 }

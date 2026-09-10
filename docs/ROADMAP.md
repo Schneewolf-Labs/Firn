@@ -172,7 +172,7 @@ Ideas taken from studying GIMP and Krita (reimplemented, not copied):
 - [x] Color smudge brush (paint that mixes with what it passes over)
 - [x] Perspective and vanishing-point assistants for the brushes
 - [x] Non-destructive filter layers (Gaussian Blur, Average, Unsharp Mask)
-- [ ] Layer styles (drop shadow, glow, bevel, stroke) kept editable
+- [x] Layer styles (drop shadow, glow, bevel, stroke) kept editable
 
 ## Dropped (not worth the effort for this port)
 

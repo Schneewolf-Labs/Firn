@@ -327,6 +327,16 @@ void Driver::before_frame(App& app, SDL_Window* window) {
                 else if (n == "smooth_mode") app.smooth_mode = static_cast<int>(v);
                 else if (n == "smooth_amount") app.smooth_amount = v;
                 else if (n == "fgsel_size") app.fgsel_size = static_cast<int>(v);
+                else if (n == "layer_styles") app.open_layer_styles(app.active_layer());
+                else if (n == "style_shadow" || n == "style_glow" || n == "style_inner_glow" || n == "style_stroke" || n == "style_bevel") {
+                    // Toggle one effect with its defaults on the active layer (no history; for tests).
+                    if (app.doc && app.active_layer() >= 0) {
+                        firn::LayerStyle& st = app.doc->layer(app.active_layer()).style;
+                        if (n == "style_shadow") st.drop_shadow = v != 0; else if (n == "style_glow") st.outer_glow = v != 0; else if (n == "style_inner_glow") st.inner_glow = v != 0;
+                        else if (n == "style_stroke") st.stroke = v != 0; else st.bevel = v != 0;
+                        app.doc->touch();
+                    }
+                }
                 else if (n == "assistant_kind") app.assistant_kind = static_cast<int>(v);
                 else if (n == "filter_layer") app.layer_new_adjustment(static_cast<firn::Adjustment::Kind>(static_cast<int>(v)));
                 else if (n == "assistant_snap") app.assistant_snap = v != 0;

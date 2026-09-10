@@ -168,6 +168,10 @@ docs/    notes on the original: command inventory, module mapping, FORMAT.md
   the dirty rect by `filter_reach()`. The native writer emits them as empty
   placeholder layers plus the Firn stash in the creator description
   (docs/FORMAT.md, "Firn stash"); put other Firn-only data there too.
+- **Layer styles** (`Layer::style`, `core/include/firn/layerstyle.h`) are
+  rendered by `render_layer_style` during compositing over the padded
+  rect; edit through `SetLayerStyleCommand`; the dialog is
+  `app/src/ui/LayerStyles.cpp`. Saved through the Firn stash.
 - **Adjustment layers** (`LayerType::Adjustment`, `Layer::adjustment`,
   `core/include/firn/adjustment.h`) transform what is composited below them
   (within their group) through their mask and opacity. Create with

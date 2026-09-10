@@ -7,6 +7,7 @@
 #include "firn/image.h"
 #include "firn/mask.h"
 #include "firn/adjustment.h"
+#include "firn/layerstyle.h"
 #include "firn/vector.h"
 
 namespace firn {
@@ -41,6 +42,7 @@ struct Layer {
     void set_deep(Image16 img) { pixels = to_image8(img); deep = std::make_shared<const Image16>(std::move(img)); }
     std::vector<vec::Object> objects;  // vector layers only
     Adjustment adjustment;             // adjustment layers only; its mask limits where it applies
+    LayerStyle style;                  // raster and vector layers: effects rendered at composite time
     bool is_raster() const { return type == LayerType::Raster; }
     bool is_vector() const { return type == LayerType::Vector; }
     bool is_adjustment() const { return type == LayerType::Adjustment; }

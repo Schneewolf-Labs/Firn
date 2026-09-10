@@ -330,6 +330,18 @@ private:
 };
 
 // Turns a vector layer into a raster layer holding its rendering.
+// Layers > Layer Styles: replaces a layer's style.
+class SetLayerStyleCommand : public Command {
+public:
+    SetLayerStyleCommand(size_t layer, LayerStyle before, LayerStyle after) : layer_(layer), before_(before), after_(after) {}
+    std::string name() const override { return "Layer Styles"; }
+    void execute(Document& doc) override { if (layer_ < doc.layer_count()) { doc.layer(layer_).style = after_; doc.touch(); } }
+    void undo(Document& doc) override { if (layer_ < doc.layer_count()) { doc.layer(layer_).style = before_; doc.touch(); } }
+private:
+    size_t layer_;
+    LayerStyle before_, after_;
+};
+
 class ConvertToRasterCommand : public Command {
 public:
     explicit ConvertToRasterCommand(size_t index) : index_(index) {}

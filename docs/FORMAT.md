@@ -270,6 +270,9 @@ original shows the text under image information and ignores it. Each
 `kind` (100 Gaussian Blur, 101 Average, 102 Unsharp Mask) and its
 parameters; the layer itself is written as an empty raster placeholder
 the original opens, and the reader turns it back into a filter layer.
+`styles` entries carry a layer index and a `style` object (the fields of
+`LayerStyle`, colors as `[r, g, b, a]`); the layer is written with its
+plain pixels, so the original shows it without the effects.
 
 ## Text shapes
 

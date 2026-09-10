@@ -199,7 +199,7 @@ static void draw_layers(App& app) {
             ImGui::SameLine();
         }
         char label[192];
-        std::snprintf(label, sizeof(label), "%s%s%s%s", L.type == LayerType::Group ? "[Group] " : L.is_vector() ? "[Vector] " : L.is_adjustment() ? (L.adjustment.is_filter() ? "[Filter] " : "[Adjust] ") : "", L.name.c_str(),
+        std::snprintf(label, sizeof(label), "%s%s%s%s", L.type == LayerType::Group ? "[Group] " : L.is_vector() ? "[Vector] " : L.is_adjustment() ? (L.adjustment.is_filter() ? "[Filter] " : "[Adjust] ") : L.style.any() ? "[fx] " : "", L.name.c_str(),
                       L.blend != BlendMode::Normal ? "  [" : "", L.blend != BlendMode::Normal ? blend_mode_name(L.blend) : "");
         if (L.blend != BlendMode::Normal) std::strncat(label, "]", sizeof(label) - std::strlen(label) - 1);
         // Size the selectable to its label so the controls after it stay clickable.

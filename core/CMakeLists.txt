@@ -10,6 +10,7 @@ add_library(firncore STATIC
   src/text.cpp
   src/vector.cpp
   src/adjustment.cpp
+  src/layerstyle.cpp
   src/photo.cpp
   src/effects_geo.cpp
   src/effects_art.cpp
