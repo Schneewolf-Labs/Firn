@@ -78,6 +78,16 @@ Mask select_color_range(const Image& img, Color color, int tolerance, int softne
 // under the current selection (the original's Select Similar).
 Mask select_similar(const Image& img, const Mask& selection, int tolerance);
 
+// Foreground extraction from scribbles: `fg` and `bg` mark known foreground
+// and background pixels (nonzero); everything outside `region` (when not
+// empty) is background too, and so is the image's outer edge when nothing
+// marks any background. Unknown pixels are classified by color likelihood
+// (k-means color models of the marks) regularized by geodesic distance to
+// the marks, so a region is claimed by the nearest mark it can reach without
+// crossing a color edge. Large images are solved at about 1.5 MP and the
+// result scaled back up. Returns a selection mask with a soft edge.
+Mask foreground_select(const Image& img, const Mask& fg, const Mask& bg, const Mask& region);
+
 // Edge helpers for the freehand selection's Smart Edge and Edge Seeker modes.
 // `edge_map` is a Sobel magnitude of the luma, 0..1, one float per pixel.
 std::vector<float> edge_map(const Image& img);

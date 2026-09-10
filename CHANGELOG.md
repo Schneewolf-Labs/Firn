@@ -20,6 +20,11 @@ section into the next version.
   (seamless clone per stamp), next to the Clone Brush.
 - Brush smoothing in Tool Options: Basic (averaged points), Weighted
   (inertia) and Stabilizer (the brush trails the cursor on a string).
+- Foreground Select tool: scribble on the object (left button) and on the
+  background (right button) and the selection is computed from color
+  models of the marks regularized by geodesic distance; a selection made
+  first serves as the rough outline. Solved at about 1.5 MP, so it is
+  quick on large photos.
 - Symmetry painting in Tool Options for every brush: Horizontal, Vertical,
   Both, Rotational (2 to 32 copies) and Kaleidoscope, about the image
   center or a point placed by clicking; the axes are drawn on the canvas.

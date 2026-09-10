@@ -167,7 +167,7 @@ Ideas taken from studying GIMP and Krita (reimplemented, not copied):
 - [x] Brush smoothing: Basic, Weighted, Stabilizer
 - [x] Color to Alpha
 - [x] Symmetry painting: mirror axes, rotational, kaleidoscope
-- [ ] Foreground Select (matting from a rough scribble)
+- [x] Foreground Select (matting from a rough scribble)
 - [ ] Unified transform gizmo (move, scale, rotate, shear, perspective in one tool)
 - [ ] Color smudge brush (paint that mixes with what it passes over)
 - [ ] Perspective and vanishing-point assistants for the brushes

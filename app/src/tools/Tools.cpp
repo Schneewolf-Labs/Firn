@@ -990,6 +990,89 @@ public:
     }
 };
 
+// --- Foreground Select --------------------------------------------------
+// Scribble on the object (left button) and, if needed, on the background
+// (right button); after every stroke the selection is recomputed from the
+// marks (mask::foreground_select). A selection made beforehand acts as the
+// rough outline: everything outside it is background.
+
+class ForegroundSelectTool : public Tool {
+public:
+    const char* category() const override { return "Selection"; }
+    const char* name() const override { return "Foreground Select"; }
+    bool overlay_always() const override { return !strokes_.empty(); }
+    void on_press(App& app, const ToolInput& in, ImGuiMouseButton b) override {
+        if (!in.inside || !app.doc || app.active_layer() < 0) return;
+        sync(app);
+        if (strokes_.empty()) region_ = app.doc->selection();
+        strokes_.push_back({b == ImGuiMouseButton_Right, static_cast<float>(app.fgsel_size), {{in.img_x, in.img_y}}});
+        drawing_ = true;
+    }
+    void on_drag(App& app, const ToolInput& in, ImGuiMouseButton) override {
+        if (!drawing_ || !app.doc) return;
+        strokes_.back().pts.emplace_back(in.img_x, in.img_y);
+    }
+    void on_release(App& app, const ToolInput&, ImGuiMouseButton) override {
+        if (!drawing_ || !app.doc) return;
+        drawing_ = false;
+        rasterize(strokes_.back());
+        compute(app);
+    }
+    void cancel(App&) override { drawing_ = false; }
+    void draw_overlay(App& app, const ToolInput& in) override {
+        if (app.doc.get() == doc_) for (const MarkStroke& s : strokes_) {
+            const ImU32 col = s.background ? IM_COL32(255, 70, 70, 150) : IM_COL32(60, 220, 90, 150);
+            const float th = std::max(s.size * in.zoom, 2.0f);
+            std::vector<ImVec2> pts;
+            pts.reserve(s.pts.size());
+            for (const auto& p : s.pts) pts.emplace_back(in.origin.x + p.first * in.zoom, in.origin.y + p.second * in.zoom);
+            if (pts.size() == 1) in.dl->AddCircleFilled(pts[0], th * 0.5f, col);
+            else in.dl->AddPolyline(pts.data(), static_cast<int>(pts.size()), col, ImDrawFlags_RoundCornersAll, th);
+        }
+        if (in.inside) {
+            const float r = app.fgsel_size * 0.5f * in.zoom;
+            in.dl->AddCircle(in.screen, r, IM_COL32(0, 0, 0, 200), 0, 1.0f);
+            in.dl->AddCircle(in.screen, r + 1.0f, IM_COL32(255, 255, 255, 160), 0, 1.0f);
+        }
+    }
+    void draw_options(App& app) override {
+        ImGui::SetNextItemWidth(110);
+        ImGui::SliderInt("Size", &app.fgsel_size, 1, 200);
+        ImGui::SameLine();
+        ImGui::Checkbox("Sample merged", &app.fgsel_merged);
+        ImGui::SameLine();
+        if (ImGui::SmallButton("Clear marks")) { strokes_.clear(); fg_ = Mask(); bg_ = Mask(); }
+        ImGui::SameLine();
+        ImGui::TextDisabled("Left: mark the object. Right: mark background. Select first for a rough outline.");
+    }
+
+private:
+    struct MarkStroke { bool background; float size; std::vector<std::pair<float, float>> pts; };
+    // Marks belong to one image size; a different image starts over.
+    void sync(const App& app) {
+        if (app.doc.get() != doc_ || fg_.width() != app.doc->width() || fg_.height() != app.doc->height()) {
+            doc_ = app.doc.get();
+            fg_ = Mask(app.doc->width(), app.doc->height(), 0);
+            bg_ = Mask(app.doc->width(), app.doc->height(), 0);
+            strokes_.clear();
+            region_ = Mask();
+        }
+    }
+    void rasterize(const MarkStroke& s) {
+        Mask line = mask::polyline(fg_.width(), fg_.height(), s.pts, s.size, false);
+        mask::combine(s.background ? bg_ : fg_, line, mask::Combine::Add);
+    }
+    void compute(App& app) {
+        const Image& src = app.fgsel_merged ? app.doc->composite() : app.doc->layer(app.active_layer()).pixels;
+        Mask m = mask::foreground_select(src, fg_, bg_, region_);
+        app.set_selection("Foreground Select", std::move(m));
+    }
+    std::vector<MarkStroke> strokes_;
+    Mask fg_, bg_, region_;
+    const Document* doc_ = nullptr;   // the image the marks belong to
+    bool drawing_ = false;
+};
+
 // --- Crop --------------------------------------------------------------
 
 class CropTool : public Tool {
@@ -1376,6 +1459,7 @@ std::vector<std::unique_ptr<Tool>> make_default_tools() {
     t.push_back(std::make_unique<SelectionTool>());
     t.push_back(std::make_unique<FreehandTool>());
     t.push_back(std::make_unique<MagicWandTool>());
+    t.push_back(std::make_unique<ForegroundSelectTool>());
     t.push_back(std::make_unique<DropperTool>());
     t.push_back(std::make_unique<BrushTool>(BrushTool::Kind::Paint));
     t.push_back(std::make_unique<BrushTool>(BrushTool::Kind::Airbrush));

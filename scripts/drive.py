@@ -26,7 +26,7 @@ touched, and real mouse events are ignored while driving. Steps
                                    sel_dialog, selection_edit, material_dialog, material_kind, material_gradient,
                                    material_texture, material_transparent, image_windows, arrange,
                                    brush_size, smooth_mode, smooth_amount, symmetry_mode, symmetry_count,
-                                   symmetry_x, symmetry_y, ...)
+                                   symmetry_x, symmetry_y, fgsel_size, ...)
     wait:N                         let N frames run
     shot:FILE                      save the framebuffer to FILE (PNG)
     save:PATH  open:PATH            save the current image / open a file (no file dialog)

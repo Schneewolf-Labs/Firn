@@ -326,6 +326,7 @@ void Driver::before_frame(App& app, SDL_Window* window) {
                 else if (n == "brush_size") app.brush.size = v;
                 else if (n == "smooth_mode") app.smooth_mode = static_cast<int>(v);
                 else if (n == "smooth_amount") app.smooth_amount = v;
+                else if (n == "fgsel_size") app.fgsel_size = static_cast<int>(v);
                 else if (n == "symmetry_mode") app.symmetry_mode = static_cast<int>(v);
                 else if (n == "symmetry_count") app.symmetry_count = static_cast<int>(v);
                 else if (n == "symmetry_x") app.symmetry_x = v;

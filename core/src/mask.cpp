@@ -1,6 +1,7 @@
 #include "firn/mask.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstring>
 
@@ -536,3 +537,171 @@ std::vector<std::pair<float, float>> smooth_polygon(const std::vector<std::pair<
 
 }  // namespace mask
 }  // namespace firn
+
+namespace firn::mask {
+
+namespace {
+
+// k-means color model: `k` centers fitted to the marked pixels (subsampled).
+std::vector<std::array<float, 3>> color_model(const Image& img, const std::vector<uint8_t>& label, uint8_t want, int k) {
+    std::vector<std::array<float, 3>> samples;
+    size_t n = 0;
+    for (size_t i = 0; i < label.size(); ++i) if (label[i] == want) ++n;
+    const size_t stride = std::max<size_t>(1, n / 4000);
+    size_t seen = 0;
+    for (size_t i = 0; i < label.size(); ++i) {
+        if (label[i] != want) continue;
+        if (seen++ % stride) continue;
+        const uint8_t* p = img.data() + i * 4;
+        samples.push_back({p[0] / 255.0f, p[1] / 255.0f, p[2] / 255.0f});
+    }
+    std::vector<std::array<float, 3>> centers;
+    if (samples.empty()) return centers;
+    k = std::min<int>(k, static_cast<int>(samples.size()));
+    for (int c = 0; c < k; ++c) centers.push_back(samples[samples.size() * c / k]);
+    std::vector<int> owner(samples.size(), 0);
+    for (int iter = 0; iter < 10; ++iter) {
+        for (size_t i = 0; i < samples.size(); ++i) {
+            float best = 1e30f; int bi = 0;
+            for (int c = 0; c < k; ++c) {
+                float d = 0; for (int j = 0; j < 3; ++j) { const float t = samples[i][j] - centers[c][j]; d += t * t; }
+                if (d < best) { best = d; bi = c; }
+            }
+            owner[i] = bi;
+        }
+        std::vector<std::array<float, 3>> sum(k, {0, 0, 0}); std::vector<int> cnt(k, 0);
+        for (size_t i = 0; i < samples.size(); ++i) { for (int j = 0; j < 3; ++j) sum[owner[i]][j] += samples[i][j]; ++cnt[owner[i]]; }
+        for (int c = 0; c < k; ++c) if (cnt[c]) for (int j = 0; j < 3; ++j) centers[c][j] = sum[c][j] / cnt[c];
+    }
+    return centers;
+}
+
+float model_distance(const std::vector<std::array<float, 3>>& centers, const uint8_t* p) {
+    float best = 1e30f;
+    const float c0 = p[0] / 255.0f, c1 = p[1] / 255.0f, c2 = p[2] / 255.0f;
+    for (const auto& m : centers) {
+        const float d = (c0 - m[0]) * (c0 - m[0]) + (c1 - m[1]) * (c1 - m[1]) + (c2 - m[2]) * (c2 - m[2]);
+        best = std::min(best, d);
+    }
+    return best;
+}
+
+// Geodesic distance from the pixels with `seed` label over the likelihood
+// map, by repeated forward/backward chamfer sweeps with 8 neighbors.
+std::vector<float> geodesic(const std::vector<float>& like, const std::vector<uint8_t>& label, uint8_t seed, int w, int h) {
+    std::vector<float> d(like.size(), 1e30f);
+    for (size_t i = 0; i < d.size(); ++i) if (label[i] == seed) d[i] = 0.0f;
+    const float eps = 0.5f / static_cast<float>(std::max(w, h));   // spatial tie-breaker
+    auto relax = [&](int x, int y, int nx, int ny, float spatial) {
+        if (nx < 0 || ny < 0 || nx >= w || ny >= h) return;
+        const size_t i = static_cast<size_t>(y) * w + x, j = static_cast<size_t>(ny) * w + nx;
+        const float c = d[j] + std::abs(like[i] - like[j]) + spatial;
+        if (c < d[i]) d[i] = c;
+    };
+    const float diag = eps * 1.41421356f;
+    for (int pass = 0; pass < 3; ++pass) {
+        for (int y = 0; y < h; ++y)
+            for (int x = 0; x < w; ++x) {
+                relax(x, y, x - 1, y, eps); relax(x, y, x, y - 1, eps);
+                relax(x, y, x - 1, y - 1, diag); relax(x, y, x + 1, y - 1, diag);
+            }
+        for (int y = h - 1; y >= 0; --y)
+            for (int x = w - 1; x >= 0; --x) {
+                relax(x, y, x + 1, y, eps); relax(x, y, x, y + 1, eps);
+                relax(x, y, x + 1, y + 1, diag); relax(x, y, x - 1, y + 1, diag);
+            }
+    }
+    return d;
+}
+
+// Nearest-neighbor mask shrink keeping any mark in the block (thin scribbles survive).
+Mask shrink_marks(const Mask& m, int sw, int sh) {
+    Mask out(sw, sh, 0);
+    if (m.empty()) return out;
+    for (int y = 0; y < sh; ++y) {
+        const int y0 = y * m.height() / sh, y1 = std::max(y0 + 1, (y + 1) * m.height() / sh);
+        for (int x = 0; x < sw; ++x) {
+            const int x0 = x * m.width() / sw, x1 = std::max(x0 + 1, (x + 1) * m.width() / sw);
+            uint8_t v = 0;
+            for (int yy = y0; yy < y1; ++yy) for (int xx = x0; xx < x1; ++xx) v = std::max(v, m.at(xx, yy));
+            out.at(x, y) = v;
+        }
+    }
+    return out;
+}
+
+Mask grow_mask(const Mask& m, int w, int h) {
+    Mask out(w, h, 0);
+    const float sx = static_cast<float>(m.width()) / w, sy = static_cast<float>(m.height()) / h;
+    for (int y = 0; y < h; ++y) {
+        const float fy = (y + 0.5f) * sy - 0.5f;
+        const int y0 = std::clamp(static_cast<int>(std::floor(fy)), 0, m.height() - 1), y1 = std::min(y0 + 1, m.height() - 1);
+        const float ty = std::clamp(fy - y0, 0.0f, 1.0f);
+        for (int x = 0; x < w; ++x) {
+            const float fx = (x + 0.5f) * sx - 0.5f;
+            const int x0 = std::clamp(static_cast<int>(std::floor(fx)), 0, m.width() - 1), x1 = std::min(x0 + 1, m.width() - 1);
+            const float tx = std::clamp(fx - x0, 0.0f, 1.0f);
+            const float v = (m.at(x0, y0) * (1 - tx) + m.at(x1, y0) * tx) * (1 - ty) + (m.at(x0, y1) * (1 - tx) + m.at(x1, y1) * tx) * ty;
+            out.at(x, y) = static_cast<uint8_t>(v + 0.5f);
+        }
+    }
+    return out;
+}
+
+}  // namespace
+
+Mask foreground_select(const Image& img, const Mask& fg, const Mask& bg, const Mask& region) {
+    const int W = img.width(), H = img.height();
+    if (W <= 0 || H <= 0) return {};
+    // Solve at a working size of about 1.5 MP.
+    const double budget = 1.5e6;
+    const double scale = std::min(1.0, std::sqrt(budget / (static_cast<double>(W) * H)));
+    const int w = std::max(1, static_cast<int>(W * scale)), h = std::max(1, static_cast<int>(H * scale));
+    const bool scaled = w != W || h != H;
+    const Image small = scaled ? raster::resample(img, w, h, raster::Filter::Bilinear) : img;
+    const Mask sfg = scaled ? shrink_marks(fg, w, h) : fg;
+    const Mask sbg = scaled ? shrink_marks(bg, w, h) : bg;
+    const Mask sreg = region.empty() ? Mask() : scaled ? shrink_marks(region, w, h) : region;
+
+    // Labels: 1 foreground, 2 background, 0 unknown.
+    std::vector<uint8_t> label(static_cast<size_t>(w) * h, 0);
+    bool any_fg = false, any_bg = false;
+    for (int y = 0; y < h; ++y)
+        for (int x = 0; x < w; ++x) {
+            const size_t i = static_cast<size_t>(y) * w + x;
+            if (!sbg.empty() && sbg.at(x, y)) { label[i] = 2; any_bg = true; }
+            else if (!sreg.empty() && sreg.at(x, y) < 128) { label[i] = 2; any_bg = true; }
+            if (!sfg.empty() && sfg.at(x, y)) { label[i] = 1; any_fg = true; }
+        }
+    if (!any_fg) return Mask(W, H, 0);
+    if (!any_bg) {   // nothing says background: the outer edge does
+        for (int x = 0; x < w; ++x) { if (!label[x]) label[x] = 2; if (!label[static_cast<size_t>(h - 1) * w + x]) label[static_cast<size_t>(h - 1) * w + x] = 2; }
+        for (int y = 0; y < h; ++y) { if (!label[static_cast<size_t>(y) * w]) label[static_cast<size_t>(y) * w] = 2; if (!label[static_cast<size_t>(y) * w + w - 1]) label[static_cast<size_t>(y) * w + w - 1] = 2; }
+    }
+    // Color likelihood of foreground per pixel.
+    const auto fg_model = color_model(small, label, 1, 8), bg_model = color_model(small, label, 2, 8);
+    std::vector<float> like(label.size(), 0.5f);
+    for (size_t i = 0; i < like.size(); ++i) {
+        const uint8_t* p = small.data() + i * 4;
+        const float df = model_distance(fg_model, p), db = model_distance(bg_model, p);
+        like[i] = (db + 1e-4f) / (df + db + 2e-4f);
+    }
+    const std::vector<float> dfg = geodesic(like, label, 1, w, h), dbg = geodesic(like, label, 2, w, h);
+    Mask out(w, h, 0);
+    for (size_t i = 0; i < like.size(); ++i) {
+        float a;
+        if (label[i] == 1) a = 1.0f;
+        else if (label[i] == 2) a = 0.0f;
+        else {
+            const float t = (dbg[i] + 1e-6f) / (dfg[i] + dbg[i] + 2e-6f);   // 1 = far from background, near foreground
+            a = std::clamp((t - 0.5f) * 8.0f + 0.5f, 0.0f, 1.0f);
+        }
+        out.data()[i] = static_cast<uint8_t>(a * 255.0f + 0.5f);
+    }
+    // Drop stray islands and pinholes smaller than a sliver of the image.
+    const int sliver = std::max(4, static_cast<int>(static_cast<double>(w) * h * 0.0005));
+    remove_specks_and_holes(out, sliver, sliver);
+    return scaled ? grow_mask(out, W, H) : out;
+}
+
+}  // namespace firn::mask

@@ -104,6 +104,11 @@ void draw_tool_icon(ImDrawList* dl, const char* name, ImVec2 p, float size, ImU3
         g.line(0.15f, 0.85f, 0.65f, 0.35f);
         g.sparkle(0.72f, 0.28f, 0.2f);
         g.line(0.6f, 0.16f, 0.84f, 0.4f); g.line(0.6f, 0.4f, 0.84f, 0.16f);
+    } else if (is("Foreground Select")) {
+        // A figure picked out of a dashed frame.
+        g.dashed_rect(0.1f, 0.1f, 0.9f, 0.9f);
+        g.fill_circle(0.5f, 0.38f, 0.13f);
+        g.fill_poly({0.3f, 0.85f, 0.38f, 0.55f, 0.62f, 0.55f, 0.7f, 0.85f});
     } else if (is("Dropper")) {
         g.line(0.2f, 0.8f, 0.6f, 0.4f);
         g.fill_poly({0.55f, 0.3f, 0.7f, 0.15f, 0.85f, 0.3f, 0.7f, 0.45f});

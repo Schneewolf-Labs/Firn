@@ -145,6 +145,8 @@ struct App {
     void draw_selection_dialogs();
     void draw_layer_menu_items();
     int wand_tolerance = 20;
+    int fgsel_size = 24;                  // Foreground Select: mark brush size
+    bool fgsel_merged = true;             //   classify on the merged image
     bool wand_contiguous = true;
     bool wand_sample_merged = false;
 

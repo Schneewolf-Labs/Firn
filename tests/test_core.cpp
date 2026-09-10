@@ -1370,6 +1370,34 @@ static void test_text_objects_survive_native_save() {
     CHECK(std::abs(rx0 - qx0) < 2.0f && std::abs(ry0 - qy0) < 2.0f && std::abs(rx1 - qx1) < 2.0f && std::abs(ry1 - qy1) < 2.0f);
 }
 
+static void test_foreground_select() {
+    // A noisy red disk on a noisy blue field: one scribble across the disk
+    // and one on the field pick out the disk, edge included.
+    const int W = 80, H = 80;
+    Image img(W, H, {0, 0, 0, 255});
+    for (int y = 0; y < H; ++y)
+        for (int x = 0; x < W; ++x) {
+            const bool disk = (x - 40) * (x - 40) + (y - 40) * (y - 40) < 22 * 22;
+            const uint8_t n = static_cast<uint8_t>((x * 7 + y * 13) % 30);
+            img.set(x, y, disk ? Color{static_cast<uint8_t>(200 + n / 2), n, n, 255} : Color{n, n, static_cast<uint8_t>(180 + n), 255});
+        }
+    Mask fg(W, H, 0), bg(W, H, 0);
+    for (int x = 30; x < 50; ++x) fg.at(x, 40) = 255;
+    for (int y = 5; y < 75; ++y) bg.at(5, y) = 255;
+    Mask sel = mask::foreground_select(img, fg, bg, Mask());
+    CHECK(sel.width() == W && sel.height() == H);
+    CHECK(sel.at(40, 25) == 255 && sel.at(52, 52) == 255);   // inside the disk, away from the scribble
+    CHECK(sel.at(10, 10) == 0 && sel.at(70, 40) == 0);       // field
+    CHECK(sel.at(40, 66) == 0 && sel.at(40, 60) == 255);     // edge lands within a pixel or two of the true rim
+    // No background marks: the image border stands in.
+    Mask sel2 = mask::foreground_select(img, fg, Mask(), Mask());
+    CHECK(sel2.at(40, 25) == 255 && sel2.at(10, 10) == 0);
+    // A rough selection as the region: everything outside it is background.
+    Mask region = mask::rectangle(W, H, 0, 0, 40, 80, false);
+    Mask sel3 = mask::foreground_select(img, fg, Mask(), region);
+    CHECK(sel3.at(30, 40) == 255 && sel3.at(50, 40) == 0);
+}
+
 static void test_symmetry() {
     // Both: a stamp near one corner lands in all four quadrants of a 64x64 image.
     Image img(64, 64, {0, 0, 0, 0});
@@ -2264,6 +2292,7 @@ int main() {
     test_stroke_pressure();
     test_heal_and_color_to_alpha();
     test_symmetry();
+    test_foreground_select();
     test_vector_core();
     test_history_limit();
     test_brush_texture();
