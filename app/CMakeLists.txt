@@ -30,6 +30,8 @@ add_executable(firn
   ${FIRN_ICON_CPP}
   ${FIRN_VERSION_CPP}
   src/ui/About.cpp
+  src/ui/Theme.cpp
+  src/ui/ThemeEditor.cpp
   src/App.cpp
   src/Vectors.cpp
   src/Drive.cpp

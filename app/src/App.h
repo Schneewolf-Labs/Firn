@@ -22,6 +22,7 @@
 #include "Config.h"
 #include "tools/Tool.h"
 #include "ui/FileDialog.h"
+#include "ui/Theme.h"
 
 // Application state shared by all UI panels. The UI is immediate-mode: every
 // frame it reads this and the Document and emits Commands. Nothing in the UI
@@ -155,7 +156,7 @@ struct App {
 
     // Dialog state
     FileDialog file_dialog;
-    enum class PendingFileOp { None, Open, SaveAs, LoadSelection, SaveSelection, LoadPalette, SavePalette, SavePdf, LoadSwatches, SaveSwatches, LoadProfile };
+    enum class PendingFileOp { None, Open, SaveAs, LoadSelection, SaveSelection, LoadPalette, SavePalette, SavePdf, LoadSwatches, SaveSwatches, LoadProfile, ImportTheme, ExportTheme };
     PendingFileOp file_op = PendingFileOp::None;
     bool show_new_dialog = false;
     // Adjustment / effect dialogs with live preview (ui/Adjust.cpp)
@@ -248,7 +249,29 @@ struct App {
     GLuint about_tex = 0;               // the icon, uploaded when the About window first opens
     std::string about_gl;               // renderer and version strings, read once
     void draw_about_dialog();           // app/src/ui/About.cpp
+    // Themes (app/src/ui/Theme.h, ThemeEditor.cpp): built-ins plus the
+    // user's files; the current one is named by config.theme.
+    std::vector<Theme> themes;
+    bool themes_loaded = false;
+    void ensure_themes();
+    const Theme* find_theme(const std::string& name) const;
     void apply_theme(const std::string& name);
+    void apply_theme_values(const Theme& t);
+    bool save_theme(Theme t, const std::string& name, std::string* err);
+    void import_theme(const std::string& path);
+    void export_theme(const std::string& path);
+    std::string default_ui_font();
+    // Font changes rebuild the atlas between frames.
+    bool font_pending = false;
+    std::string font_pending_path, font_current_path;
+    float font_pending_size = 13.0f, font_current_size = 13.0f;
+    void apply_pending_font();
+    bool show_theme_editor = false;
+    Theme theme_edit, theme_editor_before;
+    std::string theme_edit_from;        // name of the theme the edit started from
+    char theme_name_buf[64] = {};
+    void open_theme_editor();
+    void draw_theme_editor();
     bool show_prefs_dialog = false;
     Config prefs_edit;                  // working copy while the dialog is open
     void apply_config();                // push config values into live state

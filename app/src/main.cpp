@@ -146,6 +146,7 @@ int main(int argc, char** argv) {
             continue;
         }
 
+        app.apply_pending_font();
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplSDL2_NewFrame();
         if (driver.active()) driver.before_frame(app, window);

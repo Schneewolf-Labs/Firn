@@ -37,8 +37,11 @@ FIRN_WINDOW=1280x800 ./build/app/firn   # override the initial window size
 ```
 
 Help > About shows the version, git commit and build facts (the build
-records them each time it runs). File > Preferences picks the theme:
-Firn (violet dark), Dark, Light or Classic.
+records them each time it runs). File > Preferences picks the theme
+(Firn, Dark, Light, Classic, Slate, or your own) and Edit Themes... opens
+the theme editor: every color, rounding and padding, the font and text
+size; themes save to `~/.config/firn/themes/*.firntheme` and can be
+exported and imported as single files.
 
 Install it (the app, `firn-convert`, a desktop entry and the icon):
 

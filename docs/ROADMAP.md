@@ -153,6 +153,8 @@ for. Ranked by value per effort; work top to bottom, tick as they land.
       specks and holes, color range, select similar, shape-based anti-alias,
       smooth), Hide Marquee, Edit Selection, Promote Selection to Layer, Float, Defloat
 - [x] Right-click menu on layers (the Layers menu for that layer, plus View > Current Only / All)
+- [x] Help > About (version, commit, build facts) and themes: built-ins plus a theme
+      editor (colors, shape, font, text size) with save, import and export
 
 ## Dropped (not worth the effort for this port)
 

@@ -497,6 +497,7 @@ void App::draw_dialogs() {
     draw_image_dialogs();
     draw_material_dialog();
     draw_about_dialog();
+    draw_theme_editor();
 
     if (file_dialog.draw()) {
         if (file_op == PendingFileOp::Open) open_document(file_dialog.path());
@@ -506,6 +507,8 @@ void App::draw_dialogs() {
         else if (file_op == PendingFileOp::LoadPalette) load_palette(file_dialog.path());
         else if (file_op == PendingFileOp::SavePalette) save_palette(file_dialog.path());
         else if (file_op == PendingFileOp::SavePdf) print_to_pdf(file_dialog.path(), false);
+        else if (file_op == PendingFileOp::ImportTheme) import_theme(file_dialog.path());
+        else if (file_op == PendingFileOp::ExportTheme) export_theme(file_dialog.path());
         else if (file_op == PendingFileOp::LoadProfile) {
             std::ifstream pf(file_dialog.path(), std::ios::binary);
             std::vector<uint8_t> bytes((std::istreambuf_iterator<char>(pf)), std::istreambuf_iterator<char>());
@@ -552,12 +555,16 @@ void App::draw_dialogs() {
         c.new_width = std::clamp(c.new_width, 1, 30000); c.new_height = std::clamp(c.new_height, 1, 30000);
         ImGui::SeparatorText("View");
         {
-            static const char* const names[] = {"Firn", "Dark", "Light", "Classic"};
-            static const char* const keys[] = {"firn", "dark", "light", "classic"};
-            int cur = 0;
-            for (int i = 0; i < 4; ++i) if (c.theme == keys[i]) cur = i;
-            ImGui::SetNextItemWidth(160);
-            if (ImGui::Combo("Theme", &cur, names, 4)) { c.theme = keys[cur]; apply_theme(c.theme); }  // previews live; Cancel restores
+            ensure_themes();
+            ImGui::SetNextItemWidth(200);
+            if (ImGui::BeginCombo("Theme", c.theme.c_str())) {
+                for (const Theme& t : themes)
+                    if (ImGui::Selectable((t.name + (t.builtin ? "" : "  (yours)")).c_str(), t.name == c.theme)) { c.theme = t.name; apply_theme(c.theme); }  // previews live; Cancel restores
+                ImGui::EndCombo();
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Edit Themes...")) { config.theme = c.theme; open_theme_editor(); }
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Colors, shape, font and text size; save, import and export themes");
         }
         ImGui::Checkbox("Rulers", &c.show_rulers); ImGui::SameLine(); ImGui::Checkbox("Grid", &c.show_grid);
         ImGui::Checkbox("Color managed display (convert tagged images to sRGB for the screen)", &c.color_managed_display);

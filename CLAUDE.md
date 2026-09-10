@@ -129,8 +129,13 @@ docs/    notes on the original: command inventory, module mapping, FORMAT.md
   create documents through `add_document` and close through
   `close_document`, which handles the unsaved-changes prompt.
 - `cmake/version.cmake` regenerates `Version.cpp` (version, commit, build
-  date) on every build for Help > About (`app/src/ui/About.cpp`, which
-  also holds the color themes behind Preferences > Theme).
+  date) on every build for Help > About (`app/src/ui/About.cpp`).
+- **Themes** (`app/src/ui/Theme.h`): a `Theme` is every ImGui color, the
+  shape values, and the font path and size; built-ins come from
+  `Theme::builtins()`, user themes are key=value `.firntheme` files under
+  the config folder. `App::apply_theme` sets the style at once and queues a
+  font rebuild that `App::apply_pending_font` performs between frames
+  (never inside a frame). The editor is `app/src/ui/ThemeEditor.cpp`.
 - Settings persist through `Config` (`~/.config/firn/firn.cfg`; the ImGui
   layout is `layout.ini` beside it). Add new persisted fields there, expose
   them in File > Preferences, and push them into live state in
