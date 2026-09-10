@@ -338,14 +338,14 @@ void App::draw_canvas_view(ImVec2 view_pos, ImVec2 view_size) {
             if (over_top_ruler) { guide_drag_kind = 1; guide_drag_index = -1; }
             else if (over_left_ruler) { guide_drag_kind = 2; guide_drag_index = -1; }
             else if (hovered) {
-                for (size_t i = 0; i < guides_h.size(); ++i) if (std::abs(p0.y + guides_h[i] * zoom - io.MousePos.y) <= tol) { guide_drag_kind = 1; guide_drag_index = static_cast<int>(i); }
-                for (size_t i = 0; i < guides_v.size(); ++i) if (std::abs(p0.x + guides_v[i] * zoom - io.MousePos.x) <= tol) { guide_drag_kind = 2; guide_drag_index = static_cast<int>(i); }
+                for (size_t i = 0; i < guides_h().size(); ++i) if (std::abs(p0.y + guides_h()[i] * zoom - io.MousePos.y) <= tol) { guide_drag_kind = 1; guide_drag_index = static_cast<int>(i); }
+                for (size_t i = 0; i < guides_v().size(); ++i) if (std::abs(p0.x + guides_v()[i] * zoom - io.MousePos.x) <= tol) { guide_drag_kind = 2; guide_drag_index = static_cast<int>(i); }
             }
-            if (guide_drag_kind == 1 && guide_drag_index < 0) { guides_h.push_back(in.img_y); guide_drag_index = static_cast<int>(guides_h.size()) - 1; }
-            if (guide_drag_kind == 2 && guide_drag_index < 0) { guides_v.push_back(in.img_x); guide_drag_index = static_cast<int>(guides_v.size()) - 1; }
+            if (guide_drag_kind == 1 && guide_drag_index < 0) { guides_h().push_back(in.img_y); guide_drag_index = static_cast<int>(guides_h().size()) - 1; }
+            if (guide_drag_kind == 2 && guide_drag_index < 0) { guides_v().push_back(in.img_x); guide_drag_index = static_cast<int>(guides_v().size()) - 1; }
         }
         if (guide_drag_kind != 0) {
-            std::vector<float>& gv = guide_drag_kind == 1 ? guides_h : guides_v;
+            std::vector<float>& gv = guide_drag_kind == 1 ? guides_h() : guides_v();
             if (guide_drag_index >= 0 && guide_drag_index < static_cast<int>(gv.size())) {
                 gv[guide_drag_index] = std::round(guide_drag_kind == 1 ? (io.MousePos.y - p0.y) / zoom : (io.MousePos.x - p0.x) / zoom);
                 if (!ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
@@ -437,13 +437,13 @@ void App::draw_canvas_view(ImVec2 view_pos, ImVec2 view_size) {
     // Guides.
     if (show_guides) {
         const ImU32 gc = IM_COL32(0, 160, 255, 200);
-        for (float g : guides_h) { const float sy = p0.y + g * zoom; if (sy >= view_pos.y && sy <= view_pos.y + view_size.y) dl->AddLine(ImVec2(view_pos.x, sy), ImVec2(view_pos.x + view_size.x, sy), gc); }
-        for (float g : guides_v) { const float sx = p0.x + g * zoom; if (sx >= view_pos.x && sx <= view_pos.x + view_size.x) dl->AddLine(ImVec2(sx, view_pos.y), ImVec2(sx, view_pos.y + view_size.y), gc); }
+        for (float g : guides_h()) { const float sy = p0.y + g * zoom; if (sy >= view_pos.y && sy <= view_pos.y + view_size.y) dl->AddLine(ImVec2(view_pos.x, sy), ImVec2(view_pos.x + view_size.x, sy), gc); }
+        for (float g : guides_v()) { const float sx = p0.x + g * zoom; if (sx >= view_pos.x && sx <= view_pos.x + view_size.x) dl->AddLine(ImVec2(sx, view_pos.y), ImVec2(sx, view_pos.y + view_size.y), gc); }
     }
 
     // Painting assistants: vanishing points with rays toward the cursor,
     // rulers as lines across the view.
-    if (show_assistants && !assistants.empty()) {
+    if (show_assistants && !assistants().empty()) {
         const ImU32 ac = IM_COL32(255, 140, 0, 220), faint = IM_COL32(255, 140, 0, 90);
         auto long_line = [&](ImVec2 a, ImVec2 b, ImU32 col) {   // the line through a and b across the view
             float dx = b.x - a.x, dy = b.y - a.y;
@@ -454,11 +454,11 @@ void App::draw_canvas_view(ImVec2 view_pos, ImVec2 view_size) {
             dl->AddLine(ImVec2(a.x - dx * reach, a.y - dy * reach), ImVec2(a.x + dx * reach, a.y + dy * reach), col);
         };
         const int hover_i = (hovered && assistant_snap) ? nearest_assistant(in.img_x, in.img_y) : -1;
-        for (size_t i = 0; i < assistants.size(); ++i) {
-            const Assistant& a = assistants[i];
+        for (size_t i = 0; i < assistants().size(); ++i) {
+            const firn::Assistant& a = assistants()[i];
             const ImVec2 p(p0.x + a.x0 * zoom, p0.y + a.y0 * zoom), q(p0.x + a.x1 * zoom, p0.y + a.y1 * zoom);
             const bool hot = static_cast<int>(i) == hover_i;
-            if (a.kind == Assistant::Kind::VanishingPoint) {
+            if (a.kind == firn::Assistant::Kind::VanishingPoint) {
                 dl->AddCircle(p, 6.0f, ac, 0, 2.0f);
                 for (int k = 0; k < 8; ++k) {
                     const float ang = k * 3.14159265f / 4.0f;
@@ -466,10 +466,10 @@ void App::draw_canvas_view(ImVec2 view_pos, ImVec2 view_size) {
                 }
                 if (hot) long_line(p, in.screen, faint);
             } else {
-                long_line(p, q, a.kind == Assistant::Kind::Ruler ? ac : faint);
+                long_line(p, q, a.kind == firn::Assistant::Kind::Ruler ? ac : faint);
                 dl->AddLine(p, q, ac, 2.0f);
                 dl->AddCircleFilled(p, 4.0f, ac); dl->AddCircleFilled(q, 4.0f, ac);
-                if (hot && a.kind == Assistant::Kind::Parallel) long_line(in.screen, ImVec2(in.screen.x + (q.x - p.x), in.screen.y + (q.y - p.y)), faint);
+                if (hot && a.kind == firn::Assistant::Kind::Parallel) long_line(in.screen, ImVec2(in.screen.x + (q.x - p.x), in.screen.y + (q.y - p.y)), faint);
             }
         }
     }

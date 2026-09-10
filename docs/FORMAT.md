@@ -278,8 +278,10 @@ ignore: `firn:blend` (the exact blend mode name), `firn:background`,
 layer style as JSON), `firn:type` = `vector` (`firn:vector`: the native
 vector extension block bytes), `adjustment` (`firn:adjustment`: the native
 adjustment extension bytes) or `filter` (`firn:filter`: JSON parameters);
-16-bit layers are 16-bit PNGs; `<firn:icc src>` holds the color profile
-and `<firn:channel name src>` each saved selection. Reading honors
+16-bit layers are 16-bit PNGs. `<firn:icc src>` holds the color profile,
+`<firn:channel name src>` each saved selection, `<firn:guide axis pos>`
+each ruler guide and `<firn:assistant kind x0 y0 x1 y1>` each painting
+assistant. Reading honors
 offsets, hidden layers, nested stacks and 16-bit PNGs from other editors;
 unsupported operators are reported as warnings and composited Normal.
 The zip reader and writer are `core/src/zip.cpp` (store and deflate only).

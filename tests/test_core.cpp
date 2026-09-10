@@ -1474,6 +1474,11 @@ static void test_openraster() {
     filt.adjustment.kind = Adjustment::Kind::GaussianBlur;
     filt.adjustment.blur_radius = 2.5f;
     doc.alpha_channels().push_back({"Saved 1", mask::rectangle(32, 24, 2, 2, 10, 10, false)});
+    doc.guides_h().push_back(6.5f);
+    doc.guides_v().push_back(11.0f);
+    doc.guides_v().push_back(20.0f);
+    { Assistant a; a.kind = Assistant::Kind::VanishingPoint; a.x0 = 30; a.y0 = 12; doc.assistants().push_back(a); }
+    { Assistant a; a.kind = Assistant::Kind::Ruler; a.x0 = 1; a.y0 = 2; a.x1 = 3; a.y1 = 4; doc.assistants().push_back(a); }
     doc.set_icc(std::vector<uint8_t>{1, 2, 3, 4, 5});
 
     const std::vector<uint8_t> bytes = io::save_ora_to_memory(doc);
@@ -1492,6 +1497,10 @@ static void test_openraster() {
     CHECK(back->layer(7).is_adjustment() && back->layer(7).adjustment.kind == Adjustment::Kind::GaussianBlur && std::abs(back->layer(7).adjustment.blur_radius - 2.5f) < 1e-4f);
     CHECK(back->alpha_channels().size() == 1 && back->alpha_channels()[0].name == "Saved 1" && back->alpha_channels()[0].mask.at(5, 5) == 255);
     CHECK(back->icc() == std::vector<uint8_t>({1, 2, 3, 4, 5}));
+    CHECK(back->guides_h().size() == 1 && std::abs(back->guides_h()[0] - 6.5f) < 1e-3f);
+    CHECK(back->guides_v().size() == 2 && back->guides_v()[1] == 20.0f);
+    CHECK(back->assistants().size() == 2 && back->assistants()[0].kind == Assistant::Kind::VanishingPoint && back->assistants()[0].x0 == 30);
+    CHECK(back->assistants()[1].kind == Assistant::Kind::Ruler && back->assistants()[1].y1 == 4);
     CHECK(back->group_end(2) == 5);
     // The composites agree.
     const Image a = doc.composite(), b = back->composite();

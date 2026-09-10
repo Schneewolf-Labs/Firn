@@ -239,7 +239,7 @@ public:
         // Assistants: the stroke follows the nearest one from where it starts.
         assist_ = app.assistant_snap ? app.nearest_assistant(in.img_x, in.img_y) : -1;
         float sx = in.img_x, sy = in.img_y;
-        if (assist_ >= 0 && app.assistants[assist_].kind == Assistant::Kind::Ruler) app.assist_point(assist_, sx, sy, sx, sy);
+        if (assist_ >= 0 && app.assistants()[assist_].kind == Assistant::Kind::Ruler) app.assist_point(assist_, sx, sy, sx, sy);
         assist_sx_ = sx; assist_sy_ = sy;
         smooth_x_ = sx; smooth_y_ = sy; history_.clear();
         last_x_ = sx; last_y_ = sy; last_pressure_ = in.pressure;
@@ -478,27 +478,27 @@ public:
         if (!app.doc) return;
         const float tol = 8.0f / std::max(in.zoom, 0.01f);
         int hit = -1, handle = 0;
-        for (size_t i = 0; i < app.assistants.size(); ++i) {
-            const Assistant& a = app.assistants[i];
+        for (size_t i = 0; i < app.assistants().size(); ++i) {
+            const Assistant& a = app.assistants()[i];
             if (std::hypot(in.img_x - a.x0, in.img_y - a.y0) <= tol) { hit = static_cast<int>(i); handle = 0; }
             else if (a.kind != Assistant::Kind::VanishingPoint && std::hypot(in.img_x - a.x1, in.img_y - a.y1) <= tol) { hit = static_cast<int>(i); handle = 1; }
         }
         if (b == ImGuiMouseButton_Right) {
-            if (hit >= 0) app.assistants.erase(app.assistants.begin() + hit);
+            if (hit >= 0) app.assistants().erase(app.assistants().begin() + hit);
             return;
         }
         if (hit >= 0) { drag_ = hit; handle_ = handle; return; }
         Assistant a;
         a.kind = static_cast<Assistant::Kind>(std::clamp(app.assistant_kind, 0, 2));
         a.x0 = a.x1 = in.img_x; a.y0 = a.y1 = in.img_y;
-        app.assistants.push_back(a);
-        drag_ = static_cast<int>(app.assistants.size()) - 1;
+        app.assistants().push_back(a);
+        drag_ = static_cast<int>(app.assistants().size()) - 1;
         handle_ = a.kind == Assistant::Kind::VanishingPoint ? 0 : 1;
         fresh_ = true;
     }
     void on_drag(App& app, const ToolInput& in, ImGuiMouseButton) override {
-        if (drag_ < 0 || drag_ >= static_cast<int>(app.assistants.size())) return;
-        Assistant& a = app.assistants[drag_];
+        if (drag_ < 0 || drag_ >= static_cast<int>(app.assistants().size())) return;
+        Assistant& a = app.assistants()[drag_];
         if (handle_ == 0) {
             if (a.kind == Assistant::Kind::VanishingPoint) { a.x0 = in.img_x; a.y0 = in.img_y; }
             else { a.x0 = in.img_x; a.y0 = in.img_y; }
@@ -506,9 +506,9 @@ public:
     }
     void on_release(App& app, const ToolInput&, ImGuiMouseButton) override {
         // A ruler needs two distinct ends; a click alone makes none.
-        if (fresh_ && drag_ >= 0 && drag_ < static_cast<int>(app.assistants.size())) {
-            Assistant& a = app.assistants[drag_];
-            if (a.kind != Assistant::Kind::VanishingPoint && std::hypot(a.x1 - a.x0, a.y1 - a.y0) < 2.0f) app.assistants.erase(app.assistants.begin() + drag_);
+        if (fresh_ && drag_ >= 0 && drag_ < static_cast<int>(app.assistants().size())) {
+            Assistant& a = app.assistants()[drag_];
+            if (a.kind != Assistant::Kind::VanishingPoint && std::hypot(a.x1 - a.x0, a.y1 - a.y0) < 2.0f) app.assistants().erase(app.assistants().begin() + drag_);
         }
         drag_ = -1; fresh_ = false;
     }
@@ -521,7 +521,7 @@ public:
         ImGui::SameLine();
         ImGui::Checkbox("Show", &app.show_assistants);
         ImGui::SameLine();
-        if (ImGui::SmallButton("Clear")) app.assistants.clear();
+        if (ImGui::SmallButton("Clear")) app.assistants().clear();
         ImGui::SameLine();
         ImGui::TextDisabled(app.assistant_kind == 0 ? "Click to place a vanishing point; drag a point to move it; right-click removes it."
                                                     : "Drag to lay a ruler; drag an end to move it; right-click an end removes it.");

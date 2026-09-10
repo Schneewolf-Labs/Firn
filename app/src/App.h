@@ -31,16 +31,6 @@
 // owns pixels.
 // Everything that belongs to one open image. The current document's copy
 // lives directly in App's members; inactive ones are parked in App::docs.
-// Painting assistants (per document, like guides): the brushes constrain
-// their strokes to them while Snap to Assistants is on. A vanishing point
-// makes strokes run toward it, a parallel ruler gives them its direction,
-// a ruler holds them on its own line.
-struct Assistant {
-    enum class Kind { VanishingPoint, Parallel, Ruler };
-    Kind kind = Kind::VanishingPoint;
-    float x0 = 0, y0 = 0, x1 = 0, y1 = 0;   // image coords; the point is (x0, y0)
-};
-
 struct DocState {
     std::unique_ptr<firn::Document> doc;
     firn::CommandStack history;
@@ -50,8 +40,6 @@ struct DocState {
     float zoom = 1.0f, pan_x = 0.0f, pan_y = 0.0f;
     bool fit_requested = true;
     firn::raster::Rect crop_rect;
-    std::vector<float> guides_h, guides_v;  // image-space y / x positions
-    std::vector<Assistant> assistants;
     // Windowed view: a stable id for the ImGui window, its texture while the
     // document is parked, and whether it has been placed in the workspace.
     int uid = 0;
@@ -102,12 +90,21 @@ struct App {
     bool show_rulers = true, show_grid = false, show_guides = true;
     bool snap_to_guides = true, snap_to_grid = false;
     int grid_spacing = 10;
-    std::vector<float> guides_h, guides_v;  // current document's guides (image coords)
+    // Guides and painting assistants live on the current Document (so they
+    // travel with the image and are saved in the project format); these
+    // read as empty when no image is open.
+    std::vector<float>& guides_h();
+    const std::vector<float>& guides_h() const;
+    std::vector<float>& guides_v();
+    const std::vector<float>& guides_v() const;
+    std::vector<firn::Assistant>& assistants();
+    const std::vector<firn::Assistant>& assistants() const;
     // Guide being dragged: kind 0 none, 1 horizontal, 2 vertical; index -1 = new
     int guide_drag_kind = 0, guide_drag_index = -1;
     void snap_point(float& x, float& y) const;
-    std::vector<Assistant> assistants;      // current document's painting assistants
     bool show_assistants = true, assistant_snap = true;
+    mutable std::vector<float> no_guides_;              // returned when there is no document
+    mutable std::vector<firn::Assistant> no_assistants_;
     int assistant_kind = 0;                 // Assistant tool: what a click or drag creates
     // The assistant a stroke starting at (sx, sy) should follow (-1 = none).
     int nearest_assistant(float sx, float sy) const;

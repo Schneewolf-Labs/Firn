@@ -262,6 +262,12 @@ struct OraWriter {
         out += "  <stack>\n";
         range(0, doc.layer_count(), 2);
         out += "  </stack>\n";
+        for (float g : doc.guides_h()) out += "  <firn:guide axis=\"h\" pos=\"" + fmt(g) + "\"/>\n";
+        for (float g : doc.guides_v()) out += "  <firn:guide axis=\"v\" pos=\"" + fmt(g) + "\"/>\n";
+        for (const Assistant& a : doc.assistants()) {
+            const char* kind = a.kind == Assistant::Kind::VanishingPoint ? "vanishing-point" : a.kind == Assistant::Kind::Parallel ? "parallel" : "ruler";
+            out += std::string("  <firn:assistant kind=\"") + kind + "\" x0=\"" + fmt(a.x0) + "\" y0=\"" + fmt(a.y0) + "\" x1=\"" + fmt(a.x1) + "\" y1=\"" + fmt(a.y1) + "\"/>\n";
+        }
         if (!doc.icc().empty()) out += "  <firn:icc src=\"" + add_file("profile", "icc", doc.icc()) + "\"/>\n";
         for (const Document::AlphaChannel& ch : doc.alpha_channels())
             out += "  <firn:channel name=\"" + escape(ch.name) + "\" src=\"" + add_file("channel", "png", mask_png(ch.mask)) + "\"/>\n";
@@ -428,6 +434,18 @@ std::unique_ptr<Document> load_ora_from_memory(const uint8_t* data, size_t size,
     for (const XmlNode& c : root.children) {
         if (c.name == "stack") rd.stack(c, 0);
         else if (c.name == "firn:icc") { if (const std::vector<uint8_t>* b = ar.find(c.attr_or("src", ""))) doc->set_icc(*b); }
+        else if (c.name == "firn:guide") {
+            const float pos = static_cast<float>(c.number("pos", 0));
+            (c.attr_or("axis", "h") == "v" ? doc->guides_v() : doc->guides_h()).push_back(pos);
+        }
+        else if (c.name == "firn:assistant") {
+            Assistant a;
+            const std::string kind = c.attr_or("kind", "vanishing-point");
+            a.kind = kind == "parallel" ? Assistant::Kind::Parallel : kind == "ruler" ? Assistant::Kind::Ruler : Assistant::Kind::VanishingPoint;
+            a.x0 = static_cast<float>(c.number("x0", 0)); a.y0 = static_cast<float>(c.number("y0", 0));
+            a.x1 = static_cast<float>(c.number("x1", 0)); a.y1 = static_cast<float>(c.number("y1", 0));
+            doc->assistants().push_back(a);
+        }
         else if (c.name == "firn:channel") { if (auto img = rd.png(c.attr_or("src", ""))) doc->alpha_channels().push_back({c.attr_or("name", "Selection"), mask_from_image(*img, w, h)}); }
     }
     if (doc->layer_count() == 0) {

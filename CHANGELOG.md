@@ -26,7 +26,8 @@ section into the next version.
   (inertia) and Stabilizer (the brush trails the cursor on a string).
 - OpenRaster (.ora) is Firn's project format: read and written with every
   layer kind, masks, vector objects, adjustment and filter layers, layer
-  styles, 16-bit layers, color profiles and saved selections, and readable
+  styles, 16-bit layers, color profiles, saved selections, ruler guides and
+  painting assistants, and readable
   by GIMP, Krita and MyPaint. Save As suggests .ora for layered images
   and autosave uses it; the classic format stays supported for files
   meant for the original.

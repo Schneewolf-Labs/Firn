@@ -31,11 +31,18 @@ firn::raster::Symmetry App::symmetry() const {
     return s;
 }
 
+std::vector<float>& App::guides_h() { return doc ? doc->guides_h() : no_guides_; }
+const std::vector<float>& App::guides_h() const { return doc ? doc->guides_h() : no_guides_; }
+std::vector<float>& App::guides_v() { return doc ? doc->guides_v() : no_guides_; }
+const std::vector<float>& App::guides_v() const { return doc ? doc->guides_v() : no_guides_; }
+std::vector<Assistant>& App::assistants() { return doc ? doc->assistants() : no_assistants_; }
+const std::vector<Assistant>& App::assistants() const { return doc ? doc->assistants() : no_assistants_; }
+
 int App::nearest_assistant(float sx, float sy) const {
     int best = -1;
     float best_d = 1e30f;
-    for (size_t i = 0; i < assistants.size(); ++i) {
-        const Assistant& a = assistants[i];
+    for (size_t i = 0; i < assistants().size(); ++i) {
+        const Assistant& a = assistants()[i];
         float d;
         if (a.kind == Assistant::Kind::VanishingPoint) d = std::hypot(sx - a.x0, sy - a.y0);
         else {
@@ -49,8 +56,8 @@ int App::nearest_assistant(float sx, float sy) const {
 }
 
 void App::assist_point(int i, float sx, float sy, float& x, float& y) const {
-    if (i < 0 || i >= static_cast<int>(assistants.size())) return;
-    const Assistant& a = assistants[i];
+    if (i < 0 || i >= static_cast<int>(assistants().size())) return;
+    const Assistant& a = assistants()[i];
     float ox, oy, dx, dy;   // a point on the line and its direction
     if (a.kind == Assistant::Kind::VanishingPoint) { ox = a.x0; oy = a.y0; dx = sx - a.x0; dy = sy - a.y0; }
     else if (a.kind == Assistant::Kind::Parallel) { ox = sx; oy = sy; dx = a.x1 - a.x0; dy = a.y1 - a.y0; }
@@ -101,8 +108,6 @@ void App::stash_current() {
     s.zoom = zoom; s.pan_x = pan_x; s.pan_y = pan_y;
     s.fit_requested = fit_requested;
     s.crop_rect = crop_rect;
-    s.guides_h = guides_h; s.guides_v = guides_v;
-    s.assistants = assistants;
     history = CommandStack();
 }
 
@@ -110,8 +115,8 @@ void App::stash_current() {
 void App::snap_point(float& x, float& y) const {
     const float tol = 8.0f / std::max(zoom, 0.01f);
     if (snap_to_guides && show_guides) {
-        for (float g : guides_v) if (std::abs(g - x) <= tol) { x = g; break; }
-        for (float g : guides_h) if (std::abs(g - y) <= tol) { y = g; break; }
+        for (float g : guides_v()) if (std::abs(g - x) <= tol) { x = g; break; }
+        for (float g : guides_h()) if (std::abs(g - y) <= tol) { y = g; break; }
     }
     if (snap_to_grid && grid_spacing > 0) {
         x = std::round(x / grid_spacing) * grid_spacing;
@@ -134,8 +139,6 @@ void App::activate_document(int index) {
     zoom = s.zoom; pan_x = s.pan_x; pan_y = s.pan_y;
     fit_requested = s.fit_requested;
     crop_rect = s.crop_rect;
-    guides_h = s.guides_h; guides_v = s.guides_v;
-    assistants = s.assistants;
     current_doc = index;
     canvas_tex_revision = ~0ull;  // force re-upload
     select_tab_request = index;
@@ -160,8 +163,6 @@ void App::add_document(std::unique_ptr<Document> d, const std::string& path) {
     zoom = 1.0f; pan_x = pan_y = 0.0f;
     fit_requested = true;
     crop_rect = {};
-    guides_h.clear(); guides_v.clear();
-    assistants.clear();
     canvas_tex_revision = ~0ull;
     select_tab_request = current_doc;
 }
@@ -196,8 +197,6 @@ void App::close_document(int index, bool force) {
             DocState& s = docs[next];
             doc = std::move(s.doc); history = std::move(s.history); doc_path = s.doc_path; doc_title = s.title;
             saved_cursor = s.saved_cursor; zoom = s.zoom; pan_x = s.pan_x; pan_y = s.pan_y; fit_requested = s.fit_requested; crop_rect = s.crop_rect;
-            guides_h = s.guides_h; guides_v = s.guides_v;
-            assistants = s.assistants;
             current_doc = next;
             select_tab_request = next;
         }

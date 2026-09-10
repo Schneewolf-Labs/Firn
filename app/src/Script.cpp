@@ -229,7 +229,7 @@ std::string App::do_command(const std::string& name, const Value& p, bool* ok) {
     if (name == "RedoLastUndo") { redo(); return json::dump(result_ok()); }
     if (name == "AddGuide") {
         if (auto e = need_doc(); !e.empty()) return e;
-        (flag("IsHorizontal", true) ? guides_h : guides_v).push_back(static_cast<float>(num("Position", 0)));
+        (flag("IsHorizontal", true) ? guides_h() : guides_v()).push_back(static_cast<float>(num("Position", 0)));
         return json::dump(result_ok());
     }
     if (name == "ShowGuides") { show_guides = !show_guides; return json::dump(result_ok()); }

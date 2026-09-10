@@ -109,6 +109,10 @@ docs/    notes on the original: command inventory, module mapping, FORMAT.md
   original where one exists (A pan, Z zoom, S selection, E dropper, B brush,
   X eraser, F fill). L freehand and W magic wand are ours; the original put
   those on the S flyout.
+- **Guides and painting assistants** live on the `Document`
+  (`guides_h()`, `guides_v()`, `assistants()`), so they travel with the
+  image and the project format saves them; `App::guides_h()` and friends
+  forward to the current document. They are not part of the undo state.
 - **OpenRaster (.ora)** is the project format (`core/src/io_ora.cpp`,
   zip in `core/src/zip.cpp`): everything the Document holds round-trips,
   Firn-only data goes in `firn:` attributes (docs/FORMAT.md, "OpenRaster").

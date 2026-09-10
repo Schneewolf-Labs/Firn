@@ -49,6 +49,15 @@ struct Layer {
     bool has_mask() const { return !mask.empty(); }
 };
 
+// Painting assistants: guides for the brushes, kept with the image the way
+// ruler guides are. A vanishing point makes strokes run toward it, a
+// parallel ruler gives them its direction, a ruler holds them on its line.
+struct Assistant {
+    enum class Kind { VanishingPoint, Parallel, Ruler };
+    Kind kind = Kind::VanishingPoint;
+    float x0 = 0, y0 = 0, x1 = 0, y1 = 0;   // image coords; the point is (x0, y0)
+};
+
 // The undoable subset of Layer, for LayerPropertiesCommand.
 struct LayerProps {
     std::string name;
@@ -127,6 +136,16 @@ public:
     int bit_depth() const;
     void set_bit_depth(int bits);   // 16 promotes every raster layer, 8 drops the deep data
 
+    // View aids that belong to the image rather than the window: ruler
+    // guides (image-space y and x positions) and painting assistants. Not
+    // part of the undo state; the project format saves them.
+    std::vector<float>& guides_h() { return guides_h_; }
+    const std::vector<float>& guides_h() const { return guides_h_; }
+    std::vector<float>& guides_v() { return guides_v_; }
+    const std::vector<float>& guides_v() const { return guides_v_; }
+    std::vector<Assistant>& assistants() { return assistants_; }
+    const std::vector<Assistant>& assistants() const { return assistants_; }
+
     std::vector<AlphaChannel>& alpha_channels() { return alpha_; }
     const std::vector<AlphaChannel>& alpha_channels() const { return alpha_; }
 
@@ -163,6 +182,8 @@ private:
     uint64_t selection_revision_ = 0;
     raster::Rect dirty_;
     std::vector<AlphaChannel> alpha_;
+    std::vector<float> guides_h_, guides_v_;
+    std::vector<Assistant> assistants_;
     std::vector<uint8_t> icc_;
 };
 

@@ -74,10 +74,10 @@ void App::draw_menu() {
         ImGui::MenuItem("Mask Overlay", nullptr, &show_mask_overlay);
         ImGui::MenuItem("Snap to Guides", nullptr, &snap_to_guides);
         ImGui::MenuItem("Snap to Grid", nullptr, &snap_to_grid);
-        if (ImGui::MenuItem("Clear Guides", nullptr, false, !guides_h.empty() || !guides_v.empty())) { guides_h.clear(); guides_v.clear(); }
+        if (ImGui::MenuItem("Clear Guides", nullptr, false, !guides_h().empty() || !guides_v().empty())) { guides_h().clear(); guides_v().clear(); }
         ImGui::MenuItem("Assistants", nullptr, &show_assistants);
         ImGui::MenuItem("Snap to Assistants", nullptr, &assistant_snap);
-        if (ImGui::MenuItem("Clear Assistants", nullptr, false, !assistants.empty())) assistants.clear();
+        if (ImGui::MenuItem("Clear Assistants", nullptr, false, !assistants().empty())) assistants().clear();
         ImGui::SetNextItemWidth(100);
         ImGui::InputInt("Grid spacing", &grid_spacing);
         grid_spacing = std::clamp(grid_spacing, 1, 1000);
