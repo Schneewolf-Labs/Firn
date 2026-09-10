@@ -205,6 +205,12 @@ struct App {
     // Effect Browser (app/src/ui/EffectBrowser.cpp): thumbnails of every
     // dialog's operation on the active layer, taken from the dialogs themselves.
     bool show_effect_browser = false;
+    // The last adjustment or effect applied through a dialog, for Edit >
+    // Repeat. The op reads the dialog's current settings, so repeating uses
+    // what was last chosen.
+    std::string last_effect;
+    std::function<void(firn::Image&)> last_effect_op;
+    std::function<void(firn::Image16&)> last_effect_op16;
     bool effect_capture = false;
     std::map<std::string, std::function<void(firn::Image&)>> effect_ops;
     std::vector<GLuint> browser_tex;
@@ -655,7 +661,11 @@ struct App {
     void select_all();
     void select_none();
     void select_invert();
+    void copy_image(firn::Image out, const char* what);   // both clipboards, cut to the selection
     void copy();
+    void copy_merged();          // the composite, not just the active layer
+    void paste_into_selection(); // scales the clipboard to the selection and paints it through
+    void repeat_last_effect();   // re-applies the last Adjust/Effects dialog with its settings
     void cut();
     void clear_selection();
     void paste_as_new_layer();

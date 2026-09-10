@@ -32,6 +32,11 @@ section into the next version.
   by GIMP, Krita and MyPaint. Save As suggests .ora for layered images
   and autosave uses it; the classic format stays supported for files
   meant for the original.
+- Edit menu: Copy Merged (Ctrl+Shift+C) copies the composite rather than
+  the active layer; Paste Into Selection (Ctrl+Shift+L) scales the
+  clipboard to the selection and paints it through its shape; Repeat
+  (Ctrl+Shift+Y) re-applies the last adjustment or effect, with the
+  settings it was given, to the active layer.
 - Layers palette: drag a layer onto another to restack it, into and out of
   groups; a group moves with its members and cannot be dropped into itself.
 - Layer Styles (Layers > Layer Styles, also in the layer's right-click

@@ -108,7 +108,9 @@ void App::draw_shortcuts_dialog() {
     if (!ImGui::BeginPopupModal("Keyboard Shortcuts", nullptr, ImGuiWindowFlags_NoScrollbar)) return;
     struct Row { const char* keys; const char* what; };
     static const Row file[] = {{"Ctrl+N", "New image"}, {"Ctrl+O", "Open"}, {"Ctrl+S", "Save"}, {"Ctrl+Shift+S", "Save As"}, {"Ctrl+P", "Print"}, {"Ctrl+W", "Close image"}};
-    static const Row edit[] = {{"Ctrl+Z", "Undo"}, {"Ctrl+Y or Ctrl+Shift+Z", "Redo"}, {"Ctrl+C", "Copy"}, {"Ctrl+X", "Cut"}, {"Ctrl+V", "Paste as new image"}, {"Ctrl+L", "Paste as new layer"}, {"Delete", "Clear the selection"}};
+    static const Row edit[] = {{"Ctrl+Z", "Undo"}, {"Ctrl+Y or Ctrl+Shift+Z", "Redo"}, {"Ctrl+C", "Copy"}, {"Ctrl+X", "Cut"}, {"Ctrl+V", "Paste as new image"}, {"Ctrl+L", "Paste as new layer"},
+                                  {"Ctrl+Shift+C", "Copy merged"}, {"Ctrl+Shift+L", "Paste into the selection"},
+                                  {"Ctrl+Shift+Y", "Repeat the last effect"}, {"Delete", "Clear the selection"}};
     static const Row view[] = {{"+ / -", "Zoom in / out"}, {"Mouse wheel", "Zoom about the cursor"}, {"Ctrl+0", "Fit to window"}, {"Ctrl+Alt+0", "Actual size"}, {"Space + drag, middle drag", "Pan"}, {"Shift+I", "Image information"}, {"Ctrl+Shift+M", "Hide / show the marquee"}};
     static const Row sel[] = {{"Ctrl+A", "Select all"}, {"Ctrl+D", "Select none"}, {"Ctrl+Shift+I", "Invert selection"}, {"Shift / Ctrl while selecting", "Add to / remove from the selection"}, {"Ctrl+Shift+R", "Crop to selection"}, {"Ctrl+F", "Float"}, {"Ctrl+Shift+F", "Defloat"}, {"Enter, double-click", "Close a point-to-point selection"}, {"Backspace", "Remove the last point"}, {"Escape", "Cancel the gesture"}};
     static const Row img[] = {{"Ctrl+I", "Negative image"}, {"[ / ]", "Brush size down / up"}};

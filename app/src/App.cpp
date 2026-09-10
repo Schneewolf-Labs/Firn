@@ -403,10 +403,8 @@ void App::select_invert() {
 
 // --- Clipboard -----------------------------------------------------------
 
-void App::copy() {
-    if (!doc || active_layer() < 0) return;
-    const Image& src = doc->layer(active_layer()).pixels;
-    Image out = src;
+// Puts a document-sized image on both clipboards, cut to the selection.
+void App::copy_image(Image out, const char* what) {
     raster::Rect bounds{0, 0, doc->width(), doc->height()};
     if (doc->has_selection()) {
         const Mask& sel = doc->selection();
@@ -417,7 +415,52 @@ void App::copy() {
     clipboard = {std::move(out), bounds};
     // The same pixels go to the system clipboard for other programs.
     const Image cropped = raster::crop(clipboard.pixels, bounds);
-    status = clipboard::write_image(cropped) ? "Copied" : std::string("Copied (internal only: ") + clipboard::unavailable_reason() + ")";
+    status = clipboard::write_image(cropped) ? what : what + std::string(" (internal only: ") + clipboard::unavailable_reason() + ")";
+}
+
+void App::copy() {
+    if (!doc || active_layer() < 0) return;
+    copy_image(doc->layer(active_layer()).pixels, "Copied");
+}
+
+void App::copy_merged() {
+    if (!doc) return;
+    copy_image(doc->composite(), "Copied merged");
+}
+
+// The clipboard scaled to the selection's bounding box and painted through
+// the selection, so it takes the selection's shape and soft edge.
+void App::paste_into_selection() {
+    if (!doc || !active_is_raster()) { status = "Paste Into Selection needs a raster layer."; return; }
+    if (!doc->has_selection()) { status = "Paste Into Selection needs a selection."; return; }
+    Image src;
+    raster::Rect b;
+    if (!clipboard_for_paste(src, b)) { status = "Nothing to paste"; return; }
+    const Mask& sel = doc->selection();
+    const raster::Rect box = sel.bounds();
+    if (box.empty()) { status = "Nothing selected"; return; }
+    const int bw = box.x1 - box.x0, bh = box.y1 - box.y0;
+    Image piece = raster::crop(src, b);
+    if (piece.empty()) { status = "Nothing to paste"; return; }
+    if (piece.width() != bw || piece.height() != bh) piece = raster::resample(piece, bw, bh, raster::Filter::Bilinear);
+    const size_t layer = active_layer();
+    Image& px = paint_pixels(layer);
+    Image before = px;
+    for (int y = box.y0; y < box.y1; ++y)
+        for (int x = box.x0; x < box.x1; ++x) {
+            const float m = sel.at(x, y) / 255.0f;
+            if (m <= 0.0f) continue;
+            raster::blend_over(px, x, y, piece.get(x - box.x0, y - box.y0), m);
+        }
+    paint_touched(layer, &box);
+    commit_pixels(layer, "Paste Into Selection", std::move(before), px);
+    status = "Pasted into the selection";
+}
+
+void App::repeat_last_effect() {
+    if (!last_effect_op) { status = "Nothing to repeat yet."; return; }
+    if (!doc || !active_is_raster()) { status = "Repeat needs a raster layer."; return; }
+    run(std::make_unique<AdjustCommand>(active_layer(), last_effect, last_effect_op, last_effect_op16));
 }
 
 // Pixels to paste: the system clipboard when another program filled it,
@@ -1075,10 +1118,13 @@ void App::handle_shortcuts() {
     if (ctrl && ImGui::IsKeyPressed(ImGuiKey_D, false)) select_none();
     if (ctrl && ImGui::IsKeyPressed(ImGuiKey_F, false)) { if (io.KeyShift) defloat(); else if (doc && doc->has_selection() && !has_floating_layer()) promote_selection_to_layer(true); }
     if (ctrl && io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_M, false)) show_marquee = !show_marquee;
-    if (ctrl && ImGui::IsKeyPressed(ImGuiKey_C, false)) copy();
+    if (ctrl && io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_C, false)) copy_merged();
+    else if (ctrl && ImGui::IsKeyPressed(ImGuiKey_C, false)) copy();
     if (ctrl && ImGui::IsKeyPressed(ImGuiKey_X, false)) cut();
     if (ctrl && ImGui::IsKeyPressed(ImGuiKey_V, false)) paste_as_new_image();
-    if (ctrl && ImGui::IsKeyPressed(ImGuiKey_L, false)) paste_as_new_layer();
+    if (ctrl && io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_L, false)) paste_into_selection();
+    else if (ctrl && ImGui::IsKeyPressed(ImGuiKey_L, false)) paste_as_new_layer();
+    if (ctrl && io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_Y, false)) repeat_last_effect();
     if (ctrl && io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_R, false)) crop_to_selection();
     if (ctrl && ImGui::IsKeyPressed(ImGuiKey_0, false)) { if (io.KeyAlt) { zoom = 1.0f; pan_x = pan_y = 0.0f; } else fit_requested = true; }
     if (ctrl) return;

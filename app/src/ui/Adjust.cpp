@@ -121,6 +121,11 @@ void adjust_modal(App& app, const char* title, Body body, Op op, std::function<v
     if (ok) {
         app.preview_update(op, true);
         app.preview_commit(op16);
+        // Edit > Repeat re-applies this one; the op reads the dialog's
+        // settings, which stay as they were left.
+        app.last_effect = title;
+        app.last_effect_op = std::function<void(Image&)>(op);
+        app.last_effect_op16 = op16;
         ImGui::CloseCurrentPopup();
     } else if (cancel) {
         app.preview_cancel();

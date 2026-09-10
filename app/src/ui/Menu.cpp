@@ -57,9 +57,16 @@ void App::draw_menu() {
         ImGui::Separator();
         if (ImGui::MenuItem("Cut", "Ctrl+X", false, has_layer)) cut();
         if (ImGui::MenuItem("Copy", "Ctrl+C", false, has_layer)) copy();
+        if (ImGui::MenuItem("Copy Merged", "Ctrl+Shift+C", false, has_doc)) copy_merged();
         if (ImGui::MenuItem("Paste As New Image", "Ctrl+V")) paste_as_new_image();
         if (ImGui::MenuItem("Paste As New Layer", "Ctrl+L", false, has_doc)) paste_as_new_layer();
+        if (ImGui::MenuItem("Paste Into Selection", "Ctrl+Shift+L", false, has_layer && doc->has_selection())) paste_into_selection();
         if (ImGui::MenuItem("Clear", "Delete", false, has_layer)) clear_selection();
+        ImGui::Separator();
+        {
+            const std::string label = last_effect.empty() ? "Repeat" : "Repeat " + last_effect;
+            if (ImGui::MenuItem(label.c_str(), "Ctrl+Shift+Y", false, has_layer && !last_effect.empty())) repeat_last_effect();
+        }
         ImGui::EndMenu();
     }
     if (ImGui::BeginMenu("View")) {
