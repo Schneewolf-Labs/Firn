@@ -19,6 +19,19 @@ void App::draw_canvas() {
     ImGui::PopStyleVar();
 
     if (image_windows) {
+        // A strip of arrangement buttons, then the workspace the windows live in.
+        ImGui::SetCursorPos(ImVec2(ImGui::GetCursorPosX() + 6.0f, ImGui::GetCursorPosY() + 3.0f));
+        if (ImGui::SmallButton("Tabs")) { image_windows = false; config.image_windows = false; config.save(); }
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Back to one tab per image (Window > Tabbed Documents)");
+        ImGui::SameLine();
+        if (ImGui::SmallButton("Cascade")) arrange_request = Arrange::Cascade;
+        ImGui::SameLine();
+        if (ImGui::SmallButton("Tile Horizontally")) arrange_request = Arrange::TileHorizontally;
+        ImGui::SameLine();
+        if (ImGui::SmallButton("Tile Vertically")) arrange_request = Arrange::TileVertically;
+        ImGui::SameLine();
+        ImGui::TextDisabled("%zu image%s", docs.size(), docs.size() == 1 ? "" : "s");
+        ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 3.0f);
         workspace_pos = ImGui::GetCursorScreenPos();
         workspace_size = ImGui::GetContentRegionAvail();
         ImGui::GetWindowDrawList()->AddRectFilled(workspace_pos, ImVec2(workspace_pos.x + workspace_size.x, workspace_pos.y + workspace_size.y), IM_COL32(45, 45, 45, 255));
@@ -33,15 +46,26 @@ void App::draw_canvas() {
         int close_request = -1, select_request = -1;
         for (int i = 0; i < static_cast<int>(docs.size()); ++i) {
             char label[300];
-            std::snprintf(label, sizeof(label), "%s%s###doc%d", document_title(i).c_str(), document_modified(i) ? "*" : "", docs[i].uid);
+            std::snprintf(label, sizeof(label), "%s%s @ %d%%###doc%d", document_title(i).c_str(), document_modified(i) ? "*" : "", static_cast<int>((i == current_doc ? zoom : docs[i].zoom) * 100 + 0.5f), docs[i].uid);
             bool open = true;
             const ImGuiTabItemFlags flags = select_tab_request == i ? ImGuiTabItemFlags_SetSelected : 0;
             if (ImGui::BeginTabItem(label, &open, flags)) {
                 if (i != current_doc && select_tab_request < 0) select_request = i;
                 ImGui::EndTabItem();
             }
+            if (ImGui::BeginPopupContextItem()) {
+                draw_document_context_items(i);
+                ImGui::EndPopup();
+                if (i >= static_cast<int>(docs.size())) break;  // closed from the menu
+            }
             if (!open) close_request = i;
         }
+        // Trailing button: explode the tabs into windows over the workspace.
+        if (ImGui::TabItemButton("Windows", ImGuiTabItemFlags_Trailing | ImGuiTabItemFlags_NoTooltip)) {
+            image_windows = true; config.image_windows = true; config.save();
+            arrange_request = Arrange::Cascade;
+        }
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Each image in its own window inside the workspace, with its own zoom (Window > Tabbed Documents)");
         select_tab_request = -1;
         ImGui::EndTabBar();
         if (select_request >= 0) activate_document(select_request);
@@ -61,7 +85,7 @@ void App::draw_document_windows() {
     for (int i = 0; i < n; ++i) {
         DocState& s = docs[i];
         char label[300];
-        std::snprintf(label, sizeof(label), "%s%s###docwin%d", document_title(i).c_str(), document_modified(i) ? "*" : "", s.uid);
+        std::snprintf(label, sizeof(label), "%s%s @ %d%%###docwin%d", document_title(i).c_str(), document_modified(i) ? "*" : "", static_cast<int>((i == current_doc ? zoom : s.zoom) * 100 + 0.5f), s.uid);
         const firn::Document* d = i == current_doc ? doc.get() : s.doc.get();
 
         // Placement: an explicit arrangement, else a cascade slot for a new window.
@@ -96,6 +120,14 @@ void App::draw_document_windows() {
             ImGui::SetNextWindowSize(size, ImGuiCond_Always);
             s.placed = true;
             if (i == current_doc) fit_requested = true; else s.fit_requested = true;
+        } else if (s.placed && s.win_size.x > 0) {
+            // Keep the window inside the workspace: at least its title bar and a
+            // margin stay visible, and it never pokes out at the top or left.
+            const float min_visible = 80.0f;
+            ImVec2 p = s.win_pos;
+            p.x = std::clamp(p.x, workspace_pos.x, std::max(workspace_pos.x, workspace_pos.x + workspace_size.x - min_visible));
+            p.y = std::clamp(p.y, workspace_pos.y, std::max(workspace_pos.y, workspace_pos.y + workspace_size.y - chrome));
+            if (p.x != s.win_pos.x || p.y != s.win_pos.y) ImGui::SetNextWindowPos(p, ImGuiCond_Always);
         }
         if (select_tab_request == i) ImGui::SetNextWindowFocus();
 
@@ -104,6 +136,19 @@ void App::draw_document_windows() {
         ImGui::PushStyleVar(ImGuiStyleVar_WindowMinSize, ImVec2(160, 120));
         const bool shown = ImGui::Begin(label, &open, ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings);
         ImGui::PopStyleVar(2);
+        s.win_pos = ImGui::GetWindowPos();
+        s.win_size = ImGui::GetWindowSize();
+        // Right-click on the title bar: the document menu.
+        {
+            const ImVec2 mp = ImGui::GetIO().MousePos;
+            const bool on_title = ImGui::IsWindowHovered(ImGuiHoveredFlags_RootWindow) && mp.y >= s.win_pos.y && mp.y < s.win_pos.y + chrome && mp.x >= s.win_pos.x && mp.x < s.win_pos.x + s.win_size.x;
+            if (on_title && ImGui::IsMouseClicked(ImGuiMouseButton_Right)) ImGui::OpenPopup("docmenu");
+            if (ImGui::BeginPopup("docmenu")) {
+                draw_document_context_items(i);
+                ImGui::EndPopup();
+                if (i >= static_cast<int>(docs.size())) { ImGui::End(); break; }
+            }
+        }
         if (shown) {
             const ImVec2 view_pos = ImGui::GetCursorScreenPos();
             const ImVec2 view_size = ImGui::GetContentRegionAvail();
@@ -111,7 +156,12 @@ void App::draw_document_windows() {
                 draw_canvas_view(view_pos, view_size);
             } else {
                 draw_parked_view(s, view_pos, view_size);
-                const bool clicked = ImGui::IsWindowHovered(ImGuiHoveredFlags_RootAndChildWindows) && (ImGui::IsMouseClicked(ImGuiMouseButton_Left) || ImGui::IsMouseClicked(ImGuiMouseButton_Right) || ImGui::IsMouseClicked(ImGuiMouseButton_Middle));
+                // Any click activates, except a right-click on the title bar,
+                // which opens the document menu (activating would close it).
+                const ImVec2 mp = ImGui::GetIO().MousePos;
+                const bool on_title = mp.y < s.win_pos.y + chrome;
+                const bool clicked = ImGui::IsWindowHovered(ImGuiHoveredFlags_RootAndChildWindows) &&
+                                     (ImGui::IsMouseClicked(ImGuiMouseButton_Left) || ImGui::IsMouseClicked(ImGuiMouseButton_Middle) || (ImGui::IsMouseClicked(ImGuiMouseButton_Right) && !on_title));
                 if (clicked) activate = i;
             }
         }
@@ -122,6 +172,26 @@ void App::draw_document_windows() {
     arrange_request = Arrange::None;
     if (activate >= 0) activate_document(activate);
     if (close >= 0) close_document(close);
+}
+
+// The right-click menu of a document tab or window title. Items that act
+// on the document activate it first.
+void App::draw_document_context_items(int index) {
+    auto make_active = [&] { if (index != current_doc) activate_document(index); };
+    if (ImGui::MenuItem("Image Information...", "Shift+I")) { make_active(); show_info_dialog = true; }
+    ImGui::Separator();
+    if (ImGui::MenuItem("Fit to Window", "Ctrl+0")) { if (index == current_doc) fit_requested = true; else docs[index].fit_requested = true; }
+    if (ImGui::MenuItem("Actual Size", "Ctrl+Alt+0")) { if (index == current_doc) { zoom = 1.0f; pan_x = pan_y = 0.0f; } else { docs[index].zoom = 1.0f; docs[index].pan_x = docs[index].pan_y = 0.0f; docs[index].fit_requested = false; } }
+    ImGui::Separator();
+    if (ImGui::MenuItem("Save", "Ctrl+S")) { make_active(); save(); }
+    if (ImGui::MenuItem("Save As...", "Ctrl+Shift+S")) { make_active(); request_save_as(); }
+    ImGui::Separator();
+    if (ImGui::MenuItem("Close", "Ctrl+F4")) close_document(index);
+    if (ImGui::MenuItem("Close Others", nullptr, false, docs.size() > 1)) {
+        make_active();
+        for (int i = static_cast<int>(docs.size()) - 1; i >= 0; --i)
+            if (i != current_doc) close_document(i);
+    }
 }
 
 // A parked document: its composite at its own zoom and pan, wheel to zoom,

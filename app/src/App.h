@@ -45,6 +45,7 @@ struct DocState {
     GLuint tex = 0;
     uint64_t tex_revision = ~0ull;
     bool placed = false;
+    ImVec2 win_pos, win_size;         // last frame's window rect, for keeping it inside the workspace
 };
 
 struct App {
@@ -68,6 +69,7 @@ struct App {
     Arrange arrange_request = Arrange::None;
     ImVec2 workspace_pos, workspace_size;   // the Image window's client area, in window mode
     void draw_document_windows();
+    void draw_document_context_items(int index);   // right-click menu of a tab or window title
     void draw_parked_view(DocState& s, ImVec2 view_pos, ImVec2 view_size);
     void upload_document_texture(DocState& s);
     void draw_canvas_view(ImVec2 view_pos, ImVec2 view_size);

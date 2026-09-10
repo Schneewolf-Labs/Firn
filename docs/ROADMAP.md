@@ -155,6 +155,9 @@ for. Ranked by value per effort; work top to bottom, tick as they land.
 - [x] Right-click menu on layers (the Layers menu for that layer, plus View > Current Only / All)
 - [x] Help > About (version, commit, build facts) and themes: built-ins plus a theme
       editor (colors, shape, font, text size) with save, import and export
+- [x] Windowed view polish: a Windows button on the tab bar, a Tabs / Cascade / Tile
+      strip over the workspace, windows kept inside it, zoom in every title, and a
+      right-click menu on tabs and window titles (Image Information, fit, save, close)
 
 ## Dropped (not worth the effort for this port)
 
