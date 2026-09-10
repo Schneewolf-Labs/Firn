@@ -431,6 +431,22 @@ private:
     std::vector<std::unique_ptr<Command>> parts_;
 };
 
+// Drag and drop in the Layers palette: moves the layer at `index` (with its
+// members, when it is a group) so it sits directly above the stack position
+// `before`, at depth `depth`. Refuses to move a group into itself.
+class MoveLayerCommand : public Command {
+public:
+    MoveLayerCommand(size_t index, size_t before, int depth) : index_(index), before_pos_(before), depth_(depth) {}
+    std::string name() const override { return "Move Layer"; }
+    void execute(Document& doc) override;
+    void undo(Document& doc) override { doc.restore(before_); }
+    size_t memory_bytes() const override { return state_bytes(before_); }
+private:
+    size_t index_, before_pos_;
+    int depth_;
+    Document::State before_;
+};
+
 class ArrangeLayerCommand : public Command {
 public:
     ArrangeLayerCommand(size_t index, int steps) : index_(index), steps_(steps) {}

@@ -1400,6 +1400,42 @@ static void test_zip() {
 // The classic format's Firn stash names layers by index and by name; the
 // index is only trusted when the name agrees, so a file whose layers moved
 // cannot restore a filter or a style onto the wrong layer.
+// Layers palette drag and drop: a whole group travels with its members and
+// a layer dropped on a group member joins the group.
+static void test_move_layer() {
+    Document doc(8, 8);
+    doc.add_layer("Background");          // 0
+    Layer& g = doc.add_layer("Group");    // 1
+    g.type = LayerType::Group;
+    doc.add_layer("Inner A").depth = 1;   // 2
+    doc.add_layer("Inner B").depth = 1;   // 3
+    doc.add_layer("Loose");               // 4
+    CommandStack stack;
+
+    // Drop "Loose" onto "Inner A": it lands above it, inside the group.
+    stack.run(doc, std::make_unique<MoveLayerCommand>(4, 3, 1));
+    CHECK(doc.layer(3).name == "Loose" && doc.layer(3).depth == 1);
+    CHECK(doc.group_end(1) == 5 && doc.layer_count() == 5);
+    stack.undo(doc);
+    CHECK(doc.layer(4).name == "Loose" && doc.layer(4).depth == 0 && doc.group_end(1) == 4);
+    stack.redo(doc);
+    CHECK(doc.layer(3).name == "Loose");
+
+    // Drop the group onto "Background": the group and all three members move.
+    stack.run(doc, std::make_unique<MoveLayerCommand>(1, 1, 0));
+    CHECK(doc.layer(0).name == "Background");
+    stack.run(doc, std::make_unique<MoveLayerCommand>(1, 0, 0));
+    CHECK(doc.layer(0).name == "Group" && doc.layer(1).depth == 1 && doc.layer(4).name == "Background");
+    CHECK(doc.group_end(0) == 4);
+    stack.undo(doc);
+    CHECK(doc.layer(0).name == "Background");
+
+    // A group cannot land inside itself: the stack is left alone.
+    const size_t n = doc.layer_count();
+    stack.run(doc, std::make_unique<MoveLayerCommand>(1, 3, 1));
+    CHECK(doc.layer_count() == n && doc.layer(1).name == "Group" && doc.layer(1).depth == 0);
+}
+
 static void test_firn_stash_resolution() {
     Document doc(24, 16);
     doc.add_layer("Background").background = true;
@@ -2612,6 +2648,7 @@ int main() {
     test_zip();
     test_openraster();
     test_firn_stash_resolution();
+    test_move_layer();
     test_vector_core();
     test_history_limit();
     test_brush_texture();

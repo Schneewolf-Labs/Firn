@@ -210,6 +210,23 @@ static void draw_layers(App& app) {
                 else app.open_layer_properties();
             }
         }
+        // Drag a row onto another to restack it (into and out of groups).
+        if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceNoDisableHover)) {
+            ImGui::SetDragDropPayload("FIRN_LAYER", &i, sizeof(int));
+            ImGui::TextUnformatted(L.name.c_str());
+            ImGui::EndDragDropSource();
+        }
+        if (ImGui::BeginDragDropTarget()) {
+            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("FIRN_LAYER")) {
+                const int from = *static_cast<const int*>(payload->Data);
+                app.layer_move_onto(from, i);
+                ImGui::EndDragDropTarget();
+                ImGui::Unindent(L.depth * 14.0f);
+                ImGui::PopID();
+                break;   // the stack changed under us
+            }
+            ImGui::EndDragDropTarget();
+        }
         // Right-click: the Layers menu for this layer.
         if (ImGui::BeginPopupContextItem("layer_context")) {
             if (ImGui::IsWindowAppearing()) doc.set_active_layer(i);

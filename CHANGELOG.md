@@ -31,6 +31,8 @@ section into the next version.
   by GIMP, Krita and MyPaint. Save As suggests .ora for layered images
   and autosave uses it; the classic format stays supported for files
   meant for the original.
+- Layers palette: drag a layer onto another to restack it, into and out of
+  groups; a group moves with its members and cannot be dropped into itself.
 - Layer Styles (Layers > Layer Styles, also in the layer's right-click
   menu): drop shadow, outer glow, inner glow, stroke and bevel rendered
   from the layer's shape at composite time and kept editable, on raster

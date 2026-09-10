@@ -93,6 +93,9 @@ docs/    notes on the original: command inventory, module mapping, FORMAT.md
 - `docs/ROADMAP.md` is the value-ranked work list. Tick items off as they
   land and take the top unchecked item next.
 - Index 0 is the bottom of the layer stack. Palettes list top first.
+  Dragging a palette row onto another runs `MoveLayerCommand` through
+  `App::layer_move_onto`: the moved block lands directly above the target
+  at the target's depth (a group target is stepped over whole).
 - **Groups** are `LayerType::Group` layers with `depth`; their members are the
   run of layers immediately above them with a greater depth
   (`Document::group_end`). Commands that restructure layers snapshot the

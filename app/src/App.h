@@ -674,6 +674,8 @@ struct App {
     void layer_duplicate();
     void layer_delete();
     void layer_arrange(int delta);  // +1 up (towards top), -1 down; large values go to top/bottom
+    // Layers palette drag and drop: puts layer `from` where `onto` sits.
+    void layer_move_onto(int from, int onto);
     void layer_merge(int kind);     // 0 down, 1 visible, 2 all
     void layer_view_only(bool current_only);   // hide every other layer, or show all
     void layer_promote_background();

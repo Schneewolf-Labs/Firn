@@ -502,6 +502,22 @@ void App::layer_arrange(int delta) {
     run(std::make_unique<ArrangeLayerCommand>(active_layer(), delta));
 }
 
+void App::layer_move_onto(int from, int onto) {
+    if (!doc || from == onto || from < 0 || onto < 0) return;
+    const int n = static_cast<int>(doc->layer_count());
+    if (from >= n || onto >= n) return;
+    // Land directly on top of the target, at its depth. A group is stepped
+    // over as a whole, so the moved layer becomes its sibling rather than
+    // splitting it from its members.
+    const Layer& target = doc->layer(onto);
+    const size_t before = target.type == LayerType::Group ? doc->group_end(onto) : static_cast<size_t>(onto) + 1;
+    if (doc->layer(from).type == LayerType::Group && before > static_cast<size_t>(from) && before < doc->group_end(from)) {
+        status = "A group cannot be moved into itself.";
+        return;
+    }
+    run(std::make_unique<MoveLayerCommand>(from, before, target.depth));
+}
+
 void App::layer_merge(int kind) {
     if (!doc) return;
     using K = MergeLayersCommand::Kind;

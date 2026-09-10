@@ -418,6 +418,25 @@ std::vector<Block> sibling_blocks(const Document& doc, size_t index, size_t* whi
 }
 }  // namespace
 
+void MoveLayerCommand::execute(Document& doc) {
+    before_ = doc.snapshot();
+    if (index_ >= doc.layer_count() || before_pos_ > doc.layer_count()) return;
+    std::vector<Layer> layers = doc.clone_layers();
+    // The block being moved: the layer, plus the run above it that belongs to
+    // it when it is a group.
+    size_t end = index_ + 1;
+    if (layers[index_].type == LayerType::Group)
+        while (end < layers.size() && layers[end].depth > layers[index_].depth) ++end;
+    if (before_pos_ > index_ && before_pos_ < end) return;   // into itself
+    std::vector<Layer> block(layers.begin() + index_, layers.begin() + end);
+    const int shift = std::max(depth_, 0) - block.front().depth;
+    for (Layer& L : block) L.depth = std::max(L.depth + shift, 0);
+    layers.erase(layers.begin() + index_, layers.begin() + end);
+    const size_t at = before_pos_ > index_ ? before_pos_ - (end - index_) : before_pos_;
+    layers.insert(layers.begin() + at, block.begin(), block.end());
+    doc.replace_layers(layers, static_cast<int>(at));
+}
+
 void ArrangeLayerCommand::execute(Document& doc) {
     before_ = doc.snapshot();
     if (index_ >= doc.layer_count() || steps_ == 0) return;
