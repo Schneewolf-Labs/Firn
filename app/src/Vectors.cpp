@@ -544,34 +544,19 @@ void App::object_text_to_curves(bool per_character) {
 // --- Text objects ---------------------------------------------------------------
 
 std::vector<vec::Path> App::text_paths(const vec::TextInfo& t, std::vector<int>* glyph_ids) const {
-    std::vector<vec::Path> out;
     std::shared_ptr<text::Font> font = text_font;
     if (!font || font->info().path != t.font_path) font = text::Font::load(t.font_path);
-    if (!font) return out;
-    std::vector<int> ids;
-    const auto contours = font->outlines(t.text, t.size, static_cast<text::Font::Align>(t.align), 1.0f, 0.0f, nullptr, &ids);
-    for (size_t c = 0; c < contours.size(); ++c) {
-        vec::Path p;
-        p.closed = true;
-        for (const auto& pt : contours[c]) {
-            vec::Node n;
-            n.x = pt.x; n.y = pt.y; n.in_x = pt.in_x; n.in_y = pt.in_y; n.out_x = pt.out_x; n.out_y = pt.out_y;
-            n.flags[1] = 0x40;
-            p.nodes.push_back(n);
-        }
-        if (p.nodes.size() < 2) continue;
-        p.nodes.front().flags[0] = 1;
-        p.nodes.back().flags[1] |= 0x80;
-        out.push_back(std::move(p));
-        if (glyph_ids) glyph_ids->push_back(c < ids.size() ? ids[c] : -1);
-    }
-    return out;
+    if (!font) return {};
+    return vec::text_outline_paths(t, *font, nullptr, glyph_ids);
 }
 
 void App::place_text_object(vec::Object& o, const vec::TextInfo& t, float x, float y) const {
-    o.paths = text_paths(t);
     o.is_text = true;
     o.text = t;
+    o.text.x = x; o.text.y = y;
+    std::shared_ptr<text::Font> font = text_font;
+    if (!font || font->info().path != t.font_path) font = text::Font::load(t.font_path);
+    o.paths = font ? vec::text_outline_paths(o.text, *font, &o.text.baseline) : std::vector<vec::Path>{};
     o.translate(x, y);
     if (t.rotation != 0.0f) {
         float bx0, by0, bx1, by1;

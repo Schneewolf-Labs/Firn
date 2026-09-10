@@ -1,4 +1,5 @@
 #include "firn/vector.h"
+#include "firn/text.h"
 
 #include <algorithm>
 #include <cmath>
@@ -66,6 +67,12 @@ void Object::transform(float a, float b, float c, float d, float tx, float ty) {
     auto ap = [&](float& x, float& y) { const float nx = a * x + b * y + tx, ny = c * x + d * y + ty; x = nx; y = ny; };
     for (Path& p : paths)
         for (Node& n : p.nodes) { ap(n.x, n.y); ap(n.in_x, n.in_y); ap(n.out_x, n.out_y); }
+    if (is_text) {
+        // The insert point follows; a rotation part becomes the text's rotation.
+        ap(text.x, text.y);
+        const float rot = std::atan2(c, a) * 180.0f / 3.14159265f;
+        if (std::abs(rot) > 1e-4f) text.rotation += rot;
+    }
 }
 
 std::vector<std::pair<float, float>> flatten(const Path& p, float tolerance) {
@@ -130,6 +137,30 @@ static float gradient_t(const Gradient& g, float px, float py, float bx0, float 
     if (g.repeats > 0) t = std::fmod(std::max(t, 0.0f) * (g.repeats + 1), 1.0f);
     if (g.invert) t = 1.0f - t;
     return t;
+}
+
+std::vector<Path> text_outline_paths(const TextInfo& t, const text::Font& font, float* baseline, std::vector<int>* glyph_ids) {
+    std::vector<Path> out;
+    std::vector<int> ids;
+    text::Font::Layout lay;
+    const auto contours = font.outlines(t.text, t.size, static_cast<text::Font::Align>(t.align), 1.0f, 0.0f, &lay, &ids);
+    if (baseline) *baseline = static_cast<float>(lay.baseline);
+    for (size_t c = 0; c < contours.size(); ++c) {
+        Path p;
+        p.closed = true;
+        for (const auto& pt : contours[c]) {
+            Node n;
+            n.x = pt.x; n.y = pt.y; n.in_x = pt.in_x; n.in_y = pt.in_y; n.out_x = pt.out_x; n.out_y = pt.out_y;
+            n.flags[1] = 0x40;
+            p.nodes.push_back(n);
+        }
+        if (p.nodes.size() < 2) continue;
+        p.nodes.front().flags[0] = 1;
+        p.nodes.back().flags[1] |= 0x80;
+        out.push_back(std::move(p));
+        if (glyph_ids) glyph_ids->push_back(c < ids.size() ? ids[c] : -1);
+    }
+    return out;
 }
 
 // Tiled sample of `tile` at (x, y) relative to (ox, oy), scaled and rotated.

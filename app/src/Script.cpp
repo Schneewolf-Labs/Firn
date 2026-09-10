@@ -566,8 +566,8 @@ std::string App::do_command(const std::string& name, const Value& p, bool* ok) {
         vec::Object o;
         o.name = text.substr(0, text.find('\n')).substr(0, 32);
         place_text_object(o, t, x, y);
-        // The original's Start is the baseline start; move the block up by the ascent (approximated by the size).
-        o.translate(0, -size * 0.8f);
+        // The original's Start is the baseline start; move the block up so the first baseline lands on it.
+        o.translate(0, -o.text.baseline);
         o.fill = vec::PaintStyle{}; o.stroke = vec::PaintStyle{};
         if (const Value* fc = p.get("Fill").find("Color")) { o.fill.kind = vec::PaintStyle::Kind::Solid; o.fill.color = color_param(*fc, {0, 0, 0, 255}); }
         else { o.fill.kind = vec::PaintStyle::Kind::Solid; o.fill.color = background_fill(); }

@@ -256,10 +256,31 @@ group with its mask, as the original does. Layer info chunks end with the 43-byt
 tail found in every sample. The original (under Wine) opens the result with
 all layers intact; `scripts/original-open.sh` automates that check.
 
+## Text shapes
+
+A shape of type 1 (keVSTText) carries no outlines. After the shape
+attributes chunk come: the text attributes chunk (u32 size 94: u8
+alignment, i32 insert x, i32 insert y at the first baseline, nine f64 of a
+3x3 deformation matrix, u8 text flow, f64 path offset), a definition chunk
+(u32 8, u32 element count), then the elements. Each element is an
+attributes chunk (u32 6, u16 type) followed by its definition: type 1 is a
+character (u32 8, u32 Unicode code point); type 2 is a character style
+(u32 size; string chunk font family; u32 flags with 0x01 italic, 0x10
+antialiased; u32 weight; i32 character set; i32 size in pixels; u8
+antialias mode; u8 justify; u8 auto kern; f64 kerning, tracking, leading;
+u8 stroked; u8 filled; u8 styled line; f64 stroke width; two cap records
+{u8 type, u8 multipliers flag, f64 w, f64 h}; u8 join; f64 miter) followed
+by the stroke and fill paint style sub-blocks and a line style sub-block.
+The reader lays the text out again with the nearest installed font (family
+and bold/italic from the weight and flags, then a common sans face) and
+keeps the settings on the object so it stays editable; the writer emits
+this form for unrotated text objects, and the original renders and edits
+them. Rotated text is still written as a polygon shape, since the
+deformation matrix convention is unverified.
+
 ## Not read
 
-The current selection block (id 6), vector text shapes (no sample carries
-one), and color profiles.
+The current selection block (id 6) and color profiles.
 
 ## 48-bit files
 

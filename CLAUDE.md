@@ -154,8 +154,10 @@ docs/    notes on the original: command inventory, module mapping, FORMAT.md
   (`vec::group_end`). Shape, line and text tools build objects in both
   modes; "Create as vector" keeps them editable, otherwise
   `vec::rasterize` paints them through the selection. Text objects keep
-  their `TextInfo` for re-editing until saved (the original's text shape
-  layout is unknown, so they are written as plain paths).
+  their `TextInfo` (text, font, size, insert point) and are written as the
+  original's text shapes (`docs/FORMAT.md`, "Text shapes"), so they stay
+  editable after a reload in both programs; `vec::text_outline_paths`
+  lays them out and `Object::transform` keeps the insert point in step.
 - **Adjustment layers** (`LayerType::Adjustment`, `Layer::adjustment`,
   `core/include/firn/adjustment.h`) transform what is composited below them
   (within their group) through their mask and opacity. Create with

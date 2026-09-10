@@ -10,6 +10,8 @@
 // Vector objects, modeled on what the original stores in its vector layers:
 // paths of Bezier nodes with stroke and fill paint styles. Unknown bytes
 // from files are carried verbatim so round trips stay faithful.
+namespace firn::text { class Font; }
+
 namespace firn::vec {
 
 struct Node {
@@ -85,6 +87,8 @@ struct TextInfo {
     int align = 0;                  // 0 left, 1 center, 2 right
     float rotation = 0;             // degrees
     bool antialias = true;
+    float x = 0, y = 0;             // top-left of the laid-out block, image space
+    float baseline = 0;             // first baseline below the block's top (set by text_outline_paths)
 };
 
 struct Object {
@@ -134,6 +138,9 @@ void rasterize(const std::vector<Object>& objects, Image& dst);
 // Renders a paint style through a coverage mask over the object's bounds.
 void paint(Image& dst, const std::vector<uint8_t>& coverage, int w, int h, const PaintStyle& style,
            float bx0, float by0, float bx1, float by1);
+// Glyph outlines of `t` laid out with the block's top-left at (0, 0), as
+// closed paths (fills baseline). The app and the native reader share it.
+std::vector<Path> text_outline_paths(const TextInfo& t, const text::Font& font, float* baseline = nullptr, std::vector<int>* glyph_ids = nullptr);
 // Coverage multiplier of a style's texture at a pixel (1 when the style has none).
 float texture_factor(const PaintStyle& style, float x, float y, float ox, float oy);
 

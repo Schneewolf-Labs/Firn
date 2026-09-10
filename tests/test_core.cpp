@@ -1310,6 +1310,47 @@ static void test_vector_core() {
     CHECK(doc.layer(1).is_vector() && doc.layer(1).objects.size() == 1);
 }
 
+static void test_text_objects_survive_native_save() {
+    const auto fonts = text::list_fonts();
+    if (fonts.empty()) { std::printf("  (no fonts installed; text shape test skipped)\n"); return; }
+    std::shared_ptr<text::Font> font;
+    std::string family;
+    for (const auto& f : fonts) if (f.style == "Regular" && (font = text::Font::load(f.path))) { family = f.family + "  Regular"; break; }
+    if (!font) return;
+    Document doc(200, 100);
+    doc.add_layer("Background").background = true;
+    Layer& V = doc.add_layer("Vector");
+    V.type = LayerType::Vector;
+    vec::Object o;
+    o.name = "Firn";
+    o.is_text = true;
+    o.text.text = "Firn";
+    o.text.font_path = font->info().path;
+    o.text.font_family = family;
+    o.text.size = 36; o.text.align = 1; o.text.antialias = true;
+    o.fill.kind = vec::PaintStyle::Kind::Solid; o.fill.color = {10, 20, 30, 255};
+    o.paths = vec::text_outline_paths(o.text, *font, &o.text.baseline);
+    o.translate(20, 30);   // moves the insert point along with the outlines
+    CHECK(o.text.x == 20 && o.text.y == 30);
+    CHECK(!o.paths.empty() && o.text.baseline > 0);
+    V.objects.push_back(vec::make_polygon({{150, 5}, {160, 5}, {160, 10}}, true));  // a plain shape first
+    V.objects.push_back(o);
+    doc.rasterize_vector_layer(1);
+    const std::string tmp = tmp_path("firn_test_text.pspimage");
+    CHECK(io::save_psp(doc, tmp, nullptr));
+    std::string err; std::vector<std::string> warnings;
+    auto rt = io::load_psp(tmp, &err, &warnings);
+    std::remove(tmp.c_str());
+    CHECK(rt && rt->layer_count() == 2 && rt->layer(1).is_vector() && rt->layer(1).objects.size() == 2);
+    const vec::Object& b = rt->layer(1).objects[1];
+    CHECK(!rt->layer(1).objects[0].is_text && b.is_text && b.text.text == "Firn" && b.text.font_family.rfind(family.substr(0, family.find("  ")), 0) == 0);
+    CHECK(b.text.size == 36 && b.text.align == 1 && b.text.antialias && b.fill.color.b == 30);
+    // The outlines come back at the same place.
+    float ax0, ay0, ax1, ay1, bx0, by0, bx1, by1;
+    CHECK(vec::outline_bounds(o, &ax0, &ay0, &ax1, &ay1) && vec::outline_bounds(b, &bx0, &by0, &bx1, &by1));
+    CHECK(std::abs(ax0 - bx0) < 1.5f && std::abs(ay0 - by0) < 1.5f && std::abs(ax1 - bx1) < 1.5f);
+}
+
 static void test_snapshot_crop_and_undo_budget() {
     Document doc(40, 30);
     Layer& L = doc.add_layer("L");
@@ -2037,6 +2078,7 @@ int main() {
     test_material_texture_and_gradient_file();
     test_selection_modify_ops();
     test_snapshot_crop_and_undo_budget();
+    test_text_objects_survive_native_save();
     test_vector_core();
     test_history_limit();
     test_brush_texture();

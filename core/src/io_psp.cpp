@@ -1,6 +1,7 @@
 #include "firn/adjust.h"
 #include "firn/io_psp.h"
 #include "firn/raster16.h"
+#include "firn/text.h"
 
 #include <algorithm>
 #include <cmath>
@@ -29,6 +30,7 @@ enum : uint16_t {
     kChannelBlock = 5, kSelectionBlock = 6, kCompositeImageBlock = 9, kCompositeBankBlock = 16,
     kCompositeAttrBlock = 17, kJpegBlock = 18, kGroupExtBlock = 25, kMaskExtBlock = 26, kTubeBlock = 11,
     kAlphaBankBlock = 7, kAlphaChannelBlock = 8, kAdjustmentExtBlock = 12, kVectorExtBlock = 13, kShapeBlock = 14, kPaintStyleBlock = 15, kLineStyleBlock = 19,
+
 };
 enum : uint16_t { kCompNone = 0, kCompRle = 1, kCompLz77 = 2, kCompJpeg = 3 };
 // Bitmap (DIB) types. Layers use 0/1; thumbnails 5/6; composites 8/9.
@@ -364,6 +366,144 @@ bool read_paint_style(const Reader& r, const Block& b, vec::PaintStyle& out) {
     return true;
 }
 
+// UTF-8 helpers for the text shape's character elements.
+void append_utf8(std::string& out, uint32_t cp) {
+    if (cp < 0x80) out += static_cast<char>(cp);
+    else if (cp < 0x800) { out += static_cast<char>(0xC0 | (cp >> 6)); out += static_cast<char>(0x80 | (cp & 0x3F)); }
+    else if (cp < 0x10000) { out += static_cast<char>(0xE0 | (cp >> 12)); out += static_cast<char>(0x80 | ((cp >> 6) & 0x3F)); out += static_cast<char>(0x80 | (cp & 0x3F)); }
+    else { out += static_cast<char>(0xF0 | (cp >> 18)); out += static_cast<char>(0x80 | ((cp >> 12) & 0x3F)); out += static_cast<char>(0x80 | ((cp >> 6) & 0x3F)); out += static_cast<char>(0x80 | (cp & 0x3F)); }
+}
+
+std::vector<uint32_t> decode_utf8(const std::string& s) {
+    std::vector<uint32_t> out;
+    for (size_t i = 0; i < s.size();) {
+        const unsigned char c = static_cast<unsigned char>(s[i]);
+        uint32_t cp; int n;
+        if (c < 0x80) { cp = c; n = 1; }
+        else if ((c >> 5) == 6) { cp = c & 0x1F; n = 2; }
+        else if ((c >> 4) == 14) { cp = c & 0x0F; n = 3; }
+        else { cp = c & 0x07; n = 4; }
+        for (int k = 1; k < n && i + k < s.size(); ++k) cp = (cp << 6) | (static_cast<unsigned char>(s[i + k]) & 0x3F);
+        out.push_back(cp);
+        i += n;
+    }
+    return out;
+}
+
+// Finds a font file for a family name and style flags; falls back to a
+// common sans face so text from files without our fonts still shows.
+std::string font_file_for(const std::string& family, bool bold, bool italic) {
+    static const std::vector<text::FontInfo> fonts = text::list_fonts();
+    auto lower = [](std::string v) { for (char& ch : v) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch))); return v; };
+    const std::string want = lower(family);
+    auto style_ok = [&](const text::FontInfo& f) {
+        const std::string st = lower(f.style);
+        return (st.find("bold") != std::string::npos) == bold && (st.find("italic") != std::string::npos || st.find("oblique") != std::string::npos) == italic;
+    };
+    for (const auto& f : fonts) if (lower(f.family) == want && style_ok(f)) return f.path;
+    for (const auto& f : fonts) if (lower(f.family) == want) return f.path;
+    static const char* const fallbacks[] = {"DejaVu Sans", "Liberation Sans", "Arial", "Noto Sans", "Helvetica"};
+    for (const char* fb : fallbacks) for (const auto& f : fonts) if (f.family == fb && style_ok(f)) return f.path;
+    for (const char* fb : fallbacks) for (const auto& f : fonts) if (f.family == fb) return f.path;
+    return fonts.empty() ? "" : fonts.front().path;
+}
+
+// Text Vector Shape Definition (spec section 5): attributes (alignment,
+// insert point, 3x3 matrix, flow), then character-style and character
+// elements. The file carries no outlines; they are laid out again from the font.
+bool read_text_shape(const Reader& r, size_t p, size_t end, vec::Object& o) {
+    if (!r.ok(p, 4)) return false;
+    const size_t ta = r.u32(p);
+    if (ta < 94 || p + ta > end) return false;
+    vec::TextInfo t;
+    t.align = std::clamp<int>(r.u8(p + 4), 0, 2);
+    const int32_t ix = r.i32(p + 5), iy = r.i32(p + 9);
+    double m[9];
+    for (int k = 0; k < 9; ++k) m[k] = rd_f64(r, p + 13 + static_cast<size_t>(k) * 8);
+    p += ta;
+    if (!r.ok(p, 8)) return false;
+    const size_t td = r.u32(p);
+    const uint32_t count = r.u32(p + 4);
+    p += td;
+    bool bold = false, italic = false, stroked = false, filled = true;
+    float stroke_width = 1.0f;
+    int styles = 0;
+    for (uint32_t i = 0; i < count && r.ok(p, 6); ++i) {
+        const size_t ea = r.u32(p);
+        const uint16_t type = r.u16(p + 4);
+        p += ea;
+        if (!r.ok(p, 4)) break;
+        const size_t cl = r.u32(p);
+        if (type == 1) {  // character
+            if (cl >= 8) append_utf8(t.text, r.u32(p + 4));
+            p += cl;
+        } else if (type == 2) {  // character style
+            size_t q = p + 4;
+            if (!r.ok(q, 2)) break;
+            const uint16_t nlen = r.u16(q);
+            if (!r.ok(q + 2, nlen)) break;
+            std::string name(reinterpret_cast<const char*>(r.p + q + 2), nlen);
+            q += 2 + nlen;
+            if (r.ok(q, 53)) {
+                const uint32_t flags = r.u32(q), weight = r.u32(q + 4);
+                const int32_t size = r.i32(q + 12);
+                const uint8_t aa = r.u8(q + 16), justify = r.u8(q + 17);
+                const uint8_t stk = r.u8(q + 43), fil = r.u8(q + 44);
+                const double sw = rd_f64(r, q + 46);
+                if (styles++ == 0) {
+                    t.font_family = name;
+                    t.size = static_cast<float>(std::max(1, size));
+                    t.align = std::clamp<int>(justify, 0, 2);
+                    t.antialias = aa != 0 || (flags & 0x10) != 0;
+                    italic = (flags & 1) != 0;
+                    bold = weight >= 600;
+                    stroked = stk != 0; filled = fil != 0;
+                    stroke_width = static_cast<float>(sw);
+                }
+            }
+            p += cl;
+            // Paint styles (stroke, fill) and the line style follow the fixed fields.
+            int seen = 0;
+            while (r.ok(p, 10) && std::memcmp(r.p + p, "~BK\0", 4) == 0) {
+                const uint16_t id = r.u16(p + 4);
+                const size_t len = r.u32(p + 6);
+                const Block inner{id, p + 10, p + 10 + len};
+                if (inner.end > end) break;
+                if (id == kPaintStyleBlock && styles == 1) { read_paint_style(r, inner, seen == 0 ? o.stroke : o.fill); ++seen; }
+                p = inner.end;
+            }
+        } else {
+            p += cl;
+        }
+    }
+    if (!stroked) o.stroke.kind = vec::PaintStyle::Kind::None;
+    if (!filled) o.fill.kind = vec::PaintStyle::Kind::None;
+    o.stroke_width = stroke_width;
+    o.antialias = t.antialias;
+    o.is_text = true;
+    // Lay the text out again with the nearest font we have.
+    t.font_path = font_file_for(t.font_family, bold, italic);
+    if (!t.font_path.empty()) {
+        if (auto font = text::Font::load(t.font_path)) {
+            o.paths = vec::text_outline_paths(t, *font, &t.baseline);
+            t.x = static_cast<float>(ix);
+            t.y = static_cast<float>(iy) - t.baseline;
+            o.translate(t.x, t.y);
+            const bool identity = std::abs(m[0] - 1) < 1e-6 && std::abs(m[1]) < 1e-6 && std::abs(m[3]) < 1e-6 && std::abs(m[4] - 1) < 1e-6 && std::abs(m[6]) < 1e-6 && std::abs(m[7]) < 1e-6;
+            if (!identity) {
+                // A deformation matrix is applied about the insert point (row-vector convention).
+                const float a = static_cast<float>(m[0]), b = static_cast<float>(m[1]), c = static_cast<float>(m[3]), d = static_cast<float>(m[4]);
+                const float e = static_cast<float>(m[6]), f = static_cast<float>(m[7]);
+                const float px = static_cast<float>(ix), py = static_cast<float>(iy);
+                o.transform(a, b, c, d, px - (a * px + c * py) + e, py - (b * px + d * py) + f);
+                t.rotation = std::atan2(b, a) * 180.0f / 3.14159265f;
+            }
+        }
+    }
+    o.text = t;
+    return true;
+}
+
 bool read_shape(const Reader& r, const Block& sb, vec::Object& o) {
     size_t p = sb.start;
     if (!r.ok(p, 6)) return false;
@@ -379,6 +519,7 @@ bool read_shape(const Reader& r, const Block& sb, vec::Object& o) {
         if (r.ok(p, 8) && r.u32(p) == 8) o.group_count = r.u32(p + 4);
         return true;
     }
+    if (o.file_type == 1) return read_text_shape(r, p, sb.end, o);
     if (!r.ok(p, 4)) return false;
     const size_t c1 = r.u32(p);
     bool stroke_on = true, fill_on = true;
@@ -1204,6 +1345,48 @@ std::vector<uint8_t> write_shape(const vec::Object& o) {
         gb.block(kShapeBlock, w.out);
         return gb.out;
     }
+    if (o.is_text && !o.text.text.empty() && o.text.rotation == 0.0f) {
+        // Text Vector Shape: the original lays the text out again from the
+        // font name, so it stays editable there and here. Rotated text keeps
+        // the polygon form below (the deformation matrix convention is unverified).
+        const size_t type_at = static_cast<size_t>(4 + 2 + name.size());
+        w.out[type_at] = 1; w.out[type_at + 1] = 0;  // shape type keVSTText
+        const vec::TextInfo& t = o.text;
+        w.u32(94); w.u8(static_cast<uint8_t>(std::clamp(t.align, 0, 2)));
+        w.i32(static_cast<int32_t>(std::lround(t.x))); w.i32(static_cast<int32_t>(std::lround(t.y + t.baseline)));
+        const double identity[9] = {1, 0, 0, 0, 1, 0, 0, 0, 1};
+        for (double v : identity) w.f64(v);
+        w.u8(0); w.f64(0.0);
+        const std::vector<uint32_t> chars = decode_utf8(t.text);
+        w.u32(8); w.u32(static_cast<uint32_t>(chars.size() + 1));
+        // Character style element first, then one element per character.
+        w.u32(6); w.u16(2);
+        std::string family = t.font_family, style;
+        const size_t sep = family.find("  ");
+        if (sep != std::string::npos) { style = family.substr(sep + 2); family = family.substr(0, sep); }
+        for (char& ch : style) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+        const bool bold = style.find("bold") != std::string::npos, italic = style.find("italic") != std::string::npos || style.find("oblique") != std::string::npos;
+        if (family.size() > 255) family.resize(255);
+        Writer cs;
+        cs.u16(static_cast<int>(family.size())); cs.bytes(reinterpret_cast<const uint8_t*>(family.data()), family.size());
+        cs.u32((t.antialias ? 0x10u : 0u) | (italic ? 1u : 0u));
+        cs.u32(bold ? 700 : 400); cs.i32(0); cs.i32(static_cast<int32_t>(std::lround(t.size)));
+        cs.u8(t.antialias ? 2 : 0); cs.u8(static_cast<uint8_t>(std::clamp(t.align, 0, 2))); cs.u8(1);
+        cs.f64(0.0); cs.f64(0.0); cs.f64(0.0);
+        cs.u8(o.stroke.enabled() ? 1 : 0); cs.u8(o.fill.enabled() ? 1 : 0); cs.u8(0);
+        cs.f64(o.stroke_width);
+        cs.u8(0); cs.u8(0); cs.f64(1.0); cs.f64(1.0);
+        cs.u8(0); cs.u8(0); cs.f64(1.0); cs.f64(1.0);
+        cs.u8(0); cs.f64(o.miter);
+        w.u32(static_cast<uint32_t>(4 + cs.out.size())); w.bytes(cs.out);
+        w.bytes(write_paint_style(o.stroke));
+        w.bytes(write_paint_style(o.fill));
+        w.bytes(write_line_style(o.line, o.linestyle_raw));
+        for (uint32_t cp : chars) { w.u32(6); w.u16(1); w.u32(8); w.u32(cp); }
+        Writer b;
+        b.block(kShapeBlock, w.out);
+        return b.out;
+    }
     // Attribute chunk: reuse the file's bytes where we have them, patching
     // the fields we understand (stroke/fill on, antialias, width, miter).
     std::vector<uint8_t> attr = o.attr_raw;
@@ -1621,6 +1804,7 @@ std::vector<uint8_t> save_psp_to_memory(const Document& doc) {
         }
         w.block(kAlphaBankBlock, abank.out);
     }
+
     return w.out;
 }
 
