@@ -146,6 +146,7 @@ struct App {
     void draw_layer_menu_items();
     int wand_tolerance = 20;
     int fgsel_size = 24;                  // Foreground Select: mark brush size
+    int csmudge_rate = 30, csmudge_length = 60, csmudge_mode = 0;   // Color Smudge: color added per stamp (%), how far it is carried (%), 0 smearing / 1 dulling
     bool fgsel_merged = true;             //   classify on the merged image
     bool wand_contiguous = true;
     bool wand_sample_merged = false;

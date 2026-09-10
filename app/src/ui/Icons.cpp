@@ -140,6 +140,10 @@ void draw_tool_icon(ImDrawList* dl, const char* name, ImVec2 p, float size, ImU3
     } else if (is("Smudge")) {
         g.fill_rect(0.42f, 0.1f, 0.62f, 0.62f, 0.1f);
         g.poly({0.3f, 0.62f, 0.5f, 0.72f, 0.7f, 0.62f, 0.85f, 0.85f, 0.15f, 0.85f}, false);
+    } else if (is("Color Smudge")) {
+        g.fill_rect(0.42f, 0.1f, 0.62f, 0.55f, 0.1f);
+        g.poly({0.3f, 0.55f, 0.5f, 0.65f, 0.7f, 0.55f, 0.85f, 0.8f, 0.15f, 0.8f}, false);
+        g.fill_circle(0.5f, 0.9f, 0.08f);
     } else if (is("Soften Brush")) {
         g.fill_circle(0.5f, 0.5f, 0.14f);
         g.circle(0.5f, 0.5f, 0.24f);

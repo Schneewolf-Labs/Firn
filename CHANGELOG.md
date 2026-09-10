@@ -20,6 +20,10 @@ section into the next version.
   (seamless clone per stamp), next to the Clone Brush.
 - Brush smoothing in Tool Options: Basic (averaged points), Weighted
   (inertia) and Stabilizer (the brush trails the cursor on a string).
+- Color Smudge brush (Paint group): paints the foreground color while
+  dragging along what it passes over. Length sets how far the carried
+  color goes, Color rate how much paint each stamp adds, and Dulling mode
+  carries one averaged color instead of the patch.
 - Deform tool as a unified transform: with a selection it transforms only
   the selected pixels (the selection follows, one history entry), rotation
   happens about a draggable pivot from anywhere outside the box, Alt scales

@@ -459,16 +459,23 @@ private:
 // the previous stamp's pixels over the current ones (Smudge), or copies
 // them without fading (Push, right button).
 
+// Color Smudge (the painting programs' color smudge engine) is the same
+// tool carrying paint as well: every stamp tints the carried pixels toward
+// the foreground color by the color rate, so strokes lay down color that
+// blends with what they pass over. Dulling carries one averaged color
+// instead of the patch (smearing).
 class SmudgeTool : public Tool {
 public:
-    const char* category() const override { return "Retouch"; }
-    const char* name() const override { return "Smudge"; }
-    const char* shortcut() const override { return "U"; }
+    explicit SmudgeTool(bool color = false) : color_(color) {}
+    const char* category() const override { return color_ ? "Paint" : "Retouch"; }
+    const char* name() const override { return color_ ? "Color Smudge" : "Smudge"; }
+    const char* shortcut() const override { return color_ ? nullptr : "U"; }
     void on_press(App& app, const ToolInput& in, ImGuiMouseButton b) override {
         if (!app.active_is_raster()) return;
         layer_ = app.active_layer();
         before_ = app.paint_pixels(layer_);
-        push_ = b == ImGuiMouseButton_Right;
+        push_ = !color_ && b == ImGuiMouseButton_Right;
+        paint_ = to_color(b == ImGuiMouseButton_Right ? app.bg_color : app.fg_color);
         grab(app, in.img_x, in.img_y);
         last_x_ = in.img_x; last_y_ = in.img_y;
         active_ = true;
@@ -485,7 +492,7 @@ public:
     void on_release(App& app, const ToolInput&, ImGuiMouseButton) override {
         if (!active_) return;
         active_ = false;
-        app.commit_pixels(layer_, push_ ? "Push" : "Smudge", before_, app.paint_pixels(layer_));
+        app.commit_pixels(layer_, color_ ? "Color Smudge" : push_ ? "Push" : "Smudge", before_, app.paint_pixels(layer_));
     }
     void cancel(App& app) override {
         if (active_ && app.doc && layer_ < app.doc->layer_count()) { app.paint_pixels(layer_) = before_; app.paint_touched(layer_); }
@@ -505,9 +512,28 @@ public:
         if (ImGui::SliderFloat("Hardness", &hard, 0.0f, 100.0f, "%.0f")) app.brush.hardness = hard / 100.0f;
         ImGui::SameLine();
         ImGui::SetNextItemWidth(100);
-        ImGui::SliderInt("Amount", &app.retouch_amount, 1, 100, "%d%%");
-        ImGui::SameLine();
-        ImGui::TextDisabled("Left smudges, right pushes.");
+        if (color_) {
+            float op = app.brush.opacity * 100.0f;
+            if (ImGui::SliderFloat("Opacity", &op, 1.0f, 100.0f, "%.0f")) app.brush.opacity = op / 100.0f;
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(100);
+            ImGui::SliderInt("Length", &app.csmudge_length, 0, 100, "%d%%");
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("How far the carried color is dragged before it fades to what lies under the brush.");
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(100);
+            ImGui::SliderInt("Color rate", &app.csmudge_rate, 0, 100, "%d%%");
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("How much foreground color each stamp adds to what the brush carries. 0 smudges only.");
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(90);
+            ImGui::Combo("Mode", &app.csmudge_mode, "Smearing\0Dulling\0");
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Smearing drags the pixels under the brush along; Dulling drags their average color.");
+            ImGui::SameLine();
+            ImGui::TextDisabled("Left paints the foreground color, right the background.");
+        } else {
+            ImGui::SliderInt("Amount", &app.retouch_amount, 1, 100, "%d%%");
+            ImGui::SameLine();
+            ImGui::TextDisabled("Left smudges, right pushes.");
+        }
     }
 
 private:
@@ -530,8 +556,54 @@ private:
                 if (sx < 0 || sy < 0 || sx >= px.width() || sy >= px.height()) continue;
                 std::memcpy(&buf_[(static_cast<size_t>(y) * (2 * r + 1) + x) * 4], px.data() + (static_cast<size_t>(sy) * px.width() + sx) * 4, 4);
             }
+        if (color_ && app.csmudge_mode == 1) dull();
+    }
+    // Dulling: the patch becomes its alpha-weighted mean color.
+    void dull() {
+        float acc[4] = {0, 0, 0, 0}; float n = 0;
+        for (size_t i = 0; i < buf_.size(); i += 4) { const float a = buf_[i + 3] / 255.0f; acc[0] += buf_[i] * a; acc[1] += buf_[i + 1] * a; acc[2] += buf_[i + 2] * a; acc[3] += a; n += 1; }
+        const uint8_t mean[4] = {static_cast<uint8_t>(acc[3] > 0 ? acc[0] / acc[3] + 0.5f : 0), static_cast<uint8_t>(acc[3] > 0 ? acc[1] / acc[3] + 0.5f : 0), static_cast<uint8_t>(acc[3] > 0 ? acc[2] / acc[3] + 0.5f : 0), static_cast<uint8_t>(n > 0 ? acc[3] / n * 255.0f + 0.5f : 0)};
+        for (size_t i = 0; i < buf_.size(); i += 4) std::memcpy(&buf_[i], mean, 4);
+    }
+    // Color Smudge stamp: the carried patch tinted by the paint color is the
+    // dab; it goes down at the brush opacity, then what the brush carries on
+    // is that dab faded toward the fresh pixels underneath by the length.
+    void color_stamp(App& app, float cx, float cy) {
+        Image& px = app.paint_pixels(layer_);
+        const int r = rad_, W = 2 * r + 1;
+        const int ox = static_cast<int>(std::floor(cx)) - r, oy = static_cast<int>(std::floor(cy)) - r;
+        const Mask& clip = app.doc->selection();
+        const float rate = std::clamp(app.csmudge_rate / 100.0f, 0.0f, 1.0f);
+        const float length = std::clamp(app.csmudge_length / 100.0f, 0.0f, 1.0f);
+        const float opacity = std::clamp(app.brush.opacity, 0.0f, 1.0f);
+        const uint8_t pc[3] = {paint_.r, paint_.g, paint_.b};
+        // What lies under the brush before this dab: the color the stroke picks up.
+        std::vector<uint8_t> carried = std::move(buf_);
+        grab(app, cx, cy);
+        std::vector<uint8_t> fresh = std::move(buf_);
+        buf_ = std::move(carried);
+        std::vector<uint8_t> dab(buf_.size());
+        for (size_t i = 0; i < buf_.size(); i += 4) {
+            const float a = buf_[i + 3] / 255.0f;
+            const float k = rate + (1.0f - rate) * (1.0f - a);   // where nothing is carried, the paint color fills in
+            for (int c = 0; c < 3; ++c) dab[i + c] = static_cast<uint8_t>(buf_[i + c] + (pc[c] - buf_[i + c]) * k + 0.5f);
+            dab[i + 3] = static_cast<uint8_t>(buf_[i + 3] + (255 - buf_[i + 3]) * rate + 0.5f);
+        }
+        for (int y = 0; y < W; ++y)
+            for (int x = 0; x < W; ++x) {
+                const int dx = ox + x, dy = oy + y;
+                if (dx < 0 || dy < 0 || dx >= px.width() || dy >= px.height()) continue;
+                float cov = coverage(app, (dx + 0.5f) - cx, (dy + 0.5f) - cy) * opacity;
+                if (!clip.empty()) cov *= clip.at(dx, dy) / 255.0f;
+                if (cov <= 0.0f) continue;
+                const uint8_t* d = &dab[(static_cast<size_t>(y) * W + x) * 4];
+                raster::blend_over(px, dx, dy, Color{d[0], d[1], d[2], d[3]}, cov);
+            }
+        // Carry on: the dab fading toward what was underneath, by the length.
+        for (size_t i = 0; i < buf_.size(); ++i) buf_[i] = static_cast<uint8_t>(fresh[i] + (dab[i] - fresh[i]) * length + 0.5f);
     }
     void stamp(App& app, float cx, float cy) {
+        if (color_) { color_stamp(app, cx, cy); return; }
         Image& px = app.paint_pixels(layer_);
         const int r = rad_, W = 2 * r + 1;
         const int ox = static_cast<int>(std::floor(cx)) - r, oy = static_cast<int>(std::floor(cy)) - r;
@@ -550,7 +622,8 @@ private:
             }
         grab(app, cx, cy);
     }
-    bool active_ = false, push_ = false;
+    bool color_ = false, active_ = false, push_ = false;
+    Color paint_{0, 0, 0, 255};
     size_t layer_ = 0;
     Image before_;
     std::vector<uint8_t> buf_;
@@ -1463,6 +1536,7 @@ std::vector<std::unique_ptr<Tool>> make_default_tools() {
     t.push_back(std::make_unique<DropperTool>());
     t.push_back(std::make_unique<BrushTool>(BrushTool::Kind::Paint));
     t.push_back(std::make_unique<BrushTool>(BrushTool::Kind::Airbrush));
+    t.push_back(std::make_unique<SmudgeTool>(true));
     t.push_back(std::move(warp[0]));
     t.push_back(std::make_unique<BrushTool>(BrushTool::Kind::LightenDarken));
     t.push_back(std::make_unique<BrushTool>(BrushTool::Kind::DodgeBurn));
