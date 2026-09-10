@@ -166,5 +166,5 @@ for. Ranked by value per effort; work top to bottom, tick as they land.
 - Plugin filters (.8bf): Windows binaries
 - Digimarc watermarking, TWAIN scanning, screen capture, batch processing,
   web tools (image slicer, image mapper, optimizer wizards)
-- Browser palette, Effect Browser thumbnails, Print Layout
+- Browser palette, Print Layout (the Effect Browser landed in 0.2)
 - Vector leftovers: Fit Text to Path, the original's text shape layout

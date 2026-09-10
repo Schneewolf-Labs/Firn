@@ -32,6 +32,7 @@ add_executable(firn
   src/ui/About.cpp
   src/ui/Theme.cpp
   src/ui/ThemeEditor.cpp
+  src/ui/EffectBrowser.cpp
   src/App.cpp
   src/Vectors.cpp
   src/Drive.cpp

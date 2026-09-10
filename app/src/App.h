@@ -1,5 +1,6 @@
 #pragma once
 #include <functional>
+#include <map>
 #include <memory>
 #include <array>
 #include <string>
@@ -175,6 +176,22 @@ struct App {
                      MosaicGlass, PolishedStone, Sandstone, Sculpture, SoftPlastic, StrawWall, Texture, Tiles, Weave,
                      BlackPencil, BrushStrokes, Charcoal, ColoredChalk, ColoredPencil, Pencil, UserFilter };
     Adj open_adjust = Adj::None;
+    static int adjust_count();
+    static const char* adjust_title(int i);
+    firn::effects::Edge edge_setting() const;     // the edge-mode option as the effects want it
+    static firn::Color float_rgb(const float* f);
+    // Effect Browser (app/src/ui/EffectBrowser.cpp): thumbnails of every
+    // dialog's operation on the active layer, taken from the dialogs themselves.
+    bool show_effect_browser = false;
+    bool effect_capture = false;
+    std::map<std::string, std::function<void(firn::Image&)>> effect_ops;
+    std::vector<GLuint> browser_tex;
+    std::vector<uint8_t> browser_state;   // 0 pending, 1 done, 2 failed
+    firn::Image browser_source;
+    uint64_t browser_revision = ~0ull;
+    int browser_layer = -1;
+    void draw_effect_browser();
+    void reset_effect_browser();
     struct Preview {
         bool active = false;
         size_t layer = 0;

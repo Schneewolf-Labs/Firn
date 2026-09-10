@@ -234,6 +234,8 @@ void App::draw_menu() {
         ImGui::EndMenu();
     }
     if (ImGui::BeginMenu("Effects")) {
+        if (ImGui::MenuItem("Effect Browser...", nullptr, false, has_layer)) { reset_effect_browser(); show_effect_browser = true; }
+        ImGui::Separator();
         if (ImGui::BeginMenu("3D Effects", has_layer)) {
             if (ImGui::MenuItem("Buttonize...")) open_adjust = Adj::Buttonize;
             if (ImGui::MenuItem("Cutout...")) open_adjust = Adj::Cutout;
@@ -498,6 +500,7 @@ void App::draw_dialogs() {
     draw_material_dialog();
     draw_about_dialog();
     draw_theme_editor();
+    draw_effect_browser();
 
     if (file_dialog.draw()) {
         if (file_op == PendingFileOp::Open) open_document(file_dialog.path());

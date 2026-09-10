@@ -11,6 +11,8 @@ section into the next version.
 - Preferences: undo memory budget per image (default 1 GB).
 - Text objects are saved as the native format's text shapes, rotation
   included: they reopen as editable text here and in the original.
+- Effects > Effect Browser: every adjustment and effect previewed on the
+  active layer with its current settings; click a tile to open its dialog.
 
 ### Changed
 - Large images: Gaussian blur, resampling and native-file compression run
