@@ -6,6 +6,8 @@ section into the next version.
 
 ## Unreleased
 
+## 0.1.0 (2026-09-10)
+
 ### Added
 - Raster editing: layers, groups, masks, adjustment layers, selections
   (shapes, freehand, point to point, smart edge, edge seeker, magic wand,
