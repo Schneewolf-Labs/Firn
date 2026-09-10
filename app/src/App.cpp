@@ -36,6 +36,7 @@ void App::apply_config() {
         for (DocState& d : docs) d.tex_revision = ~0ull;
     }
     image_windows = config.image_windows;
+    apply_theme(config.theme);
     // Library folders may have changed: rescan on next use.
     tubes_loaded = brush_tips_loaded = textures_loaded = false;
     tubes.clear(); brush_tips.clear(); textures.clear();

@@ -414,6 +414,10 @@ void App::draw_menu() {
         if (ImGui::MenuItem("Tile Vertically", nullptr, false, can_arrange)) arrange_request = Arrange::TileVertically;
         ImGui::EndMenu();
     }
+    if (ImGui::BeginMenu("Help")) {
+        if (ImGui::MenuItem("About Firn...")) show_about_dialog = true;
+        ImGui::EndMenu();
+    }
     ImGui::EndMainMenuBar();
 }
 
@@ -492,6 +496,7 @@ void App::draw_dialogs() {
     draw_adjustment_layer_dialog();
     draw_image_dialogs();
     draw_material_dialog();
+    draw_about_dialog();
 
     if (file_dialog.draw()) {
         if (file_op == PendingFileOp::Open) open_document(file_dialog.path());
@@ -546,6 +551,14 @@ void App::draw_dialogs() {
         ImGui::SetNextItemWidth(160); ImGui::InputInt("New image height", &c.new_height);
         c.new_width = std::clamp(c.new_width, 1, 30000); c.new_height = std::clamp(c.new_height, 1, 30000);
         ImGui::SeparatorText("View");
+        {
+            static const char* const names[] = {"Firn", "Dark", "Light", "Classic"};
+            static const char* const keys[] = {"firn", "dark", "light", "classic"};
+            int cur = 0;
+            for (int i = 0; i < 4; ++i) if (c.theme == keys[i]) cur = i;
+            ImGui::SetNextItemWidth(160);
+            if (ImGui::Combo("Theme", &cur, names, 4)) { c.theme = keys[cur]; apply_theme(c.theme); }  // previews live; Cancel restores
+        }
         ImGui::Checkbox("Rulers", &c.show_rulers); ImGui::SameLine(); ImGui::Checkbox("Grid", &c.show_grid);
         ImGui::Checkbox("Color managed display (convert tagged images to sRGB for the screen)", &c.color_managed_display);
         ImGui::SetNextItemWidth(160); ImGui::InputInt("Grid spacing", &c.grid_spacing);
@@ -572,7 +585,7 @@ void App::draw_dialogs() {
             ImGui::CloseCurrentPopup();
         }
         ImGui::SameLine();
-        if (ImGui::Button("Cancel", ImVec2(90, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape, false)) ImGui::CloseCurrentPopup();
+        if (ImGui::Button("Cancel", ImVec2(90, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape, false)) { apply_theme(config.theme); ImGui::CloseCurrentPopup(); }
         ImGui::EndPopup();
     }
 

@@ -128,6 +128,9 @@ docs/    notes on the original: command inventory, module mapping, FORMAT.md
   `App::docs` as `DocState` and swapped in by `activate_document`. Always
   create documents through `add_document` and close through
   `close_document`, which handles the unsaved-changes prompt.
+- `cmake/version.cmake` regenerates `Version.cpp` (version, commit, build
+  date) on every build for Help > About (`app/src/ui/About.cpp`, which
+  also holds the color themes behind Preferences > Theme).
 - Settings persist through `Config` (`~/.config/firn/firn.cfg`; the ImGui
   layout is `layout.ini` beside it). Add new persisted fields there, expose
   them in File > Preferences, and push them into live state in

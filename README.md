@@ -36,6 +36,10 @@ ctest --test-dir build
 FIRN_WINDOW=1280x800 ./build/app/firn   # override the initial window size
 ```
 
+Help > About shows the version, git commit and build facts (the build
+records them each time it runs). File > Preferences picks the theme:
+Firn (violet dark), Dark, Light or Classic.
+
 Install it (the app, `firn-convert`, a desktop entry and the icon):
 
 ```sh

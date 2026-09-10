@@ -17,9 +17,19 @@ add_custom_command(
   DEPENDS ${CMAKE_SOURCE_DIR}/assets/icon-128.png ${CMAKE_SOURCE_DIR}/cmake/embed.cmake
   COMMENT "Embedding the window icon")
 
+# Version, git commit and build date, refreshed on every build.
+set(FIRN_VERSION_CPP ${CMAKE_CURRENT_BINARY_DIR}/generated/Version.cpp)
+add_custom_target(firn_version
+  COMMAND ${CMAKE_COMMAND} -DOUTPUT=${FIRN_VERSION_CPP} -DSOURCE_DIR=${CMAKE_SOURCE_DIR}
+          -DVERSION=${PROJECT_VERSION} -P ${CMAKE_SOURCE_DIR}/cmake/version.cmake
+  BYPRODUCTS ${FIRN_VERSION_CPP}
+  COMMENT "Recording the version and commit")
+
 add_executable(firn
   src/main.cpp
   ${FIRN_ICON_CPP}
+  ${FIRN_VERSION_CPP}
+  src/ui/About.cpp
   src/App.cpp
   src/Vectors.cpp
   src/Drive.cpp
@@ -44,6 +54,7 @@ add_executable(firn
   src/tools/WarpTools.cpp
 )
 target_include_directories(firn PRIVATE src)
+add_dependencies(firn firn_version)
 # Lets a development build find the sample tubes in the (gitignored) backup.
 target_compile_definitions(firn PRIVATE FIRN_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 target_link_libraries(firn PRIVATE firncore imgui SDL2::SDL2 OpenGL::GL)
