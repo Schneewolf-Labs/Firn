@@ -135,6 +135,12 @@ enum class Filter { Nearest, Bilinear, Bicubic };
 Image resample(const Image& src, int w, int h, Filter filter);
 
 // Copies the rect (clipped to the image; outside is transparent).
+// Selections > Matting. `remove_matte` undoes a composite against a solid
+// color on semi-transparent pixels (black or white halos); `defringe`
+// replaces the color of edge pixels within `width` px of opaque ones with
+// their nearest opaque neighbor's color.
+void remove_matte(Image& img, Color matte);
+void defringe(Image& img, int width);
 Image crop(const Image& src, Rect r);
 // Same size, content moved by (dx, dy); uncovered area is transparent.
 Image shifted(const Image& src, int dx, int dy);

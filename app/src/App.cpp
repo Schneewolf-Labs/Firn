@@ -666,8 +666,42 @@ Mask image_to_mask(const Image& img) {
 
 static Image mask_to_image(const Mask& m) { return mask_to_image_impl(m); }
 
+// Edit Selection: the selection becomes a grayscale proxy that every
+// painting tool works on (white selects), shown as a red overlay; the
+// document's own selection is cleared meanwhile so nothing clips to it.
+void App::set_selection_edit(bool on) {
+    if (!doc) return;
+    tool().cancel(*this);
+    if (on && !selection_edit) {
+        if (mask_edit) set_mask_edit(false);
+        selection_edit = true;
+        selection_edit_before = doc->selection();
+        mask_proxy = mask_to_image(doc->has_selection() ? doc->selection() : Mask(doc->width(), doc->height(), 0));
+        doc->set_selection(Mask());
+        overlay_tex_revision = ~0ull;
+        status = "Editing the selection: paint white to select, black to deselect. Selections > Edit Selection again to finish.";
+    } else if (!on && selection_edit) {
+        selection_edit = false;
+        Mask after = image_to_mask(mask_proxy);
+        mask_proxy = Image();
+        doc->set_selection(selection_edit_before);
+        if (!after.any()) after = Mask();
+        set_selection("Edit Selection", std::move(after));
+        overlay_tex_revision = ~0ull;
+    }
+}
+
+void App::layer_view_only(bool current_only) {
+    if (!doc || active_layer() < 0) return;
+    const int cur = active_layer();
+    run(std::make_unique<StateEditCommand>(current_only ? "View Current Only" : "View All", [cur, current_only](Document& d) {
+        for (size_t i = 0; i < d.layer_count(); ++i) d.layer(i).visible = !current_only || static_cast<int>(i) == cur || d.layer(i).type == LayerType::Group;
+    }));
+}
+
 void App::set_mask_edit(bool on) {
     tool().cancel(*this);
+    if (on && selection_edit) set_selection_edit(false);
     if (on && doc && active_layer() >= 0 && doc->layer(active_layer()).has_mask()) {
         mask_edit = true;
         mask_proxy_layer = active_layer();
@@ -680,11 +714,13 @@ void App::set_mask_edit(bool on) {
 }
 
 Image& App::paint_pixels(size_t layer) {
+    if (selection_edit) return mask_proxy;
     if (mask_edit && layer == mask_proxy_layer && doc && layer < doc->layer_count() && doc->layer(layer).has_mask()) return mask_proxy;
     return doc->layer(layer).pixels;
 }
 
 void App::paint_touched(size_t layer, const raster::Rect* rect) {
+    if (selection_edit) { overlay_tex_revision = ~0ull; doc->touch(); return; }
     if (mask_edit && layer == mask_proxy_layer && doc && layer < doc->layer_count() && doc->layer(layer).has_mask())
         doc->layer(layer).mask = image_to_mask(mask_proxy);
     if (rect) doc->touch(*rect);
@@ -692,6 +728,14 @@ void App::paint_touched(size_t layer, const raster::Rect* rect) {
 }
 
 void App::commit_pixels(size_t layer, const std::string& name, Image before, const Image& after) {
+    if (selection_edit) {
+        // The proxy is the selection being edited; one command when editing ends.
+        (void)layer; (void)name; (void)before;
+        mask_proxy = after;
+        overlay_tex_revision = ~0ull;
+        doc->touch();
+        return;
+    }
     if (mask_edit && layer == mask_proxy_layer && doc && doc->layer(layer).has_mask()) {
         // Record the mask change; the proxy already holds `after`.
         Mask before_mask = image_to_mask(before);
@@ -876,10 +920,10 @@ void App::sync_canvas_texture() {
 
 // Red tint where the edited mask hides pixels, as a second texture.
 void App::sync_overlay_texture() {
-    const bool want = mask_edit && show_mask_overlay && doc && mask_proxy_layer < doc->layer_count() && doc->layer(mask_proxy_layer).has_mask();
+    const bool want = doc && show_mask_overlay && (selection_edit || (mask_edit && mask_proxy_layer < doc->layer_count() && doc->layer(mask_proxy_layer).has_mask()));
     if (!want) { overlay_tex_revision = ~0ull; return; }
     if (overlay_tex && overlay_tex_revision == doc->revision()) return;
-    const Mask& m = doc->layer(mask_proxy_layer).mask;
+    const Mask m = selection_edit ? image_to_mask(mask_proxy) : doc->layer(mask_proxy_layer).mask;
     std::vector<uint8_t> px(m.size() * 4);
     for (size_t i = 0; i < m.size(); ++i) {
         px[i * 4 + 0] = 255; px[i * 4 + 1] = 0; px[i * 4 + 2] = 0;

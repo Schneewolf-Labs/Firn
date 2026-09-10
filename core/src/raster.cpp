@@ -1052,4 +1052,50 @@ void scratch_fill(Image& img, float x0, float y0, float x1, float y1, float widt
         }
 }
 
+
+void remove_matte(Image& img, Color matte) {
+    uint8_t* p = img.data();
+    for (size_t i = 0; i < img.size_bytes(); i += 4) {
+        const int a = p[i + 3];
+        if (a == 0 || a == 255) continue;
+        const float f = a / 255.0f;
+        const int m[3] = {matte.r, matte.g, matte.b};
+        for (int c = 0; c < 3; ++c) {
+            // observed = color * a + matte * (1 - a)
+            const float v = (p[i + c] - m[c] * (1.0f - f)) / f;
+            p[i + c] = static_cast<uint8_t>(std::clamp(v, 0.0f, 255.0f) + 0.5f);
+        }
+    }
+}
+
+void defringe(Image& img, int width) {
+    const int w = img.width(), h = img.height();
+    if (width <= 0 || w == 0) return;
+    // Grow the opaque region `width` times; each pass gives translucent
+    // pixels next to a settled one that pixel's color.
+    std::vector<uint8_t> settled(static_cast<size_t>(w) * h, 0);
+    const uint8_t* p = img.data();
+    for (size_t i = 0; i < settled.size(); ++i) settled[i] = p[i * 4 + 3] == 255;
+    for (int pass = 0; pass < width; ++pass) {
+        std::vector<uint8_t> next = settled;
+        Image src = img;
+        for (int y = 0; y < h; ++y)
+            for (int x = 0; x < w; ++x) {
+                const size_t i = static_cast<size_t>(y) * w + x;
+                if (settled[i] || src.data()[i * 4 + 3] == 0) continue;
+                for (int dy = -1; dy <= 1 && !next[i]; ++dy)
+                    for (int dx = -1; dx <= 1; ++dx) {
+                        const int nx = x + dx, ny = y + dy;
+                        if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+                        const size_t ni = static_cast<size_t>(ny) * w + nx;
+                        if (!settled[ni]) continue;
+                        for (int c = 0; c < 3; ++c) img.data()[i * 4 + c] = src.data()[ni * 4 + c];
+                        next[i] = 1;
+                        break;
+                    }
+            }
+        settled.swap(next);
+    }
+}
+
 }  // namespace firn::raster

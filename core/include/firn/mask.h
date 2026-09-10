@@ -63,5 +63,30 @@ void feather(Mask& m, float radius);
 void expand(Mask& m, int pixels);    // grow by a circular structuring element
 void contract(Mask& m, int pixels);  // shrink likewise
 
+// Selections > Modify, as the original names them.
+void feather_inside(Mask& m, float radius);    // soften only within the selection
+void feather_outside(Mask& m, float radius);   // soften only outward
+void unfeather(Mask& m);                        // hard edge at 50%
+void smooth(Mask& m, int amount, bool preserve_corners);   // rounds jagged edges
+void shape_antialias(Mask& m, bool inside, bool outside);  // one-pixel soft edge
+// Drops selected islands up to `speck_size` pixels and fills unselected holes up to `hole_size`.
+void remove_specks_and_holes(Mask& m, int speck_size, int hole_size);
+// Every pixel within `tolerance` (max channel difference) of `color`; beyond
+// it the selection fades over `softness` more levels.
+Mask select_color_range(const Image& img, Color color, int tolerance, int softness);
+// Pixels anywhere in the image that are within `tolerance` of a color found
+// under the current selection (the original's Select Similar).
+Mask select_similar(const Image& img, const Mask& selection, int tolerance);
+
+// Edge helpers for the freehand selection's Smart Edge and Edge Seeker modes.
+// `edge_map` is a Sobel magnitude of the luma, 0..1, one float per pixel.
+std::vector<float> edge_map(const Image& img);
+// The strongest edge within `range` pixels of (x, y), or (x, y) itself when nothing is stronger.
+std::pair<float, float> seek_edge(const std::vector<float>& edges, int w, int h, float x, float y, int range);
+// Lowest-cost path from a to b hugging strong edges (8-connected, in a corridor around the segment).
+std::vector<std::pair<float, float>> edge_path(const std::vector<float>& edges, int w, int h, std::pair<float, float> a, std::pair<float, float> b);
+// Moving-average smoothing of a polygon outline; `amount` 0..100 sets the window.
+std::vector<std::pair<float, float>> smooth_polygon(const std::vector<std::pair<float, float>>& pts, int amount, bool closed);
+
 }  // namespace mask
 }  // namespace firn

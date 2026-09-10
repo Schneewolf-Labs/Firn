@@ -325,7 +325,7 @@ void App::draw_canvas_view(ImVec2 view_pos, ImVec2 view_size) {
 
     dl->AddImage((ImTextureID)(intptr_t)canvas_tex, p0, p1);
     sync_overlay_texture();
-    if (mask_edit && show_mask_overlay && overlay_tex && overlay_tex_revision == doc->revision())
+    if ((mask_edit || selection_edit) && show_mask_overlay && overlay_tex && overlay_tex_revision == doc->revision())
         dl->AddImage((ImTextureID)(intptr_t)overlay_tex, p0, p1);
     dl->AddRect(ImVec2(p0.x - 1, p0.y - 1), ImVec2(p1.x + 1, p1.y + 1), IM_COL32(0, 0, 0, 255));
 
@@ -353,7 +353,7 @@ void App::draw_canvas_view(ImVec2 view_pos, ImVec2 view_size) {
     // Marching ants along the selection boundary. Each unit edge is one
     // segment; color alternates along the outline and cycles with time.
     sync_ants();
-    if (!ants.empty()) {
+    if (!ants.empty() && show_marquee) {
         const int phase = static_cast<int>(ImGui::GetTime() * 10.0);
         const float vx0 = view_pos.x, vy0 = view_pos.y, vx1 = view_pos.x + view_size.x, vy1 = view_pos.y + view_size.y;
         for (const Edge& e : ants) {

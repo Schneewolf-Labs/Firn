@@ -110,10 +110,34 @@ struct App {
     int fill_tolerance = 20;
     float fill_opacity = 1.0f;
     // Selection tool options (shared by Selection / Freehand / Magic Wand)
-    int sel_shape = 0;                  // 0 rectangle, 1 ellipse
+    int sel_shape = 0;                  // Selection tool shape: see kSelectionShapes in Tools.cpp
     int sel_mode = 0;                   // mask::Combine as int: 0 replace, 1 add, 2 subtract, 3 intersect
     float sel_feather = 0.0f;
     bool sel_antialias = true;
+    int sel_freehand_type = 0;          // 0 freehand, 1 point to point, 2 smart edge, 3 edge seeker
+    int sel_range = 10;                 // edge seeker search radius
+    int sel_smoothing = 0;              // outline smoothing 0..100
+    bool show_marquee = true;
+    // Selections > Modify dialog parameters.
+    int sel_tolerance = 30, sel_softness = 20;
+    float sel_color[3] = {1.0f, 1.0f, 1.0f};
+    int sel_speck = 10, sel_hole = 10;
+    int sel_smooth_amount = 5;
+    bool sel_preserve_corners = true;
+    bool sel_aa_inside = true, sel_aa_outside = true;
+    int sel_defringe = 1;
+    // Edit Selection: paint the selection as a mask with the ordinary tools.
+    bool selection_edit = false;
+    firn::Mask selection_edit_before;
+    void set_selection_edit(bool on);
+    void select_from_mask();
+    void select_from_vector();
+    void promote_selection_to_layer(bool floating);
+    void defloat();
+    bool has_floating_layer() const;
+    void draw_selections_menu();
+    void draw_selection_dialogs();
+    void draw_layer_menu_items();
     int wand_tolerance = 20;
     bool wand_contiguous = true;
     bool wand_sample_merged = false;
@@ -253,7 +277,7 @@ struct App {
     GLuint overlay_tex = 0;
     uint64_t overlay_tex_revision = ~0ull;
     void sync_overlay_texture();
-    int show_sel_dialog = 0;            // 1 expand, 2 contract, 3 feather
+    int show_sel_dialog = 0;            // a SelDialog id (app/src/ui/SelectionMenu.cpp)
     bool show_layer_props_dialog = false;
     bool show_jpeg_dialog = false;
     int jpeg_quality = 90;
@@ -543,6 +567,7 @@ struct App {
     void layer_delete();
     void layer_arrange(int delta);  // +1 up (towards top), -1 down; large values go to top/bottom
     void layer_merge(int kind);     // 0 down, 1 visible, 2 all
+    void layer_view_only(bool current_only);   // hide every other layer, or show all
     void layer_promote_background();
     void layer_new_group();
     void layer_ungroup();

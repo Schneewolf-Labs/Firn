@@ -25,7 +25,6 @@ void App::draw_menu() {
     const int layer = active_layer();
     const bool has_any_layer = has_doc && layer >= 0;
     const bool has_layer = has_any_layer && doc->layer(layer).is_raster();  // pixel operations need a raster layer
-    const bool is_group = has_any_layer && doc->layer(layer).type == LayerType::Group;
 
     if (!ImGui::BeginMainMenuBar()) return;
 
@@ -342,94 +341,9 @@ void App::draw_menu() {
         if (ImGui::MenuItem("User Defined Filter...", nullptr, false, has_layer)) open_adjust = Adj::UserFilter;
         ImGui::EndMenu();
     }
-    if (ImGui::BeginMenu("Selections")) {
-        const bool has_sel = has_doc && doc->has_selection();
-        if (ImGui::MenuItem("Select All", "Ctrl+A", false, has_doc)) select_all();
-        if (ImGui::MenuItem("Select None", "Ctrl+D", false, has_sel)) select_none();
-        if (ImGui::MenuItem("Invert", "Ctrl+Shift+I", false, has_doc)) select_invert();
-        ImGui::Separator();
-        if (ImGui::BeginMenu("Load/Save Selection", has_doc)) {
-            if (ImGui::BeginMenu("Load Selection From Alpha Channel", !doc->alpha_channels().empty())) {
-                for (size_t i = 0; i < doc->alpha_channels().size(); ++i) {
-                    ImGui::PushID(static_cast<int>(i));
-                    if (ImGui::MenuItem(doc->alpha_channels()[i].name.c_str())) set_selection("Load Selection From Alpha Channel", doc->alpha_channels()[i].mask);
-                    ImGui::PopID();
-                }
-                ImGui::Separator();
-                if (ImGui::MenuItem("Delete All Alpha Channels")) doc->alpha_channels().clear();
-                ImGui::EndMenu();
-            }
-            if (ImGui::MenuItem("Save Selection To Alpha Channel...", nullptr, false, doc->has_selection())) {
-                std::snprintf(alpha_name_buf, sizeof(alpha_name_buf), "Selection #%zu", doc->alpha_channels().size() + 1);
-                show_alpha_save_dialog = true;
-            }
-            ImGui::Separator();
-            if (ImGui::MenuItem("Load Selection From Disk...")) request_load_selection();
-            if (ImGui::MenuItem("Save Selection To Disk...", nullptr, false, has_doc && doc->has_selection())) request_save_selection();
-            ImGui::EndMenu();
-        }
-        if (ImGui::BeginMenu("Modify", has_sel)) {
-            if (ImGui::MenuItem("Expand...")) show_sel_dialog = 1;
-            if (ImGui::MenuItem("Contract...")) show_sel_dialog = 2;
-            if (ImGui::MenuItem("Feather...")) show_sel_dialog = 3;
-            ImGui::EndMenu();
-        }
-        ImGui::EndMenu();
-    }
+    draw_selections_menu();
     if (ImGui::BeginMenu("Layers")) {
-        const int n = has_doc ? static_cast<int>(doc->layer_count()) : 0;
-        const bool is_bg = has_layer && doc->layer(layer).background;
-        if (ImGui::MenuItem("New Raster Layer", nullptr, false, has_doc)) layer_new();
-        if (ImGui::MenuItem("New Vector Layer", nullptr, false, has_doc)) layer_new_vector();
-        if (ImGui::BeginMenu("New Adjustment Layer", has_doc)) {
-            using K = Adjustment::Kind;
-            static const K kinds[] = {K::BrightnessContrast, K::ChannelMixer, K::ColorBalance, K::Curves, K::HSL, K::Invert, K::Levels, K::Posterize, K::Threshold};
-            for (K k : kinds) if (ImGui::MenuItem(Adjustment::kind_name(k))) layer_new_adjustment(k);
-            ImGui::EndMenu();
-        }
-        if (ImGui::MenuItem("New Layer Group", nullptr, false, has_any_layer)) layer_new_group();
-        if (ImGui::BeginMenu("New Mask Layer", has_any_layer)) {
-            if (ImGui::MenuItem("Show All")) layer_set_mask("New Mask Layer", Mask(doc->width(), doc->height(), 255));
-            if (ImGui::MenuItem("Hide All")) layer_set_mask("New Mask Layer", Mask(doc->width(), doc->height(), 0));
-            if (ImGui::MenuItem("From Selection", nullptr, false, doc->has_selection())) layer_mask_from_selection();
-            if (ImGui::MenuItem("From Image")) layer_mask_from_image();
-            ImGui::EndMenu();
-        }
-        if (ImGui::MenuItem("Duplicate", nullptr, false, has_any_layer)) layer_duplicate();
-        if (ImGui::MenuItem("Delete", nullptr, false, has_any_layer && n > 1)) layer_delete();
-        if (ImGui::MenuItem("Ungroup Layers", nullptr, false, is_group)) layer_ungroup();
-        if (ImGui::MenuItem("Properties...", nullptr, false, has_any_layer)) {
-            if (doc->layer(layer).is_adjustment()) open_adjustment_dialog(layer, false);
-            else open_layer_properties();
-        }
-        ImGui::Separator();
-        if (ImGui::BeginMenu("Mask", has_any_layer && doc->layer(layer).has_mask())) {
-            bool on = doc->layer(layer).mask_enabled;
-            if (ImGui::MenuItem("Enable Mask", nullptr, &on)) layer_set_mask(on ? "Enable Mask" : "Disable Mask", doc->layer(layer).mask, on);
-            bool editing = mask_edit && static_cast<int>(mask_proxy_layer) == layer;
-            if (ImGui::MenuItem("Edit Mask", nullptr, &editing)) set_mask_edit(editing);
-            if (ImGui::MenuItem("Invert Mask")) { Mask m = doc->layer(layer).mask; mask::invert(m); layer_set_mask("Invert Mask", std::move(m), doc->layer(layer).mask_enabled); }
-            if (ImGui::MenuItem("Delete Mask")) layer_set_mask("Delete Mask", Mask());
-            if (ImGui::MenuItem("Load Selection From Mask")) set_selection("Load Selection From Mask", doc->layer(layer).mask);
-            ImGui::EndMenu();
-        }
-        if (ImGui::BeginMenu("Arrange", has_any_layer)) {
-            if (ImGui::MenuItem("Bring to Top")) layer_arrange(n);
-            if (ImGui::MenuItem("Move Up")) layer_arrange(+1);
-            if (ImGui::MenuItem("Move Down")) layer_arrange(-1);
-            if (ImGui::MenuItem("Send to Bottom")) layer_arrange(-n);
-            ImGui::EndMenu();
-        }
-        if (ImGui::BeginMenu("Merge", has_any_layer)) {
-            if (ImGui::MenuItem("Merge Down", nullptr, false, has_layer && layer > 0 && doc->layer(layer - 1).is_raster() && doc->layer(layer - 1).depth == doc->layer(layer).depth)) layer_merge(0);
-            if (ImGui::MenuItem("Merge Visible", nullptr, false, n > 1)) layer_merge(1);
-            if (ImGui::MenuItem("Merge All (Flatten)", nullptr, false, n > 1)) layer_merge(2);
-            ImGui::EndMenu();
-        }
-        ImGui::Separator();
-        if (ImGui::MenuItem("Promote Background Layer", nullptr, false, is_bg)) layer_promote_background();
-        if (ImGui::MenuItem("Convert to Raster Layer", nullptr, false, has_any_layer && doc->layer(layer).is_vector())) layer_convert_to_raster();
-        (void)is_group;
+        draw_layer_menu_items();
         ImGui::EndMenu();
     }
     if (ImGui::BeginMenu("Objects")) {
@@ -501,6 +415,74 @@ void App::draw_menu() {
         ImGui::EndMenu();
     }
     ImGui::EndMainMenuBar();
+}
+
+
+// The Layers menu body, shared with the Layers palette's context menu.
+void App::draw_layer_menu_items() {
+    const bool has_doc = doc != nullptr;
+    const int layer = active_layer();
+    const bool has_any_layer = has_doc && layer >= 0;
+    const bool has_layer = has_any_layer && doc->layer(layer).is_raster();
+    const bool is_group = has_any_layer && doc->layer(layer).type == LayerType::Group;
+    const int n = has_doc ? static_cast<int>(doc->layer_count()) : 0;
+    const bool is_bg = has_layer && doc->layer(layer).background;
+    if (ImGui::MenuItem("New Raster Layer", nullptr, false, has_doc)) layer_new();
+    if (ImGui::MenuItem("New Vector Layer", nullptr, false, has_doc)) layer_new_vector();
+    if (ImGui::BeginMenu("New Adjustment Layer", has_doc)) {
+        using K = Adjustment::Kind;
+        static const K kinds[] = {K::BrightnessContrast, K::ChannelMixer, K::ColorBalance, K::Curves, K::HSL, K::Invert, K::Levels, K::Posterize, K::Threshold};
+        for (K k : kinds) if (ImGui::MenuItem(Adjustment::kind_name(k))) layer_new_adjustment(k);
+        ImGui::EndMenu();
+    }
+    if (ImGui::MenuItem("New Layer Group", nullptr, false, has_any_layer)) layer_new_group();
+    if (ImGui::BeginMenu("New Mask Layer", has_any_layer)) {
+        if (ImGui::MenuItem("Show All")) layer_set_mask("New Mask Layer", Mask(doc->width(), doc->height(), 255));
+        if (ImGui::MenuItem("Hide All")) layer_set_mask("New Mask Layer", Mask(doc->width(), doc->height(), 0));
+        if (ImGui::MenuItem("From Selection", nullptr, false, doc->has_selection())) layer_mask_from_selection();
+        if (ImGui::MenuItem("From Image")) layer_mask_from_image();
+        ImGui::EndMenu();
+    }
+    if (ImGui::MenuItem("Duplicate", nullptr, false, has_any_layer)) layer_duplicate();
+    if (ImGui::MenuItem("Delete", nullptr, false, has_any_layer && n > 1)) layer_delete();
+    if (ImGui::MenuItem("Ungroup Layers", nullptr, false, is_group)) layer_ungroup();
+    if (ImGui::MenuItem("Properties...", nullptr, false, has_any_layer)) {
+        if (doc->layer(layer).is_adjustment()) open_adjustment_dialog(layer, false);
+        else open_layer_properties();
+    }
+    ImGui::Separator();
+    if (ImGui::BeginMenu("Mask", has_any_layer && doc->layer(layer).has_mask())) {
+        bool on = doc->layer(layer).mask_enabled;
+        if (ImGui::MenuItem("Enable Mask", nullptr, &on)) layer_set_mask(on ? "Enable Mask" : "Disable Mask", doc->layer(layer).mask, on);
+        bool editing = mask_edit && static_cast<int>(mask_proxy_layer) == layer;
+        if (ImGui::MenuItem("Edit Mask", nullptr, &editing)) set_mask_edit(editing);
+        if (ImGui::MenuItem("Invert Mask")) { Mask m = doc->layer(layer).mask; mask::invert(m); layer_set_mask("Invert Mask", std::move(m), doc->layer(layer).mask_enabled); }
+        if (ImGui::MenuItem("Delete Mask")) layer_set_mask("Delete Mask", Mask());
+        if (ImGui::MenuItem("Load Selection From Mask")) set_selection("Load Selection From Mask", doc->layer(layer).mask);
+        ImGui::EndMenu();
+    }
+    if (ImGui::BeginMenu("View", has_any_layer)) {
+        if (ImGui::MenuItem("Current Only")) layer_view_only(true);
+        if (ImGui::MenuItem("All")) layer_view_only(false);
+        ImGui::EndMenu();
+    }
+    if (ImGui::BeginMenu("Arrange", has_any_layer)) {
+        if (ImGui::MenuItem("Bring to Top")) layer_arrange(n);
+        if (ImGui::MenuItem("Move Up")) layer_arrange(+1);
+        if (ImGui::MenuItem("Move Down")) layer_arrange(-1);
+        if (ImGui::MenuItem("Send to Bottom")) layer_arrange(-n);
+        ImGui::EndMenu();
+    }
+    if (ImGui::BeginMenu("Merge", has_any_layer)) {
+        if (ImGui::MenuItem("Merge Down", nullptr, false, has_layer && layer > 0 && doc->layer(layer - 1).is_raster() && doc->layer(layer - 1).depth == doc->layer(layer).depth)) layer_merge(0);
+        if (ImGui::MenuItem("Merge Visible", nullptr, false, n > 1)) layer_merge(1);
+        if (ImGui::MenuItem("Merge All (Flatten)", nullptr, false, n > 1)) layer_merge(2);
+        ImGui::EndMenu();
+    }
+    ImGui::Separator();
+    if (ImGui::MenuItem("Promote Background Layer", nullptr, false, is_bg)) layer_promote_background();
+    if (ImGui::MenuItem("Promote Selection to Layer", nullptr, false, has_layer && doc->has_selection())) promote_selection_to_layer(false);
+    if (ImGui::MenuItem("Convert to Raster Layer", nullptr, false, has_any_layer && doc->layer(layer).is_vector())) layer_convert_to_raster();
 }
 
 void App::draw_dialogs() {
@@ -673,8 +655,6 @@ void App::draw_dialogs() {
         }
         ImGui::EndPopup();
     }
-    static const char* kSelDialogs[] = {nullptr, "Expand Selection", "Contract Selection", "Feather Selection"};
-    if (show_sel_dialog) { ImGui::OpenPopup(kSelDialogs[show_sel_dialog]); show_sel_dialog = 0; }
     if (show_layer_props_dialog) { ImGui::OpenPopup("Layer Properties"); show_layer_props_dialog = false; }
     if (show_resize_dialog) { ImGui::OpenPopup("Resize"); show_resize_dialog = false; }
     if (show_canvas_dialog) { ImGui::OpenPopup("Canvas Size"); show_canvas_dialog = false; }
@@ -696,24 +676,7 @@ void App::draw_dialogs() {
         ImGui::EndPopup();
     }
 
-    for (int which = 1; which <= 3; ++which) {
-        if (!ImGui::BeginPopupModal(kSelDialogs[which], nullptr, ImGuiWindowFlags_AlwaysAutoResize)) continue;
-        escape();
-        ImGui::SliderInt("Pixels", &sel_modify_px, 1, 100);
-        if (ImGui::Button("OK") || enter()) {
-            if (doc && doc->has_selection()) {
-                Mask m = doc->selection();
-                if (which == 1) mask::expand(m, sel_modify_px);
-                else if (which == 2) mask::contract(m, sel_modify_px);
-                else mask::feather(m, static_cast<float>(sel_modify_px));
-                set_selection(kSelDialogs[which], std::move(m));
-            }
-            ImGui::CloseCurrentPopup();
-        }
-        ImGui::SameLine();
-        if (ImGui::Button("Cancel")) ImGui::CloseCurrentPopup();
-        ImGui::EndPopup();
-    }
+    draw_selection_dialogs();
 
     if (ImGui::BeginPopupModal("Layer Properties", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
         escape();

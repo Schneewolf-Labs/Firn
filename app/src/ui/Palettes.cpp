@@ -210,6 +210,13 @@ static void draw_layers(App& app) {
                 else app.open_layer_properties();
             }
         }
+        // Right-click: the Layers menu for this layer.
+        if (ImGui::BeginPopupContextItem("layer_context")) {
+            if (ImGui::IsWindowAppearing()) doc.set_active_layer(i);
+            app.draw_layer_menu_items();
+            ImGui::EndPopup();
+            if (!app.doc || i >= static_cast<int>(app.doc->layer_count())) { ImGui::Unindent(L.depth * 14.0f); ImGui::PopID(); break; }
+        }
         if (L.has_mask()) {
             ImGui::SameLine();
             bool on = L.mask_enabled;

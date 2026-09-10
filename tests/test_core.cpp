@@ -1305,6 +1305,62 @@ static void test_vector_core() {
     CHECK(doc.layer(1).is_vector() && doc.layer(1).objects.size() == 1);
 }
 
+static void test_selection_modify_ops() {
+    // Specks and holes: a 1-px speck and a 1-px hole in a 20x20 mask.
+    Mask m(20, 20, 0);
+    for (int y = 4; y < 16; ++y) for (int x = 4; x < 16; ++x) m.at(x, y) = 255;
+    m.at(10, 10) = 0;   // hole
+    m.at(1, 1) = 255;   // speck
+    mask::remove_specks_and_holes(m, 2, 2);
+    CHECK(m.at(1, 1) == 0 && m.at(10, 10) == 255 && m.at(4, 4) == 255 && m.at(0, 0) == 0);
+    // Unfeather and inside/outside feather.
+    Mask f = m;
+    mask::feather_inside(f, 2.0f);
+    CHECK(f.at(2, 2) == 0 && f.at(4, 4) < 255 && f.at(10, 10) == 255);
+    Mask g = m;
+    mask::feather_outside(g, 2.0f);
+    CHECK(g.at(3, 10) > 0 && g.at(4, 4) == 255);
+    mask::unfeather(g);
+    CHECK(g.at(3, 10) == 255 || g.at(3, 10) == 0);
+    Mask s = m;
+    mask::smooth(s, 2, false);
+    CHECK(s.at(10, 10) == 255 && s.at(0, 0) == 0);
+    Mask aa = m;
+    mask::shape_antialias(aa, true, true);
+    CHECK(aa.at(4, 4) < 255 && aa.at(10, 10) == 255);
+    // Color range and select similar.
+    Image img(4, 1, Color{255, 0, 0, 255});
+    img.set(1, 0, {250, 5, 0, 255});
+    img.set(2, 0, {0, 0, 255, 255});
+    img.set(3, 0, {128, 0, 0, 255});
+    Mask cr = mask::select_color_range(img, {255, 0, 0, 255}, 10, 0);
+    CHECK(cr.at(0, 0) == 255 && cr.at(1, 0) == 255 && cr.at(2, 0) == 0 && cr.at(3, 0) == 0);
+    Mask seed(4, 1, 0);
+    seed.at(0, 0) = 255;
+    Mask sim = mask::select_similar(img, seed, 16);
+    CHECK(sim.at(0, 0) == 255 && sim.at(1, 0) == 255 && sim.at(2, 0) == 0 && sim.at(3, 0) == 0);
+    // Edge helpers: a vertical edge at x = 5 in a 12x12 image.
+    Image e(12, 12, Color{0, 0, 0, 255});
+    for (int y = 0; y < 12; ++y) for (int x = 5; x < 12; ++x) e.set(x, y, {255, 255, 255, 255});
+    auto edges = mask::edge_map(e);
+    auto snapped = mask::seek_edge(edges, 12, 12, 2.0f, 6.0f, 4);
+    CHECK(std::abs(snapped.first - 5.0f) < 1.5f);
+    auto path = mask::edge_path(edges, 12, 12, {4.5f, 1.5f}, {4.5f, 10.5f});
+    CHECK(path.size() >= 9 && std::abs(path[path.size() / 2].first - 4.5f) < 1.5f);
+    auto sp = mask::smooth_polygon({{0, 0}, {10, 0}, {10, 10}, {0, 10}}, 50, true);
+    CHECK(sp.size() == 4 && sp[0].first > 0.0f);
+    // Matting.
+    Image mt(2, 1, Color{0, 0, 0, 0});
+    mt.set(0, 0, {128, 0, 0, 128});   // red over black at 50%
+    raster::remove_matte(mt, {0, 0, 0, 255});
+    CHECK(mt.get(0, 0).r == 255 && mt.get(0, 0).a == 128);
+    Image df(3, 1, Color{0, 200, 0, 255});
+    df.set(1, 0, {255, 255, 255, 100});
+    df.set(2, 0, {0, 0, 0, 0});
+    raster::defringe(df, 1);
+    CHECK(df.get(1, 0).g == 200 && df.get(1, 0).a == 100 && df.get(2, 0).a == 0);
+}
+
 static void test_material_texture_and_gradient_file() {
     // A checker texture halves the paint where it is black.
     auto tex = std::make_shared<Image>(2, 1, Color{255, 255, 255, 255});
@@ -1943,6 +1999,7 @@ int main() {
     test_vector_queries();
     test_vector_roundtrip();
     test_material_texture_and_gradient_file();
+    test_selection_modify_ops();
     test_vector_core();
     test_history_limit();
     test_brush_texture();

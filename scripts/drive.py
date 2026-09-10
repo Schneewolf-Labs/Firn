@@ -22,7 +22,9 @@ touched, and real mouse events are ignored while driving. Steps
     tool:NAME                      select a tool by its palette name ("Object Selector")
     layer:N                        make layer N active
     set:NAME:VALUE                 set a tool option (create_as_vector, shape_kind, shape_library, line_width,
-                                   line_style, pen_mode, pen_close, fg_kind, bg_kind, fg_gradient, bg_gradient, ...)
+                                   line_style, pen_mode, pen_close, sel_type, sel_shape, sel_range, sel_smoothing,
+                                   sel_dialog, selection_edit, material_dialog, material_kind, material_gradient,
+                                   material_texture, material_transparent, image_windows, arrange, ...)
     wait:N                         let N frames run
     shot:FILE                      save the framebuffer to FILE (PNG)
     save:PATH  open:PATH            save the current image / open a file (no file dialog)

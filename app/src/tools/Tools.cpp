@@ -662,6 +662,26 @@ int gesture_mode(const App& app) {
     return app.sel_mode;
 }
 
+// Selection tool shapes, in the original's order.
+static const char* const kSelectionShapes = "Rectangle\0Square\0Rounded Rectangle\0Rounded Square\0Ellipse\0Circle\0Triangle\0Pentagon\0Hexagon\0Octagon\0Star\0Arrow\0";
+
+// The mask for a selection shape dragged from (x0, y0) to (x1, y1).
+Mask selection_shape(int shape, int w, int h, float x0, float y0, float x1, float y1, bool aa) {
+    const float cx = (x0 + x1) * 0.5f, cy = (y0 + y1) * 0.5f, rx = std::abs(x1 - x0) * 0.5f, ry = std::abs(y1 - y0) * 0.5f;
+    const float lx = std::min(x0, x1), ly = std::min(y0, y1), hx = std::max(x0, x1), hy = std::max(y0, y1);
+    switch (shape) {
+        case 2: case 3: return mask::rounded_rectangle(w, h, lx, ly, hx, hy, std::min(rx, ry) * 0.3f, aa);
+        case 4: case 5: return mask::ellipse(w, h, cx, cy, rx, ry, aa);
+        case 6: return mask::regular_polygon(w, h, cx, cy, rx, ry, 3, 0.0f, aa);
+        case 7: return mask::regular_polygon(w, h, cx, cy, rx, ry, 5, 0.0f, aa);
+        case 8: return mask::regular_polygon(w, h, cx, cy, rx, ry, 6, 0.0f, aa);
+        case 9: return mask::regular_polygon(w, h, cx, cy, rx, ry, 8, 22.5f, aa);
+        case 10: return mask::star(w, h, cx, cy, rx, ry, 5, 0.45f, 0.0f, aa);
+        case 11: return mask::polygon(w, h, {{lx, cy - ry * 0.4f}, {cx, cy - ry * 0.4f}, {cx, ly}, {hx, cy}, {cx, hy}, {cx, cy + ry * 0.4f}, {lx, cy + ry * 0.4f}}, aa);
+        default: return mask::rectangle(w, h, lx, ly, hx, hy, aa);
+    }
+}
+
 class SelectionTool : public Tool {
 public:
     const char* category() const override { return "Selection"; }
@@ -675,24 +695,32 @@ public:
         y0_ = y1_ = in.img_y;
         mode_ = gesture_mode(app);
     }
-    void on_drag(App&, const ToolInput& in, ImGuiMouseButton) override {
+    // Square / circle shapes keep the drag square.
+    void constrain(App& app, float& x1, float& y1) const {
+        if (app.sel_shape == 1 || app.sel_shape == 3 || app.sel_shape == 5) {
+            const float d = std::max(std::abs(x1 - x0_), std::abs(y1 - y0_));
+            x1 = x0_ + (x1 >= x0_ ? d : -d);
+            y1 = y0_ + (y1 >= y0_ ? d : -d);
+        }
+    }
+    void on_drag(App& app, const ToolInput& in, ImGuiMouseButton) override {
         if (!dragging_) return;
         x1_ = in.img_x;
         y1_ = in.img_y;
+        constrain(app, x1_, y1_);
     }
     void on_release(App& app, const ToolInput& in, ImGuiMouseButton) override {
         if (!dragging_ || !app.doc) return;
         dragging_ = false;
         x1_ = in.img_x; y1_ = in.img_y;
+        constrain(app, x1_, y1_);
         const int w = app.doc->width(), h = app.doc->height();
         if (std::abs(x1_ - x0_) < 1.0f || std::abs(y1_ - y0_) < 1.0f) {
             // A click without a drag deselects, like the original.
             app.select_none();
             return;
         }
-        Mask shape = app.sel_shape == 0
-            ? mask::rectangle(w, h, x0_, y0_, x1_, y1_, app.sel_antialias)
-            : mask::ellipse(w, h, (x0_ + x1_) * 0.5f, (y0_ + y1_) * 0.5f, (x1_ - x0_) * 0.5f, (y1_ - y0_) * 0.5f, app.sel_antialias);
+        Mask shape = selection_shape(app.sel_shape, w, h, x0_, y0_, x1_, y1_, app.sel_antialias);
         const int saved = app.sel_mode;
         app.sel_mode = mode_;
         app.apply_selection_gesture("Selection", std::move(shape));
@@ -703,7 +731,7 @@ public:
         if (!dragging_) return;
         const ImVec2 a(in.origin.x + x0_ * in.zoom, in.origin.y + y0_ * in.zoom);
         const ImVec2 b(in.origin.x + x1_ * in.zoom, in.origin.y + y1_ * in.zoom);
-        if (app.sel_shape == 0) {
+        if (app.sel_shape != 4 && app.sel_shape != 5) {
             in.dl->AddRect(a, b, IM_COL32(0, 0, 0, 255));
             in.dl->AddRect(ImVec2(a.x + 1, a.y + 1), ImVec2(b.x - 1, b.y - 1), IM_COL32(255, 255, 255, 255));
         } else {
@@ -713,8 +741,8 @@ public:
         }
     }
     void draw_options(App& app) override {
-        ImGui::SetNextItemWidth(110);
-        ImGui::Combo("Shape", &app.sel_shape, "Rectangle\0Ellipse\0");
+        ImGui::SetNextItemWidth(150);
+        ImGui::Combo("Shape", &app.sel_shape, kSelectionShapes);
         ImGui::SameLine();
         draw_selection_common(app);
     }
@@ -730,41 +758,130 @@ public:
     const char* category() const override { return "Selection"; }
     const char* name() const override { return "Freehand Selection"; }
     const char* shortcut() const override { return "L"; }
+    bool overlay_always() const override { return polygon_open_; }
     void on_press(App& app, const ToolInput& in, ImGuiMouseButton) override {
         if (!app.doc) return;
+        const int type = app.sel_freehand_type;
+        if (type == 1 || type == 2) {
+            // Point to Point / Smart Edge: a click adds a vertex; a double
+            // click, Enter, or a click on the first point closes.
+            if (!polygon_open_) {
+                pts_.clear(); vertices_.clear();
+                polygon_open_ = true;
+                mode_ = gesture_mode(app);
+                if (type == 2) edges_ = mask::edge_map(app.doc->composite());
+                vertices_.emplace_back(in.img_x, in.img_y);
+                pts_ = vertices_;
+                return;
+            }
+            const bool near_first = std::hypot(in.img_x - vertices_.front().first, in.img_y - vertices_.front().second) * in.zoom < 8.0f && vertices_.size() > 2;
+            if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left) || near_first) { close_polygon(app); return; }
+            add_vertex(app, in.img_x, in.img_y);
+            return;
+        }
         pts_.clear();
-        pts_.emplace_back(in.img_x, in.img_y);
         mode_ = gesture_mode(app);
+        if (type == 3) edges_ = mask::edge_map(app.doc->composite());
+        pts_.push_back(seek(app, in.img_x, in.img_y));
+        dragging_ = true;
     }
-    void on_drag(App&, const ToolInput& in, ImGuiMouseButton) override {
-        if (pts_.empty()) return;
+    void on_drag(App& app, const ToolInput& in, ImGuiMouseButton) override {
+        if (polygon_open_ || pts_.empty()) return;
+        const auto p = seek(app, in.img_x, in.img_y);
         const auto& l = pts_.back();
-        if (std::abs(l.first - in.img_x) >= 0.5f || std::abs(l.second - in.img_y) >= 0.5f) pts_.emplace_back(in.img_x, in.img_y);
+        if (std::abs(l.first - p.first) >= 0.5f || std::abs(l.second - p.second) >= 0.5f) pts_.push_back(p);
     }
     void on_release(App& app, const ToolInput&, ImGuiMouseButton) override {
+        if (!dragging_) return;  // releases of point-to-point clicks are not gestures
+        dragging_ = false;
         if (!app.doc) { pts_.clear(); return; }
+        finish(app, app.sel_freehand_type == 3 ? "Edge Seeker Selection" : "Freehand Selection");
+    }
+    void cancel(App&) override { pts_.clear(); vertices_.clear(); polygon_open_ = false; dragging_ = false; }
+    void draw_overlay(App& app, const ToolInput& in) override {
+        if (polygon_open_) {
+            // Keys while the polygon is open: Enter closes, Backspace drops the last vertex.
+            if (ImGui::IsKeyPressed(ImGuiKey_Enter, false) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter, false)) { close_polygon(app); return; }
+            if (ImGui::IsKeyPressed(ImGuiKey_Backspace, false) && vertices_.size() > 1) { vertices_.pop_back(); rebuild_points(app); }
+            if (ImGui::IsKeyPressed(ImGuiKey_Escape, false)) { cancel(app); return; }
+            // Rubber band from the last vertex to the cursor.
+            if (app.sel_freehand_type == 2 && app.doc) {
+                if (std::abs(in.img_x - live_target_.first) > 0.5f || std::abs(in.img_y - live_target_.second) > 0.5f) {
+                    live_target_ = {in.img_x, in.img_y};
+                    live_ = mask::edge_path(edges_, app.doc->width(), app.doc->height(), vertices_.back(), live_target_);
+                }
+            } else {
+                live_ = {vertices_.back(), {in.img_x, in.img_y}};
+            }
+        }
+        auto line = [&](const std::pair<float, float>& a, const std::pair<float, float>& b, ImU32 col, float th) {
+            in.dl->AddLine(ImVec2(in.origin.x + a.first * in.zoom, in.origin.y + a.second * in.zoom), ImVec2(in.origin.x + b.first * in.zoom, in.origin.y + b.second * in.zoom), col, th);
+        };
+        for (size_t i = 0; i + 1 < pts_.size(); ++i) { line(pts_[i], pts_[i + 1], IM_COL32(0, 0, 0, 255), 3.0f); line(pts_[i], pts_[i + 1], IM_COL32(255, 255, 255, 255), 1.0f); }
+        if (polygon_open_) {
+            for (size_t i = 0; i + 1 < live_.size(); ++i) line(live_[i], live_[i + 1], IM_COL32(255, 255, 0, 220), 1.0f);
+            for (const auto& v : vertices_) in.dl->AddRectFilled(ImVec2(in.origin.x + v.first * in.zoom - 3, in.origin.y + v.second * in.zoom - 3), ImVec2(in.origin.x + v.first * in.zoom + 3, in.origin.y + v.second * in.zoom + 3), IM_COL32(255, 255, 255, 255));
+        }
+    }
+    void draw_options(App& app) override {
+        ImGui::SetNextItemWidth(130);
+        if (ImGui::Combo("Type", &app.sel_freehand_type, "Freehand\0Point to Point\0Smart Edge\0Edge Seeker\0")) cancel(app);
+        ImGui::SameLine();
+        if (app.sel_freehand_type == 3) { ImGui::SetNextItemWidth(90); ImGui::SliderInt("Range", &app.sel_range, 1, 50); ImGui::SameLine(); }
+        ImGui::SetNextItemWidth(90);
+        ImGui::SliderInt("Smoothing", &app.sel_smoothing, 0, 100);
+        ImGui::SameLine();
+        draw_selection_common(app);
+        if (app.sel_freehand_type == 1 || app.sel_freehand_type == 2) { ImGui::SameLine(); ImGui::TextDisabled("Click to add points; double-click or Enter closes, Backspace removes"); }
+    }
+
+private:
+    std::pair<float, float> seek(const App& app, float x, float y) const {
+        if (app.sel_freehand_type == 3 && app.doc && !edges_.empty()) return mask::seek_edge(edges_, app.doc->width(), app.doc->height(), x, y, app.sel_range);
+        return {x, y};
+    }
+    void add_vertex(App& app, float x, float y) {
+        vertices_.emplace_back(x, y);
+        rebuild_points(app);
+    }
+    // Points along the polygon: the vertices, or edge-hugging paths between them.
+    void rebuild_points(App& app) {
+        pts_.clear();
+        if (app.sel_freehand_type == 2 && app.doc) {
+            for (size_t i = 0; i < vertices_.size(); ++i) {
+                if (i == 0) { pts_.push_back(vertices_[0]); continue; }
+                auto seg = mask::edge_path(edges_, app.doc->width(), app.doc->height(), vertices_[i - 1], vertices_[i]);
+                pts_.insert(pts_.end(), seg.begin() + (seg.empty() ? 0 : 1), seg.end());
+            }
+        } else {
+            pts_ = vertices_;
+        }
+    }
+    void close_polygon(App& app) {
+        if (!app.doc) { cancel(app); return; }
+        if (app.sel_freehand_type == 2 && vertices_.size() > 1) {
+            auto seg = mask::edge_path(edges_, app.doc->width(), app.doc->height(), vertices_.back(), vertices_.front());
+            pts_.insert(pts_.end(), seg.begin() + 1, seg.end());
+        }
+        polygon_open_ = false;
+        vertices_.clear(); live_.clear();
+        finish(app, app.sel_freehand_type == 2 ? "Smart Edge Selection" : "Point to Point Selection");
+    }
+    void finish(App& app, const char* label) {
         if (pts_.size() < 3) { pts_.clear(); app.select_none(); return; }
-        Mask shape = mask::polygon(app.doc->width(), app.doc->height(), pts_, app.sel_antialias);
+        std::vector<std::pair<float, float>> outline = app.sel_smoothing > 0 ? mask::smooth_polygon(pts_, app.sel_smoothing, true) : pts_;
+        Mask shape = mask::polygon(app.doc->width(), app.doc->height(), outline, app.sel_antialias);
         pts_.clear();
         const int saved = app.sel_mode;
         app.sel_mode = mode_;
-        app.apply_selection_gesture("Freehand Selection", std::move(shape));
+        app.apply_selection_gesture(label, std::move(shape));
         app.sel_mode = saved;
     }
-    void cancel(App&) override { pts_.clear(); }
-    void draw_overlay(App&, const ToolInput& in) override {
-        if (pts_.size() < 2) return;
-        for (size_t i = 0; i + 1 < pts_.size(); ++i) {
-            const ImVec2 a(in.origin.x + pts_[i].first * in.zoom, in.origin.y + pts_[i].second * in.zoom);
-            const ImVec2 b(in.origin.x + pts_[i + 1].first * in.zoom, in.origin.y + pts_[i + 1].second * in.zoom);
-            in.dl->AddLine(a, b, IM_COL32(0, 0, 0, 255), 3.0f);
-            in.dl->AddLine(a, b, IM_COL32(255, 255, 255, 255), 1.0f);
-        }
-    }
-    void draw_options(App& app) override { draw_selection_common(app); }
-
-private:
-    std::vector<std::pair<float, float>> pts_;
+    std::vector<std::pair<float, float>> pts_, vertices_, live_;
+    std::pair<float, float> live_target_{-1, -1};
+    std::vector<float> edges_;
+    bool polygon_open_ = false;
+    bool dragging_ = false;
     int mode_ = 0;
 };
 

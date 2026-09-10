@@ -69,6 +69,9 @@ docs/    notes on the original: command inventory, module mapping, FORMAT.md
   eraser paints the background color on it and clears alpha elsewhere.
 - **Selections are a `Mask` on the `Document`** (empty mask = none). Change
   it only through `SelectionCommand` (`App::set_selection`) so it is undoable.
+  The Selections menu, its Modify dialogs, Edit Selection mode and
+  float/defloat live in `app/src/ui/SelectionMenu.cpp`; the mask operations
+  behind them are in `core/include/firn/mask.h`.
   `LayerPixelCommand` clips its result to the selection automatically via
   `raster::apply_through_mask`; tools pass `&doc->selection()` as the clip to
   `raster::Stroke` / `raster::flood_fill`. New pixel commands get this for

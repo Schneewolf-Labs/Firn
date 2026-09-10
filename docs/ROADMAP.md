@@ -146,6 +146,13 @@ for. Ranked by value per effort; work top to bottom, tick as they land.
 - [x] The full Material Properties dialog (color, gradient, pattern, texture,
       swatches, foreground/background, lock)
 - [x] Thumbnails in the file dialog (lazy, two per frame, plus a preview pane)
+- [x] Freehand Selection types: Point to Point, Smart Edge, Edge Seeker, smoothing;
+      Selection tool shapes (square, rounded, circle, polygons, star, arrow)
+- [x] Selections menu completed: From Mask, From Vector Object, Matting (remove
+      black/white matte, defringe), Modify (inside/outside feather, unfeather,
+      specks and holes, color range, select similar, shape-based anti-alias,
+      smooth), Hide Marquee, Edit Selection, Promote Selection to Layer, Float, Defloat
+- [x] Right-click menu on layers (the Layers menu for that layer, plus View > Current Only / All)
 
 ## Dropped (not worth the effort for this port)
 

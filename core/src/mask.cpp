@@ -307,5 +307,232 @@ void morph(Mask& m, int r, bool grow) {
 void expand(Mask& m, int pixels) { morph(m, pixels, true); }
 void contract(Mask& m, int pixels) { morph(m, pixels, false); }
 
+
+// --- Selections > Modify ----------------------------------------------------
+
+void feather_inside(Mask& m, float radius) {
+    Mask soft = m;
+    feather(soft, radius);
+    for (size_t i = 0; i < m.size(); ++i) m.data()[i] = std::min(m.data()[i], soft.data()[i]);
+}
+
+void feather_outside(Mask& m, float radius) {
+    Mask soft = m;
+    feather(soft, radius);
+    for (size_t i = 0; i < m.size(); ++i) m.data()[i] = std::max(m.data()[i], soft.data()[i]);
+}
+
+void unfeather(Mask& m) {
+    for (size_t i = 0; i < m.size(); ++i) m.data()[i] = m.data()[i] >= 128 ? 255 : 0;
+}
+
+void smooth(Mask& m, int amount, bool preserve_corners) {
+    if (amount <= 0 || m.empty()) return;
+    Mask soft = m;
+    feather(soft, static_cast<float>(amount));
+    // Re-threshold around the middle with a short ramp so the edge stays
+    // anti-aliased; preserving corners keeps the original where the blur
+    // only pulled pixels inward at convex corners (min/max with the source).
+    for (size_t i = 0; i < m.size(); ++i) {
+        const int v = soft.data()[i];
+        const int band = 24;
+        int out = v <= 128 - band ? 0 : v >= 128 + band ? 255 : (v - (128 - band)) * 255 / (2 * band);
+        if (preserve_corners && m.data()[i] == 255 && v >= 96) out = 255;
+        m.data()[i] = static_cast<uint8_t>(out);
+    }
+}
+
+void shape_antialias(Mask& m, bool inside, bool outside) {
+    Mask soft = m;
+    feather(soft, 1.0f);
+    for (size_t i = 0; i < m.size(); ++i) {
+        const uint8_t a = m.data()[i], b = soft.data()[i];
+        m.data()[i] = inside && outside ? b : inside ? std::min(a, b) : outside ? std::max(a, b) : a;
+    }
+}
+
+void remove_specks_and_holes(Mask& m, int speck_size, int hole_size) {
+    if (m.empty()) return;
+    const int w = m.width(), h = m.height();
+    std::vector<int> label(static_cast<size_t>(w) * h, -1);
+    std::vector<int> area;
+    std::vector<int> stack;
+    for (int y = 0; y < h; ++y)
+        for (int x = 0; x < w; ++x) {
+            const size_t i = static_cast<size_t>(y) * w + x;
+            if (label[i] >= 0) continue;
+            const bool on = m.data()[i] >= 128;
+            const int id = static_cast<int>(area.size());
+            area.push_back(0);
+            label[i] = id;
+            stack.assign(1, static_cast<int>(i));
+            while (!stack.empty()) {
+                const int c = stack.back(); stack.pop_back();
+                ++area[id];
+                const int cx = c % w, cy = c / w;
+                const int nb[4][2] = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
+                for (const auto& d : nb) {
+                    const int nx = cx + d[0], ny = cy + d[1];
+                    if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+                    const size_t ni = static_cast<size_t>(ny) * w + nx;
+                    if (label[ni] >= 0 || (m.data()[ni] >= 128) != on) continue;
+                    label[ni] = id;
+                    stack.push_back(static_cast<int>(ni));
+                }
+            }
+        }
+    for (size_t i = 0; i < m.size(); ++i) {
+        const bool on = m.data()[i] >= 128;
+        const int a = area[label[i]];
+        if (on && a <= speck_size) m.data()[i] = 0;
+        else if (!on && a <= hole_size) m.data()[i] = 255;
+    }
+}
+
+Mask select_color_range(const Image& img, Color color, int tolerance, int softness) {
+    Mask out(img.width(), img.height(), 0);
+    const uint8_t* p = img.data();
+    for (size_t i = 0; i < out.size(); ++i) {
+        const int d = std::max({std::abs(p[i * 4] - color.r), std::abs(p[i * 4 + 1] - color.g), std::abs(p[i * 4 + 2] - color.b)});
+        int v = 0;
+        if (d <= tolerance) v = 255;
+        else if (softness > 0 && d < tolerance + softness) v = 255 - (d - tolerance) * 255 / softness;
+        out.data()[i] = static_cast<uint8_t>(v);
+    }
+    return out;
+}
+
+Mask select_similar(const Image& img, const Mask& selection, int tolerance) {
+    Mask out(img.width(), img.height(), 0);
+    if (selection.empty() || selection.width() != img.width() || selection.height() != img.height()) return out;
+    // Colors under the selection, quantized to 32 levels per channel, then
+    // grown by the tolerance so the lookup is one table read per pixel.
+    const int q = 32, step = 256 / q;
+    std::vector<uint8_t> grid(static_cast<size_t>(q) * q * q, 0);
+    const uint8_t* p = img.data();
+    for (size_t i = 0; i < out.size(); ++i)
+        if (selection.data()[i] >= 128) grid[(static_cast<size_t>(p[i * 4] / step) * q + p[i * 4 + 1] / step) * q + p[i * 4 + 2] / step] = 1;
+    const int r = (tolerance + step - 1) / step;
+    for (int axis = 0; axis < 3 && r > 0; ++axis) {
+        std::vector<uint8_t> next(grid.size(), 0);
+        for (int a = 0; a < q; ++a)
+            for (int b = 0; b < q; ++b)
+                for (int c = 0; c < q; ++c) {
+                    int on = 0;
+                    for (int k = -r; k <= r && !on; ++k) {
+                        int aa = a, bb = b, cc = c;
+                        (axis == 0 ? aa : axis == 1 ? bb : cc) += k;
+                        if (aa < 0 || bb < 0 || cc < 0 || aa >= q || bb >= q || cc >= q) continue;
+                        on = grid[(static_cast<size_t>(aa) * q + bb) * q + cc];
+                    }
+                    next[(static_cast<size_t>(a) * q + b) * q + c] = static_cast<uint8_t>(on);
+                }
+        grid.swap(next);
+    }
+    for (size_t i = 0; i < out.size(); ++i)
+        if (grid[(static_cast<size_t>(p[i * 4] / step) * q + p[i * 4 + 1] / step) * q + p[i * 4 + 2] / step]) out.data()[i] = 255;
+    return out;
+}
+
+// --- Edge helpers -----------------------------------------------------------
+
+std::vector<float> edge_map(const Image& img) {
+    const int w = img.width(), h = img.height();
+    std::vector<float> luma(static_cast<size_t>(w) * h), out(static_cast<size_t>(w) * h, 0.0f);
+    const uint8_t* p = img.data();
+    for (size_t i = 0; i < luma.size(); ++i) luma[i] = (0.299f * p[i * 4] + 0.587f * p[i * 4 + 1] + 0.114f * p[i * 4 + 2]) / 255.0f;
+    auto L = [&](int x, int y) { return luma[static_cast<size_t>(std::clamp(y, 0, h - 1)) * w + std::clamp(x, 0, w - 1)]; };
+    float peak = 1e-6f;
+    for (int y = 0; y < h; ++y)
+        for (int x = 0; x < w; ++x) {
+            const float gx = (L(x + 1, y - 1) + 2 * L(x + 1, y) + L(x + 1, y + 1)) - (L(x - 1, y - 1) + 2 * L(x - 1, y) + L(x - 1, y + 1));
+            const float gy = (L(x - 1, y + 1) + 2 * L(x, y + 1) + L(x + 1, y + 1)) - (L(x - 1, y - 1) + 2 * L(x, y - 1) + L(x + 1, y - 1));
+            const float g = std::sqrt(gx * gx + gy * gy);
+            out[static_cast<size_t>(y) * w + x] = g;
+            peak = std::max(peak, g);
+        }
+    for (float& v : out) v /= peak;
+    return out;
+}
+
+std::pair<float, float> seek_edge(const std::vector<float>& edges, int w, int h, float x, float y, int range) {
+    const int cx = static_cast<int>(std::floor(x)), cy = static_cast<int>(std::floor(y));
+    float best = -1.0f;
+    std::pair<float, float> at{x, y};
+    for (int dy = -range; dy <= range; ++dy)
+        for (int dx = -range; dx <= range; ++dx) {
+            const int px = cx + dx, py = cy + dy;
+            if (px < 0 || py < 0 || px >= w || py >= h || dx * dx + dy * dy > range * range) continue;
+            // Prefer strong edges, then nearer ones.
+            const float score = edges[static_cast<size_t>(py) * w + px] - 0.002f * (dx * dx + dy * dy);
+            if (score > best) { best = score; at = {px + 0.5f, py + 0.5f}; }
+        }
+    return best > 0.05f ? at : std::pair<float, float>{x, y};
+}
+
+std::vector<std::pair<float, float>> edge_path(const std::vector<float>& edges, int w, int h, std::pair<float, float> a, std::pair<float, float> b) {
+    std::vector<std::pair<float, float>> out;
+    const int ax = std::clamp(static_cast<int>(a.first), 0, w - 1), ay = std::clamp(static_cast<int>(a.second), 0, h - 1);
+    const int bx = std::clamp(static_cast<int>(b.first), 0, w - 1), by = std::clamp(static_cast<int>(b.second), 0, h - 1);
+    // Corridor: the segment's bounding box grown by a margin.
+    const int margin = std::max(8, static_cast<int>(std::hypot(bx - ax, by - ay) * 0.5f));
+    const int x0 = std::max(0, std::min(ax, bx) - margin), y0 = std::max(0, std::min(ay, by) - margin);
+    const int x1 = std::min(w - 1, std::max(ax, bx) + margin), y1 = std::min(h - 1, std::max(ay, by) + margin);
+    const int cw = x1 - x0 + 1, ch = y1 - y0 + 1;
+    const float inf = 1e30f;
+    std::vector<float> dist(static_cast<size_t>(cw) * ch, inf);
+    std::vector<int> prev(dist.size(), -1);
+    std::vector<uint8_t> done(dist.size(), 0);
+    auto idx = [&](int x, int y) { return static_cast<size_t>(y - y0) * cw + (x - x0); };
+    // Simple binary heap over (cost, index).
+    std::vector<std::pair<float, int>> heap;
+    auto push = [&](float c, int i) { heap.emplace_back(c, i); std::push_heap(heap.begin(), heap.end(), [](const auto& l, const auto& r) { return l.first > r.first; }); };
+    dist[idx(ax, ay)] = 0.0f;
+    push(0.0f, static_cast<int>(idx(ax, ay)));
+    const int target = static_cast<int>(idx(bx, by));
+    while (!heap.empty()) {
+        std::pop_heap(heap.begin(), heap.end(), [](const auto& l, const auto& r) { return l.first > r.first; });
+        const auto [c, i] = heap.back(); heap.pop_back();
+        if (done[i]) continue;
+        done[i] = 1;
+        if (i == target) break;
+        const int cx = x0 + i % cw, cy = y0 + i / cw;
+        for (int dy = -1; dy <= 1; ++dy)
+            for (int dx = -1; dx <= 1; ++dx) {
+                if (!dx && !dy) continue;
+                const int nx = cx + dx, ny = cy + dy;
+                if (nx < x0 || ny < y0 || nx > x1 || ny > y1) continue;
+                const size_t ni = idx(nx, ny);
+                if (done[ni]) continue;
+                const float step = (dx && dy) ? 1.4142f : 1.0f;
+                const float cost = c + step * (1.05f - edges[static_cast<size_t>(ny) * w + nx]);
+                if (cost < dist[ni]) { dist[ni] = cost; prev[ni] = i; push(cost, static_cast<int>(ni)); }
+            }
+    }
+    if (dist[target] >= inf) { out.push_back(a); out.push_back(b); return out; }
+    for (int i = target; i >= 0; i = prev[i]) out.emplace_back(x0 + i % cw + 0.5f, y0 + i / cw + 0.5f);
+    std::reverse(out.begin(), out.end());
+    return out;
+}
+
+std::vector<std::pair<float, float>> smooth_polygon(const std::vector<std::pair<float, float>>& pts, int amount, bool closed) {
+    const int n = static_cast<int>(pts.size());
+    const int win = std::clamp(amount, 0, 100) / 10;
+    if (win <= 0 || n < 3) return pts;
+    std::vector<std::pair<float, float>> out(pts.size());
+    for (int i = 0; i < n; ++i) {
+        float sx = 0, sy = 0; int cnt = 0;
+        for (int k = -win; k <= win; ++k) {
+            int j = i + k;
+            if (closed) j = (j % n + n) % n;
+            else if (j < 0 || j >= n) continue;
+            sx += pts[j].first; sy += pts[j].second; ++cnt;
+        }
+        out[i] = {sx / cnt, sy / cnt};
+    }
+    if (!closed) { out.front() = pts.front(); out.back() = pts.back(); }
+    return out;
+}
+
 }  // namespace mask
 }  // namespace firn

@@ -320,6 +320,12 @@ void Driver::before_frame(App& app, SDL_Window* window) {
                 const std::string& n = s.text;
                 const float v = s.x;
                 if (n == "material_dialog") app.open_material_dialog(v < 2);   // 1 foreground, 2 background
+                else if (n == "sel_type") app.sel_freehand_type = static_cast<int>(v);
+                else if (n == "sel_shape") app.sel_shape = static_cast<int>(v);
+                else if (n == "sel_range") app.sel_range = static_cast<int>(v);
+                else if (n == "sel_smoothing") app.sel_smoothing = static_cast<int>(v);
+                else if (n == "sel_dialog") app.show_sel_dialog = static_cast<int>(v);
+                else if (n == "selection_edit") app.set_selection_edit(v != 0);
                 else if (n == "material_kind") { app.fg_material.kind = static_cast<int>(v); if (v == 1) { app.fg_material.gradient_index = -1; } }
                 else if (n == "material_gradient") { app.ensure_gradients(); const int i = static_cast<int>(v); if (i >= 0 && i < static_cast<int>(app.gradient_library.size())) { app.fg_material.kind = 1; app.fg_material.gradient_index = i; app.fg_material.gradient = app.gradient_library[i]; } }
                 else if (n == "material_texture") { const int i = static_cast<int>(v); app.fg_material.texture = app.texture_image(i); app.fg_material.texture_index = i; app.fg_material.texture_on = app.fg_material.texture != nullptr; }
