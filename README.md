@@ -186,3 +186,10 @@ layers, selections, adjustments, effects, and materials); results such as
 `ReturnImageInfo` come back as dicts. `App.Constants.X.Y` evaluates to the
 value's name. Windows-only modules used by a few bundled scripts are not
 available.
+
+## License
+
+Firn is released under the Apache License 2.0; see `LICENSE`. It bundles
+Dear ImGui (MIT) and the stb libraries (public domain / MIT), and links
+SDL2 (zlib). It is an independent reimplementation and is not affiliated
+with the original program's publishers.

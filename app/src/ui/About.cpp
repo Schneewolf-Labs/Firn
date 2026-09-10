@@ -74,7 +74,7 @@ void App::draw_about_dialog() {
     ImGui::Text("Version %s", kFirnVersion);
     ImGui::Text("Commit %s%s%s", kFirnCommit, kFirnBranch[0] ? " on " : "", kFirnBranch);
     ImGui::Text("Built %s with %s", kFirnBuildDate, compiler());
-    ImGui::TextDisabled("A Schneewolf Labs project");
+    ImGui::TextDisabled("A Schneewolf Labs project, Apache License 2.0");
     ImGui::EndGroup();
     ImGui::Separator();
     SDL_version linked;

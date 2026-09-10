@@ -6,6 +6,9 @@ section into the next version.
 
 ## Unreleased
 
+### Added
+- Apache License 2.0.
+
 ## 0.1.0 (2026-09-10)
 
 ### Added
