@@ -833,7 +833,27 @@ std::string creator_description(const Reader& r, const Block& b) {
     return {};
 }
 
-void apply_firn_stash(const Reader& r, const Block& creator, Document& doc) {
+// The stash names a layer by index and by name. The index is only trusted
+// when the name at it agrees: another program (or an older Firn) may have
+// reordered or removed layers since, and restoring a filter or a style onto
+// the wrong layer is worse than dropping it.
+int stash_layer(const Document& doc, const json::Value& entry, std::vector<std::string>* warnings) {
+    const int idx = static_cast<int>(entry.get("layer").as_number(-1));
+    const std::string name = entry.get("name").as_string();
+    const bool in_range = idx >= 0 && idx < static_cast<int>(doc.layer_count());
+    if (in_range && (name.empty() || doc.layer(idx).name == name)) return idx;
+    int found = -1;
+    for (size_t i = 0; i < doc.layer_count(); ++i) {
+        if (doc.layer(i).name != name) continue;
+        if (found >= 0) { found = -2; break; }   // more than one candidate
+        found = static_cast<int>(i);
+    }
+    if (found >= 0) return found;
+    if (warnings) warnings->push_back("Layer \"" + name + "\" is not where the file said, so its Firn-only settings were dropped");
+    return -1;
+}
+
+void apply_firn_stash(const Reader& r, const Block& creator, Document& doc, std::vector<std::string>* warnings) {
     const std::string text = creator_description(r, creator);
     if (text.empty() || text[0] != '{') return;
     json::Value v;
@@ -841,8 +861,8 @@ void apply_firn_stash(const Reader& r, const Block& creator, Document& doc) {
     const json::Value& filters = v.get("filters");
     for (size_t i = 0; i < filters.size(); ++i) {
         const json::Value& f = filters[i];
-        const int idx = static_cast<int>(f.get("layer").as_number(-1));
-        if (idx < 0 || idx >= static_cast<int>(doc.layer_count()) || !doc.layer(idx).is_raster()) continue;
+        const int idx = stash_layer(doc, f, warnings);
+        if (idx < 0 || !doc.layer(idx).is_raster()) continue;
         Layer& L = doc.layer(idx);
         L.type = LayerType::Adjustment;
         L.pixels = Image();
@@ -859,8 +879,8 @@ void apply_firn_stash(const Reader& r, const Block& creator, Document& doc) {
     const json::Value& styles = v.get("styles");
     for (size_t i = 0; i < styles.size(); ++i) {
         const json::Value& e = styles[i];
-        const int idx = static_cast<int>(e.get("layer").as_number(-1));
-        if (idx < 0 || idx >= static_cast<int>(doc.layer_count())) continue;
+        const int idx = stash_layer(doc, e, warnings);
+        if (idx < 0) continue;
         doc.layer(idx).style = LayerStyle::from_json(e.get("style"));
     }
     doc.touch();
@@ -874,6 +894,7 @@ std::string firn_stash(const Document& doc) {
         const Adjustment& a = L.adjustment;
         json::Value f = json::Value::object();
         f.set("layer", json::Value::number(static_cast<double>(i)));
+        f.set("name", json::Value::string(L.name));
         f.set("kind", json::Value::number(static_cast<int>(a.kind)));
         f.set("blur_radius", json::Value::number(a.blur_radius));
         f.set("average_radius", json::Value::number(a.average_radius));
@@ -888,6 +909,7 @@ std::string firn_stash(const Document& doc) {
         if (!L.style.any()) continue;
         json::Value e = json::Value::object();
         e.set("layer", json::Value::number(static_cast<double>(i)));
+        e.set("name", json::Value::string(L.name));
         e.set("style", L.style.to_json());
         styles.push(std::move(e));
     }
@@ -986,7 +1008,7 @@ std::unique_ptr<Document> load_psp_from_memory(const uint8_t* data, size_t size,
             }
             if (layers.size() != doc->layer_count()) doc->replace_layers(layers, 0);
         }
-        if (creator) apply_firn_stash(r, *creator, *doc);
+        if (creator) apply_firn_stash(r, *creator, *doc, warnings);
     }
     if (doc->layer_count() == 0) {
         if (composite_bank && read_composite(r, *composite_bank, hdr, have_palette ? &pal : nullptr, *doc, e)) {

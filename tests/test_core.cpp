@@ -1390,6 +1390,52 @@ static void test_zip() {
     CHECK(std::memcmp(bytes.data() + 30, "mimetype", 8) == 0 && bytes[8] == 0 && std::memcmp(bytes.data() + 38, "abc", 3) == 0);
 }
 
+// The classic format's Firn stash names layers by index and by name; the
+// index is only trusted when the name agrees, so a file whose layers moved
+// cannot restore a filter or a style onto the wrong layer.
+static void test_firn_stash_resolution() {
+    Document doc(24, 16);
+    doc.add_layer("Background").background = true;
+    doc.layer(0).pixels.fill({10, 20, 30, 255});
+    Layer& blur = doc.add_layer("Blur");
+    blur.type = LayerType::Adjustment;
+    blur.adjustment.kind = Adjustment::Kind::GaussianBlur;
+    blur.adjustment.blur_radius = 4.0f;
+    Layer& top = doc.add_layer("Top");
+    top.pixels = Image(24, 16, {0, 0, 0, 0});
+    top.style.drop_shadow = true;
+    std::vector<uint8_t> bytes = io::save_psp_to_memory(doc);
+
+    // Patch the stash's indices out of range, keeping the byte length: the
+    // reader must fall back to the names (what a reordered file looks like).
+    auto patch = [&](std::vector<uint8_t>& data, const std::string& from, const std::string& to) {
+        CHECK(from.size() == to.size());
+        const auto it = std::search(data.begin(), data.end(), from.begin(), from.end());
+        CHECK(it != data.end());
+        std::copy(to.begin(), to.end(), it);
+    };
+    std::vector<uint8_t> moved = bytes;
+    patch(moved, "\"layer\":1", "\"layer\":7");
+    patch(moved, "\"layer\":2", "\"layer\":8");
+    std::string err;
+    std::vector<std::string> warnings;
+    auto back = io::load_psp_from_memory(moved.data(), moved.size(), &err, &warnings);
+    CHECK(back && back->layer_count() == 3 && warnings.empty());
+    CHECK(back->layer(1).name == "Blur" && back->layer(1).is_adjustment() && std::abs(back->layer(1).adjustment.blur_radius - 4.0f) < 1e-4f);
+    CHECK(back->layer(2).name == "Top" && back->layer(2).style.drop_shadow);
+    CHECK(!back->layer(0).is_adjustment() && !back->layer(0).style.any());
+
+    // A name that no longer exists: the entry is dropped with a warning and
+    // the placeholder stays an ordinary layer, rather than landing anywhere.
+    std::vector<uint8_t> gone = moved;
+    patch(gone, "\"name\":\"Blur\"", "\"name\":\"Blue\"");
+    warnings.clear();
+    auto back2 = io::load_psp_from_memory(gone.data(), gone.size(), &err, &warnings);
+    CHECK(back2 && back2->layer_count() == 3 && warnings.size() == 1);
+    CHECK(back2->layer(1).name == "Blur" && !back2->layer(1).is_adjustment());
+    CHECK(back2->layer(2).style.drop_shadow);   // the entry that still matches is kept
+}
+
 static void test_openraster() {
     // A document using everything: background, a 16-bit layer, a masked
     // group with two members, a vector layer, an adjustment layer, a filter
@@ -2510,6 +2556,7 @@ int main() {
     test_layer_styles();
     test_zip();
     test_openraster();
+    test_firn_stash_resolution();
     test_vector_core();
     test_history_limit();
     test_brush_texture();
