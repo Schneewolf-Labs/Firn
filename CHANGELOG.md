@@ -16,6 +16,11 @@ section into the next version.
 - HiDPI: the UI follows the display's scale factor (drawable ratio on
   macOS and Wayland, DPI on Windows, GDK_SCALE / QT_SCALE_FACTOR / Xft.dpi
   on X11), with a UI scale setting in Preferences and FIRN_UI_SCALE to force it.
+- Heal Brush: a clone whose texture is blended into the target's colors
+  (seamless clone per stamp), next to the Clone Brush.
+- Brush smoothing in Tool Options: Basic (averaged points), Weighted
+  (inertia) and Stabilizer (the brush trails the cursor on a string).
+- Adjust > Color to Alpha: a chosen color becomes transparency.
 - Pen tablets: pressure drives the brush size and/or opacity (Tool
   Options), the eraser end switches to the Eraser tool and back, tilt is
   read where reported. XInput2 on X11, pointer messages on Windows, tablet

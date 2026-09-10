@@ -109,6 +109,7 @@ void Stroke::stamp(float cx, float cy) {
             m = brush_.accumulate ? std::min(1.0f, m + cov * brush_.flow) : std::max(m, cov);
         }
     }
+    if (mode_ == StrokeMode::Heal) heal_box(box);
     pending_ = pending_.united(box);
 }
 
@@ -144,7 +145,105 @@ void Stroke::stamp_tip(float cx, float cy) {
             float& m = mask_[static_cast<size_t>(y) * w + x];
             m = brush_.accumulate ? std::min(1.0f, m + cov * brush_.flow) : std::max(m, cov);
         }
+    if (mode_ == StrokeMode::Heal) heal_box(box);
     pending_ = pending_.united(box);
+}
+
+// Heal: the stamp's box gets seamless-clone pixels computed against the
+// untouched base, kept in heal_ for render() to composite by coverage.
+void Stroke::heal_box(const Rect& box) {
+    if (!clone_) return;
+    if (heal_.empty()) heal_ = base_;
+    // Widen by one so the ring around the coverage supplies the boundary.
+    const Rect padded = Rect{box.x0 - 1, box.y0 - 1, box.x1 + 1, box.y1 + 1}.clipped(base_.width(), base_.height());
+    heal(heal_, *clone_, clone_ox_, clone_oy_, mask_, padded);
+}
+
+void heal(Image& dst, const Image& src, int ox, int oy, const std::vector<float>& region, const Rect& box) {
+    const int w = dst.width(), h = dst.height();
+    const Rect r = box.clipped(w, h);
+    if (r.empty()) return;
+    const int bw = r.x1 - r.x0, bh = r.y1 - r.y0;
+    // D = target - source, known on the rim (region == 0), solved inside.
+    std::vector<float> d(static_cast<size_t>(bw) * bh * 3, 0.0f);
+    std::vector<uint8_t> inside(static_cast<size_t>(bw) * bh, 0), known(inside.size(), 0);
+    auto src_at = [&](int x, int y, int c) -> float {
+        const int sx = std::clamp(x + ox, 0, src.width() - 1), sy = std::clamp(y + oy, 0, src.height() - 1);
+        return src.data()[(static_cast<size_t>(sy) * src.width() + sx) * 4 + c];
+    };
+    for (int y = 0; y < bh; ++y)
+        for (int x = 0; x < bw; ++x) {
+            const int gx = r.x0 + x, gy = r.y0 + y;
+            const size_t gi = static_cast<size_t>(gy) * w + gx, li = static_cast<size_t>(y) * bw + x;
+            const bool in = region[gi] > 0.0f;
+            inside[li] = in;
+            // Pixels the stroke does not cover hold the boundary values.
+            if (!in) {
+                known[li] = 1;
+                for (int c = 0; c < 3; ++c) d[li * 3 + c] = dst.data()[gi * 4 + c] - src_at(gx, gy, c);
+            }
+        }
+    // Interior starts from the mean of the boundary difference, then Gauss-Seidel with over-relaxation.
+    float mean[3] = {0, 0, 0}; int nk = 0;
+    for (size_t i = 0; i < known.size(); ++i) if (known[i]) { for (int c = 0; c < 3; ++c) mean[c] += d[i * 3 + c]; ++nk; }
+    if (nk) for (float& m : mean) m /= static_cast<float>(nk);
+    for (size_t i = 0; i < inside.size(); ++i) if (inside[i]) for (int c = 0; c < 3; ++c) d[i * 3 + c] = mean[c];
+    const float omega = 1.8f;
+    const int max_iter = std::clamp(bw * bh / 4, 40, 600);
+    for (int it = 0; it < max_iter; ++it) {
+        float residual = 0.0f;
+        for (int parity = 0; parity < 2; ++parity)
+            for (int y = 0; y < bh; ++y)
+                for (int x = (y + parity) & 1; x < bw; x += 2) {
+                    const size_t li = static_cast<size_t>(y) * bw + x;
+                    if (!inside[li]) continue;
+                    for (int c = 0; c < 3; ++c) {
+                        float sum = 0.0f; int n = 0;
+                        auto tap = [&](int nx, int ny) { if (nx < 0 || ny < 0 || nx >= bw || ny >= bh) return; sum += d[(static_cast<size_t>(ny) * bw + nx) * 3 + c]; ++n; };
+                        tap(x - 1, y); tap(x + 1, y); tap(x, y - 1); tap(x, y + 1);
+                        if (!n) continue;
+                        const float target = sum / static_cast<float>(n);
+                        const float delta = target - d[li * 3 + c];
+                        d[li * 3 + c] += omega * delta;
+                        residual += delta * delta;
+                    }
+                }
+        if (residual < 0.01f * static_cast<float>(bw * bh)) break;
+    }
+    for (int y = 0; y < bh; ++y)
+        for (int x = 0; x < bw; ++x) {
+            const size_t li = static_cast<size_t>(y) * bw + x;
+            if (!inside[li]) continue;
+            const int gx = r.x0 + x, gy = r.y0 + y;
+            const size_t gi = static_cast<size_t>(gy) * w + gx;
+            for (int c = 0; c < 3; ++c) dst.data()[gi * 4 + c] = static_cast<uint8_t>(std::clamp(src_at(gx, gy, c) + d[li * 3 + c], 0.0f, 255.0f) + 0.5f);
+            dst.data()[gi * 4 + 3] = static_cast<uint8_t>(std::clamp(src_at(gx, gy, 3), 0.0f, 255.0f));
+        }
+}
+
+void color_to_alpha(Image& img, Color color, float transparency_threshold, float opacity_threshold) {
+    const float c[3] = {color.r / 255.0f, color.g / 255.0f, color.b / 255.0f};
+    const float t0 = std::clamp(transparency_threshold, 0.0f, 1.0f), t1 = std::clamp(opacity_threshold, t0 + 1e-4f, 1.0f);
+    uint8_t* p = img.data();
+    for (size_t i = 0; i < img.size_bytes(); i += 4) {
+        float v[3] = {p[i] / 255.0f, p[i + 1] / 255.0f, p[i + 2] / 255.0f};
+        // How far each channel sits from the reference color, as a fraction of
+        // the room it has on that side; the largest fraction is the alpha needed.
+        float a = 0.0f;
+        for (int k = 0; k < 3; ++k) {
+            float r = 0.0f;
+            if (v[k] > c[k]) r = (1.0f - c[k]) > 1e-6f ? (v[k] - c[k]) / (1.0f - c[k]) : 1.0f;
+            else if (v[k] < c[k]) r = c[k] > 1e-6f ? (c[k] - v[k]) / c[k] : 1.0f;
+            a = std::max(a, r);
+        }
+        float alpha = a <= t0 ? 0.0f : a >= t1 ? 1.0f : (a - t0) / (t1 - t0);
+        if (alpha <= 0.0f) { p[i + 3] = 0; continue; }
+        for (int k = 0; k < 3; ++k) {
+            const float q = (v[k] - c[k]) / alpha + c[k];
+            p[i + k] = static_cast<uint8_t>(std::clamp(q, 0.0f, 1.0f) * 255.0f + 0.5f);
+        }
+        p[i + 3] = static_cast<uint8_t>(std::clamp(alpha * (p[i + 3] / 255.0f), 0.0f, 1.0f) * 255.0f + 0.5f);
+    }
 }
 
 void Stroke::add_point(float x, float y, float pressure) {
@@ -195,6 +294,8 @@ Rect Stroke::render(Image& dst) {
             if (mode_ == StrokeMode::Erase) {
                 std::memcpy(d, b, 3);
                 d[3] = static_cast<uint8_t>(b[3] * (1.0f - m) + 0.5f);
+            } else if (mode_ == StrokeMode::Heal) {
+                if (!heal_.empty()) blend_over(dst, x, y, heal_.get(x, y), m);
             } else if (mode_ == StrokeMode::Clone) {
                 std::memcpy(d, b, 4);
                 const int sx = x + clone_ox_, sy = y + clone_oy_;

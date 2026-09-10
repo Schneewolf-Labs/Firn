@@ -50,7 +50,7 @@ struct Brush {
 
 // Paint: color. Erase: clear alpha. Clone: pixels from a source image at an
 // offset. Filter: a per-pixel function of the existing pixel (retouch tools).
-enum class StrokeMode { Paint, Erase, Clone, Filter };
+enum class StrokeMode { Paint, Erase, Clone, Filter, Heal };
 
 // A brush stroke in progress. Same semantics as the original: opacity is per stroke, so
 // overlapping stamps do not build up. Coverage accumulates as max() into a
@@ -70,7 +70,8 @@ public:
     void set_pressure_response(bool size, bool opacity) { pressure_size_ = size; pressure_alpha_ = opacity; }
 
     // Clone source: `src` must outlive the stroke; a destination pixel (x, y)
-    // takes src(x + ox, y + oy).
+    // takes src(x + ox, y + oy). Heal uses the same source but blends its
+    // texture into the target's colors (a seamless clone per stamp).
     void set_clone_source(const Image* src, int ox, int oy) { clone_ = src; clone_ox_ = ox; clone_oy_ = oy; }
     void set_filter(std::function<Color(Color)> f) { filter_ = std::move(f); }
     // Filter with access to the untouched base image around the pixel.
@@ -103,7 +104,20 @@ private:
     bool pressure_size_ = false, pressure_alpha_ = false;
     float size_scale_ = 1.0f, alpha_scale_ = 1.0f;   // from the current pressure
     void apply_pressure(float p);
+    Image heal_;                 // healed pixels per stamp box (Heal mode)
+    void heal_box(const Rect& box);
 };
+
+// Seamless clone: fills `dst` inside `region` (coverage > 0) with `src`'s
+// texture bent to match `dst`'s colors at the region's edge, by solving
+// Laplace's equation for the difference image (the classic heal). `src`
+// is sampled at (x + ox, y + oy). Only pixels within `box` are touched.
+void heal(Image& dst, const Image& src, int ox, int oy, const std::vector<float>& region, const Rect& box);
+
+// Turns `color` into transparency: pixels at the color become clear, others
+// keep the part of their color the reference cannot explain, unpremultiplied.
+// Between the thresholds (0..1 on the extracted alpha) the result ramps.
+void color_to_alpha(Image& img, Color color, float transparency_threshold = 0.0f, float opacity_threshold = 1.0f);
 
 // 4-connected flood fill from (x,y). Pixels whose max channel difference to
 // the seed is <= tolerance are filled with `color` composited at `opacity`.

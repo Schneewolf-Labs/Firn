@@ -15,6 +15,9 @@ and maps its module layout onto this repo.
   CMake options `FIRN_BUILD_APP` / `FIRN_BUILD_TESTS`, env var `FIRN_WINDOW`.
 - `WindowsInstall/` is a gitignored backup of the original install, kept only
   as a reverse-engineering reference. Never build against it or copy from it.
+- `reference/` holds gitignored shallow clones of GIMP and Krita (GPL) for
+  studying designs. Never copy code from them: Firn is Apache-2.0, so every
+  feature inspired by them is written independently from the idea.
 
 ## Build and test
 

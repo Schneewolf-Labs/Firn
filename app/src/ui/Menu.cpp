@@ -160,6 +160,8 @@ void App::draw_menu() {
         ImGui::EndMenu();
     }
     if (ImGui::BeginMenu("Adjust")) {
+        if (ImGui::MenuItem("Color to Alpha...", nullptr, false, has_layer)) open_adjust = Adj::ColorToAlpha;
+        ImGui::Separator();
         if (ImGui::BeginMenu("Brightness and Contrast", has_layer)) {
             if (ImGui::MenuItem("Brightness/Contrast...")) open_adjust = Adj::BrightnessContrast;
             if (ImGui::MenuItem("Curves...")) open_adjust = Adj::Curves;

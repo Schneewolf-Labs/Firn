@@ -176,7 +176,9 @@ struct App {
                      AgedNewspaper, BallsBubbles, ColoredEdges, ColoredFoil, Contours, Enamel, GlowingEdges, HotWax,
                      MagnifyingLens, NeonGlow, Topography, Lights, Blinds, FineLeather, RoughLeather, Fur, MosaicAntique,
                      MosaicGlass, PolishedStone, Sandstone, Sculpture, SoftPlastic, StrawWall, Texture, Tiles, Weave,
-                     BlackPencil, BrushStrokes, Charcoal, ColoredChalk, ColoredPencil, Pencil, UserFilter };
+                     BlackPencil, BrushStrokes, Charcoal, ColoredChalk, ColoredPencil, Pencil, UserFilter, ColorToAlpha };
+    float cta_color[3] = {1.0f, 1.0f, 1.0f};
+    float cta_transparency = 0.0f, cta_opacity = 1.0f;
     Adj open_adjust = Adj::None;
     static int adjust_count();
     static const char* adjust_title(int i);
@@ -269,6 +271,8 @@ struct App {
     // Pen tablet (app/src/Tablet.cpp): pressure, tilt, eraser tip.
     PenState pen;
     bool pen_size = true, pen_opacity = false;   // what pressure drives (Config)
+    int smooth_mode = 0;                          // brush stroke smoothing: 0 none, 1 basic, 2 weighted, 3 stabilizer
+    float smooth_amount = 30.0f;
     int pen_prev_tool = -1;                      // tool to restore when the eraser tip lifts
     void pen_tick();                             // per frame: presence timeout, eraser tip switching
     // Autosave and recovery (app/src/Autosave.cpp)

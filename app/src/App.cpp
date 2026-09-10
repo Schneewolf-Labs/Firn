@@ -39,6 +39,7 @@ void App::apply_config() {
     }
     image_windows = config.image_windows;
     pen_size = config.pen_size; pen_opacity = config.pen_opacity;
+    smooth_mode = config.smooth_mode; smooth_amount = config.smooth_amount;
     apply_theme(config.theme);
     // Library folders may have changed: rescan on next use.
     tubes_loaded = brush_tips_loaded = textures_loaded = false;

@@ -230,7 +230,7 @@ static const char* kTitles[] = {nullptr, "Brightness/Contrast", "Curves", "Gamma
                                     "Blinds", "Fine Leather", "Rough Leather", "Fur", "Mosaic - Antique", "Mosaic - Glass",
                                     "Polished Stone", "Sandstone", "Sculpture", "Soft Plastic", "Straw Wall", "Texture", "Tiles",
                                     "Weave", "Black Pencil", "Brush Strokes", "Charcoal", "Colored Chalk", "Colored Pencil", "Pencil",
-                                    "User Defined Filter"};
+                                    "User Defined Filter", "Color to Alpha"};
 
 effects::Edge App::edge_setting() const {
     return effects::Edge{edge_mode, Color{static_cast<uint8_t>(edge_color[0] * 255 + 0.5f), static_cast<uint8_t>(edge_color[1] * 255 + 0.5f), static_cast<uint8_t>(edge_color[2] * 255 + 0.5f), 255}};
@@ -260,6 +260,20 @@ void App::draw_adjust_dialogs() {
         [&] { bool c = ImGui::SliderInt("Brightness", &bc_brightness, -255, 255); c |= ImGui::SliderInt("Contrast", &bc_contrast, -100, 100); return c; },
         [&](Image& img) { adjust::apply_lut(img, adjust::brightness_contrast_lut(bc_brightness, bc_contrast)); },
         [&](Image16& img) { raster16::brightness_contrast(img, bc_brightness, bc_contrast); });
+
+    adjust_modal(*this, "Color to Alpha",
+        [&] {
+            bool c = ImGui::ColorEdit3("Color", cta_color);
+            ImGui::SameLine();
+            if (ImGui::SmallButton("Background")) { for (int i = 0; i < 3; ++i) cta_color[i] = bg_color[i]; c = true; }
+            ImGui::SameLine();
+            if (ImGui::SmallButton("Foreground")) { for (int i = 0; i < 3; ++i) cta_color[i] = fg_color[i]; c = true; }
+            c |= ImGui::SliderFloat("Transparency threshold", &cta_transparency, 0.0f, 1.0f, "%.2f");
+            c |= ImGui::SliderFloat("Opacity threshold", &cta_opacity, 0.0f, 1.0f, "%.2f");
+            ImGui::TextDisabled("The color becomes transparent; other pixels keep what the color cannot explain.");
+            return c;
+        },
+        [&](Image& img) { raster::color_to_alpha(img, float_rgb(cta_color), cta_transparency, cta_opacity); });
 
     adjust_modal(*this, "Curves",
         [&] {

@@ -154,6 +154,9 @@ void draw_tool_icon(ImDrawList* dl, const char* name, ImVec2 p, float size, ImU3
     } else if (is("Clone Brush")) {
         g.rect(0.12f, 0.12f, 0.6f, 0.6f, 0.08f);
         g.fill_rect(0.4f, 0.4f, 0.88f, 0.88f, 0.08f);
+    } else if (is("Heal Brush")) {
+        g.circle(0.5f, 0.5f, 0.36f);
+        g.line(0.5f, 0.28f, 0.5f, 0.72f); g.line(0.28f, 0.5f, 0.72f, 0.5f);
     } else if (is("Scratch Remover")) {
         ImVec2 pts[4] = {g.at(0.12f, 0.62f), g.at(0.62f, 0.12f), g.at(0.88f, 0.38f), g.at(0.38f, 0.88f)};
         dl->AddPolyline(pts, 4, col, ImDrawFlags_Closed, g.th);

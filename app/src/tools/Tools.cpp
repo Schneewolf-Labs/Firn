@@ -82,12 +82,12 @@ private:
 
 class BrushTool : public Tool {
 public:
-    enum class Kind { Paint, Eraser, Airbrush, Clone, LightenDarken, DodgeBurn, Saturation, Hue, ColorReplacer, Soften, Sharpen };
+    enum class Kind { Paint, Eraser, Airbrush, Clone, LightenDarken, DodgeBurn, Saturation, Hue, ColorReplacer, Soften, Sharpen, Heal };
     const char* category() const override {
         switch (kind_) {
             case Kind::Paint: case Kind::Airbrush: return "Paint";
             case Kind::Eraser: return "Erase";
-            case Kind::Clone: case Kind::ColorReplacer: return "Clone and Replace";
+            case Kind::Clone: case Kind::Heal: case Kind::ColorReplacer: return "Clone and Replace";
             default: return "Retouch";
         }
     }
@@ -99,6 +99,7 @@ public:
             case Kind::Eraser: return "Eraser";
             case Kind::Airbrush: return "Airbrush";
             case Kind::Clone: return "Clone Brush";
+            case Kind::Heal: return "Heal Brush";
             case Kind::LightenDarken: return "Lighten/Darken";
             case Kind::DodgeBurn: return "Dodge/Burn";
             case Kind::Soften: return "Soften Brush";
@@ -123,7 +124,7 @@ public:
     void on_press(App& app, const ToolInput& in, ImGuiMouseButton b) override {
         if (!app.active_is_raster()) { if (app.doc && app.active_layer() >= 0) app.status = "Select a raster layer to paint on."; return; }
         // Clone: right-click sets the source point.
-        if (kind_ == Kind::Clone && b == ImGuiMouseButton_Right) {
+        if ((kind_ == Kind::Clone || kind_ == Kind::Heal) && b == ImGuiMouseButton_Right) {
             src_x_ = in.img_x; src_y_ = in.img_y; has_src_ = true; first_stroke_ = true;
             return;
         }
@@ -142,9 +143,9 @@ public:
                 if (L.background) color = to_color(primary ? app.bg_color : app.fg_color);
                 else mode = raster::StrokeMode::Erase;
                 break;
-            case Kind::Clone:
-                if (!has_src_) { app.status = "Clone Brush: right-click to set the source point first."; return; }
-                mode = raster::StrokeMode::Clone;
+            case Kind::Clone: case Kind::Heal:
+                if (!has_src_) { app.status = std::string(name()) + ": right-click to set the source point first."; return; }
+                mode = kind_ == Kind::Heal ? raster::StrokeMode::Heal : raster::StrokeMode::Clone;
                 if (!app.clone_aligned || first_stroke_) {
                     off_x_ = static_cast<int>(std::floor(src_x_ - in.img_x));
                     off_y_ = static_cast<int>(std::floor(src_y_ - in.img_y));
@@ -226,24 +227,57 @@ public:
         }
         layer_ = app.active_layer();
         stroke_ = std::make_unique<raster::Stroke>(app.paint_pixels(layer_), brush, color, mode, &app.doc->selection());
-        if (mode == raster::StrokeMode::Clone) stroke_->set_clone_source(&clone_src_, off_x_, off_y_);
+        if (mode == raster::StrokeMode::Clone || mode == raster::StrokeMode::Heal) stroke_->set_clone_source(&clone_src_, off_x_, off_y_);
         if (filter) stroke_->set_filter(std::move(filter));
         if (area_filter) stroke_->set_area_filter(std::move(area_filter));
         stroke_->set_pressure_response(app.pen_size, app.pen_opacity);
+        smooth_x_ = in.img_x; smooth_y_ = in.img_y; history_.clear();
         last_x_ = in.img_x; last_y_ = in.img_y; last_pressure_ = in.pressure;
         stroke_->add_point(in.img_x, in.img_y, in.pressure);
         flush(app);
     }
     void on_drag(App& app, const ToolInput& in, ImGuiMouseButton) override {
         if (!stroke_) return;
-        stroke_->add_point(in.img_x, in.img_y, in.pressure);
-        last_x_ = in.img_x; last_y_ = in.img_y; last_pressure_ = in.pressure;
+        float x = in.img_x, y = in.img_y;
+        smooth_point(app, in, x, y);
+        stroke_->add_point(x, y, in.pressure);
+        last_x_ = x; last_y_ = y; last_pressure_ = in.pressure;
         flush(app);
     }
-    void on_release(App& app, const ToolInput&, ImGuiMouseButton) override {
+    void on_release(App& app, const ToolInput& in, ImGuiMouseButton) override {
         if (!stroke_ || !app.doc) return;
+        // Smoothing lags behind the cursor; finish the line to where the pen lifted.
+        if (app.smooth_mode != 0 && (std::abs(in.img_x - last_x_) > 0.5f || std::abs(in.img_y - last_y_) > 0.5f)) {
+            stroke_->add_point(in.img_x, in.img_y, in.pressure);
+            flush(app);
+        }
         app.commit_pixels(layer_, name(), stroke_->base(), app.paint_pixels(layer_));
         stroke_.reset();
+    }
+    // Stroke smoothing, in the spirit of the usual painting programs:
+    // Basic averages the last few points, Weighted follows the cursor with
+    // inertia, Stabilizer drags the brush behind the cursor on a string.
+    void smooth_point(const App& app, const ToolInput& in, float& x, float& y) {
+        const float amount = std::clamp(app.smooth_amount, 0.0f, 100.0f);
+        if (app.smooth_mode == 0 || amount <= 0.0f) { smooth_x_ = x; smooth_y_ = y; return; }
+        if (app.smooth_mode == 1) {
+            history_.emplace_back(x, y);
+            const size_t n = static_cast<size_t>(2 + amount / 8.0f);
+            while (history_.size() > n) history_.erase(history_.begin());
+            float sx = 0, sy = 0;
+            for (const auto& pt : history_) { sx += pt.first; sy += pt.second; }
+            x = sx / history_.size(); y = sy / history_.size();
+        } else if (app.smooth_mode == 2) {
+            const float k = 1.0f - 0.95f * amount / 100.0f;   // follow fraction per event
+            smooth_x_ += (x - smooth_x_) * k; smooth_y_ += (y - smooth_y_) * k;
+            x = smooth_x_; y = smooth_y_;
+        } else {
+            // String length in screen pixels, so it feels the same at any zoom.
+            const float radius = amount * 2.0f / std::max(in.zoom, 0.01f);
+            const float dx = x - smooth_x_, dy = y - smooth_y_, dist = std::sqrt(dx * dx + dy * dy);
+            if (dist > radius) { const float f = (dist - radius) / dist; smooth_x_ += dx * f; smooth_y_ += dy * f; }
+            x = smooth_x_; y = smooth_y_;
+        }
     }
     void cancel(App& app) override {
         if (stroke_ && app.doc && layer_ < app.doc->layer_count()) {
@@ -271,7 +305,7 @@ public:
             in.dl->AddCircle(in.screen, r, IM_COL32(0, 0, 0, 200), 0, 1.0f);
             in.dl->AddCircle(in.screen, r + 1.0f, IM_COL32(255, 255, 255, 160), 0, 1.0f);
         }
-        if (kind_ == Kind::Clone && has_src_) {
+        if ((kind_ == Kind::Clone || kind_ == Kind::Heal) && has_src_) {
             const float sx = stroke_ ? in.img_x + off_x_ : src_x_, sy = stroke_ ? in.img_y + off_y_ : src_y_;
             const ImVec2 c(in.origin.x + sx * in.zoom, in.origin.y + sy * in.zoom);
             in.dl->AddLine(ImVec2(c.x - 6, c.y), ImVec2(c.x + 6, c.y), IM_COL32(255, 255, 255, 255));
@@ -292,6 +326,15 @@ public:
         if (ImGui::Checkbox("Size##pen", &app.pen_size)) { app.config.pen_size = app.pen_size; app.config.save(); }
         ImGui::SameLine();
         if (ImGui::Checkbox("Opacity##pen", &app.pen_opacity)) { app.config.pen_opacity = app.pen_opacity; app.config.save(); }
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(100);
+        if (ImGui::Combo("Smoothing", &app.smooth_mode, "None\0Basic\0Weighted\0Stabilizer\0")) { app.config.smooth_mode = app.smooth_mode; app.config.save(); }
+        if (app.smooth_mode != 0) {
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(90);
+            if (ImGui::SliderFloat("##smooth", &app.smooth_amount, 1.0f, 100.0f, "%.0f")) { app.config.smooth_amount = app.smooth_amount; app.config.save(); }
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Basic: points averaged. Weighted: the brush follows with inertia. Stabilizer: the brush trails the cursor on a string this long.");
+        }
         ImGui::SameLine();
         ImGui::SetNextItemWidth(100);
         float hard = app.brush.hardness * 100.0f;
@@ -343,7 +386,7 @@ public:
                 if (ImGui::SliderFloat("Rate", &flow, 1.0f, 100.0f, "%.0f")) app.brush.flow = flow / 100.0f;
                 break;
             }
-            case Kind::Clone:
+            case Kind::Clone: case Kind::Heal:
                 ImGui::SameLine();
                 ImGui::Checkbox("Aligned", &app.clone_aligned);
                 ImGui::SameLine();
@@ -381,6 +424,8 @@ private:
     size_t layer_ = 0;
     std::unique_ptr<raster::Stroke> stroke_;
     float last_x_ = 0, last_y_ = 0, last_pressure_ = 1.0f;
+    float smooth_x_ = 0, smooth_y_ = 0;
+    std::vector<std::pair<float, float>> history_;
     // Clone state
     bool has_src_ = false, first_stroke_ = true;
     float src_x_ = 0, src_y_ = 0;
@@ -1323,6 +1368,7 @@ std::vector<std::unique_ptr<Tool>> make_default_tools() {
     t.push_back(std::make_unique<BrushTool>(BrushTool::Kind::Hue));
     t.push_back(std::make_unique<RedEyeTool>());
     t.push_back(std::make_unique<BrushTool>(BrushTool::Kind::Clone));
+    t.push_back(std::make_unique<BrushTool>(BrushTool::Kind::Heal));
     t.push_back(std::move(warp[2]));
     t.push_back(std::move(warp[3]));
     t.push_back(std::make_unique<BrushTool>(BrushTool::Kind::ColorReplacer));

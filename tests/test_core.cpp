@@ -1370,6 +1370,34 @@ static void test_text_objects_survive_native_save() {
     CHECK(std::abs(rx0 - qx0) < 2.0f && std::abs(ry0 - qy0) < 2.0f && std::abs(rx1 - qx1) < 2.0f && std::abs(ry1 - qy1) < 2.0f);
 }
 
+static void test_heal_and_color_to_alpha() {
+    // Heal: a bright source patch onto a dark target keeps the target's tone at the rim.
+    Image target(40, 40, Color{40, 40, 40, 255});
+    Image src(40, 40, Color{200, 200, 200, 255});
+    for (int y = 0; y < 40; ++y) for (int x = 0; x < 40; ++x) if ((x + y) % 4 == 0) src.set(x, y, {220, 220, 220, 255});  // texture
+    std::vector<float> region(40 * 40, 0.0f);
+    for (int y = 12; y < 28; ++y) for (int x = 12; x < 28; ++x) region[static_cast<size_t>(y) * 40 + x] = 1.0f;
+    Image healed = target;
+    raster::heal(healed, src, 0, 0, region, raster::Rect{10, 10, 30, 30});
+    CHECK(healed.get(20, 20).r < 90 && healed.get(20, 20).r >= 30);   // pulled down to the target's darkness
+    CHECK(healed.get(5, 5).r == 40);                                    // outside the region untouched
+    Image cloned = target;
+    raster::Brush b; b.size = 10; b.hardness = 1;
+    raster::Stroke st(target, b, {0, 0, 0, 255}, raster::StrokeMode::Heal);
+    st.set_clone_source(&src, 0, 0);
+    st.add_point(20, 20);
+    st.render(cloned);
+    CHECK(cloned.get(20, 20).r < 90);
+    // Color to alpha: white to transparency on a gray ramp.
+    Image img(3, 1, Color{255, 255, 255, 255});
+    img.set(1, 0, {128, 128, 128, 255});
+    img.set(2, 0, {255, 0, 0, 255});
+    raster::color_to_alpha(img, {255, 255, 255, 255});
+    CHECK(img.get(0, 0).a == 0);
+    CHECK(img.get(1, 0).a >= 126 && img.get(1, 0).a <= 129 && img.get(1, 0).r <= 2);   // half gray = black at half alpha
+    CHECK(img.get(2, 0).a == 255 && img.get(2, 0).r == 255 && img.get(2, 0).g == 0);
+}
+
 static void test_stroke_pressure() {
     Image base(64, 64, Color{0, 0, 0, 0});
     raster::Brush b;
@@ -2207,6 +2235,7 @@ int main() {
     test_psd_import();
     test_webp_roundtrip();
     test_stroke_pressure();
+    test_heal_and_color_to_alpha();
     test_vector_core();
     test_history_limit();
     test_brush_texture();
