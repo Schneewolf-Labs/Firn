@@ -93,6 +93,7 @@ docs/    notes on the original: command inventory, module mapping, FORMAT.md
 - `docs/ROADMAP.md` is the value-ranked work list. Tick items off as they
   land and take the top unchecked item next.
 - Index 0 is the bottom of the layer stack. Palettes list top first.
+  Double-clicking a row's name renames it in place (`App::rename_layer`).
   Dragging a palette row onto another runs `MoveLayerCommand` through
   `App::layer_move_onto`: the moved block lands directly above the target
   at the target's depth (a group target is stepped over whole).

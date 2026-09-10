@@ -671,6 +671,9 @@ struct App {
     bool show_revert_prompt = false;
     void zoom_to_rect(firn::raster::Rect r);   // fills the view with an image rect
     void zoom_to_selection();
+    // Layers palette: the layer whose name is being edited in place (-1 none).
+    int rename_layer = -1;
+    char rename_buf[128] = {};
     void cut();
     void clear_selection();
     void paste_as_new_layer();

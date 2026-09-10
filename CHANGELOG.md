@@ -32,6 +32,8 @@ section into the next version.
   by GIMP, Krita and MyPaint. Save As suggests .ora for layered images
   and autosave uses it; the classic format stays supported for files
   meant for the original.
+- Layers palette: double-clicking a layer's name renames it in place
+  (its other settings stay behind Properties in the right-click menu).
 - File > Revert loads the saved file again and drops every change, asking
   first when there is anything to lose.
 - View > Zoom to Selection fills the window with the selection.
