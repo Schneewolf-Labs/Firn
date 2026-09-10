@@ -270,6 +270,9 @@ layer under `data/`, `mergedimage.png` and `Thumbnails/thumbnail.png`.
 Layers are listed top first; a `<stack>` inside the stack is a group.
 Each layer is stored as just its content box with `x`/`y` giving its
 position, and the PNG entries are stored rather than deflated again.
+The writer encodes the layer PNGs, the merged image and the thumbnail on
+their own threads (a flat image is its own composite, so it is encoded
+once and used for both entries).
 Every layer carries `name`, `src`, `x`, `y`, `opacity`, `visibility` and a
 `composite-op` (the SVG operators; blend modes without one, such as
 Dissolve, fall back to `svg:src-over`).

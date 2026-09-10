@@ -9,6 +9,8 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <functional>
+#include <future>
 #include <fstream>
 #include <iterator>
 
@@ -176,17 +178,43 @@ Mask mask_from_image(const Image& img, int w, int h) {
 std::string fmt(double v) { char b[32]; std::snprintf(b, sizeof(b), "%.4g", v); return b; }
 
 struct OraWriter {
+    explicit OraWriter(const Document& d) : doc(d) {}
     const Document& doc;
     std::vector<zip::Entry> entries;
     int counter = 0;
     std::string out;
+    // Encoding a layer's PNG is the expensive part, so the entries are built
+    // on their own threads while the stack XML that names them is written.
+    struct Pending {
+        std::string name;
+        bool store;
+        std::shared_future<std::vector<uint8_t>> data;
+    };
+    std::vector<Pending> pending;
+    // A single opaque layer is its own composite: mergedimage.png and the
+    // layer entry are then the same picture, encoded once.
+    std::shared_future<std::vector<uint8_t>> merged;
+    const Layer* merged_layer = nullptr;
 
-    std::string add_file(const std::string& stem, const std::string& ext, std::vector<uint8_t> bytes) {
+    std::string add_file(const std::string& stem, const std::string& ext, std::function<std::vector<uint8_t>()> fn) {
         const std::string name = "data/" + stem + std::to_string(counter++) + "." + ext;
         // PNGs are deflated already; running the zip's deflate over them
         // costs a second on a big project and saves nothing.
-        entries.push_back({name, std::move(bytes), ext == "png"});
+        pending.push_back({name, ext == "png", std::async(std::launch::async, std::move(fn)).share()});
         return name;
+    }
+    std::string add_file(const std::string& stem, const std::string& ext, std::vector<uint8_t> bytes) {
+        return add_file(stem, ext, [b = std::move(bytes)]() mutable { return std::move(b); });
+    }
+    // Reuses bytes another entry is already producing.
+    std::string add_shared(const std::string& stem, const std::string& ext, std::shared_future<std::vector<uint8_t>> data) {
+        const std::string name = "data/" + stem + std::to_string(counter++) + "." + ext;
+        pending.push_back({name, ext == "png", std::move(data)});
+        return name;
+    }
+    void collect() {
+        for (Pending& p : pending) entries.push_back({p.name, p.data.get(), p.store});
+        pending.clear();
     }
 
     void common_attrs(const Layer& L) {
@@ -196,7 +224,8 @@ struct OraWriter {
         out += std::string(" composite-op=\"") + svg_op(L.blend) + "\"";
         out += std::string(" firn:blend=\"") + blend_mode_name(L.blend) + "\"";
         if (L.has_mask()) {
-            out += " firn:mask=\"" + add_file("mask", "png", mask_png(L.mask)) + "\"";
+            const Layer* Lp = &L;
+            out += " firn:mask=\"" + add_file("mask", "png", [Lp] { return mask_png(Lp->mask); }) + "\"";
             if (!L.mask_enabled) out += " firn:mask-enabled=\"0\"";
         }
         if (L.style.any()) out += " firn:style=\"" + escape(json::dump(L.style.to_json())) + "\"";
@@ -226,8 +255,14 @@ struct OraWriter {
             raster::Rect box = raster::content_bounds(L.pixels).clipped(L.pixels.width(), L.pixels.height());
             if (box.empty()) box = {0, 0, 1, 1};
             ox = box.x0; oy = box.y0;
-            if (L.is_deep()) src = add_file("layer", "png", encode_png16(raster16::crop(*L.deep, box)));
-            else src = add_file("layer", "png", encode_png(raster::crop(L.pixels, box)));
+            const Layer* Lp = &L;
+            if (Lp == merged_layer) {
+                src = add_shared("layer", "png", merged);
+            } else {
+                src = add_file("layer", "png", [Lp, box] {
+                    return Lp->is_deep() ? encode_png16(raster16::crop(*Lp->deep, box)) : encode_png(raster::crop(Lp->pixels, box));
+                });
+            }
         }
         out += " src=\"" + src + "\" x=\"" + std::to_string(ox) + "\" y=\"" + std::to_string(oy) + "\"/>\n";
     }
@@ -265,6 +300,19 @@ struct OraWriter {
     }
 
     std::vector<uint8_t> build() {
+        // The composite and its thumbnail start encoding first, so they run
+        // while the layers do.
+        const Image flat = doc.composite();
+        const float scale = std::min(1.0f, 256.0f / std::max(1, std::max(flat.width(), flat.height())));
+        const Image thumb = scale < 1.0f ? raster::resample(flat, std::max(1, static_cast<int>(flat.width() * scale)), std::max(1, static_cast<int>(flat.height() * scale)), raster::Filter::Bilinear) : flat;
+        merged = std::async(std::launch::async, [&flat] { return encode_png(flat); }).share();
+        auto thumb_job = std::async(std::launch::async, [&thumb] { return encode_png(thumb); });
+        if (doc.layer_count() == 1) {
+            const Layer& only = doc.layer(0);
+            if (only.is_raster() && !only.is_deep() && only.pixels.width() == flat.width() && only.pixels.height() == flat.height() &&
+                std::memcmp(only.pixels.data(), flat.data(), flat.size_bytes()) == 0)
+                merged_layer = &only;
+        }
         entries.push_back({"mimetype", std::vector<uint8_t>(std::begin("image/openraster"), std::end("image/openraster") - 1), true});
         out = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
         out += "<image version=\"0.0.3\" w=\"" + std::to_string(doc.width()) + "\" h=\"" + std::to_string(doc.height()) + "\" xres=\"72\" yres=\"72\" xmlns:firn=\"https://github.com/Schneewolf-Labs/Firn\">\n";
@@ -278,15 +326,15 @@ struct OraWriter {
             out += std::string("  <firn:assistant kind=\"") + kind + "\" x0=\"" + fmt(a.x0) + "\" y0=\"" + fmt(a.y0) + "\" x1=\"" + fmt(a.x1) + "\" y1=\"" + fmt(a.y1) + "\"/>\n";
         }
         if (!doc.icc().empty()) out += "  <firn:icc src=\"" + add_file("profile", "icc", doc.icc()) + "\"/>\n";
-        for (const Document::AlphaChannel& ch : doc.alpha_channels())
-            out += "  <firn:channel name=\"" + escape(ch.name) + "\" src=\"" + add_file("channel", "png", mask_png(ch.mask)) + "\"/>\n";
+        for (const Document::AlphaChannel& ch : doc.alpha_channels()) {
+            const Mask* m = &ch.mask;
+            out += "  <firn:channel name=\"" + escape(ch.name) + "\" src=\"" + add_file("channel", "png", [m] { return mask_png(*m); }) + "\"/>\n";
+        }
         out += "</image>\n";
         entries.push_back({"stack.xml", std::vector<uint8_t>(out.begin(), out.end()), false});
-        const Image flat = doc.composite();
-        entries.push_back({"mergedimage.png", encode_png(flat), true});
-        const float scale = std::min(1.0f, 256.0f / std::max(1, std::max(flat.width(), flat.height())));
-        const Image thumb = scale < 1.0f ? raster::resample(flat, std::max(1, static_cast<int>(flat.width() * scale)), std::max(1, static_cast<int>(flat.height() * scale)), raster::Filter::Bilinear) : flat;
-        entries.push_back({"Thumbnails/thumbnail.png", encode_png(thumb), true});
+        collect();   // the layer entries, in the order the XML names them
+        entries.push_back({"mergedimage.png", merged.get(), true});
+        entries.push_back({"Thumbnails/thumbnail.png", thumb_job.get(), true});
         return zip::write(entries);
     }
 };
@@ -434,7 +482,7 @@ std::optional<Image> load_ora_thumbnail(const std::string& path) {
 }
 
 std::vector<uint8_t> save_ora_to_memory(const Document& doc) {
-    OraWriter w{doc, {}, 0, {}};
+    OraWriter w{doc};
     return w.build();
 }
 
