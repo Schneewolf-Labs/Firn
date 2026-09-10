@@ -1,40 +1,57 @@
-// macOS pen input: tablet data rides on the NSEvent SDL hands us.
+// macOS pen input. SDL2's system-window messages carry nothing on Cocoa,
+// so a local event monitor watches the NSEvents before SDL sees them and
+// keeps the latest tablet data for poll() to hand over on the main thread.
 #include "Tablet.h"
 
 #import <Cocoa/Cocoa.h>
 #include <SDL.h>
-#include <SDL_syswm.h>
 
 #include "imgui.h"
 
 namespace tablet {
 
-void init(SDL_Window*) { SDL_EventState(SDL_SYSWMEVENT, SDL_ENABLE); }
-void poll(PenState&) {}
+namespace {
+PenState g_latest;
+bool g_dirty = false;
+id g_monitor = nil;
+}  // namespace
 
-void syswm(const SDL_Event& event, PenState& pen) {
-    const SDL_SysWMmsg* m = event.syswm.msg;
-    if (!m || m->subsystem != SDL_SYSWM_COCOA) return;
-    NSEvent* e = m->msg.cocoa.event;
-    if (!e) return;
-    const NSEventType t = [e type];
-    if (t == NSEventTypeTabletProximity) {
-        pen.present = [e isEnteringProximity];
-        pen.eraser = [e pointingDeviceType] == NSPointingDeviceTypeEraser;
-        pen.last_seen = ImGui::GetTime();
-        return;
-    }
-    const bool tablet_point = t == NSEventTypeTabletPoint ||
-        ((t == NSEventTypeMouseMoved || t == NSEventTypeLeftMouseDragged || t == NSEventTypeLeftMouseDown) && [e subtype] == NSEventSubtypeTabletPoint);
-    if (!tablet_point) return;
-    pen.present = true;
-    pen.pressure = [e pressure];
-    const NSPoint tilt = [e tilt];
-    pen.tilt_x = static_cast<float>(tilt.x * 60.0);
-    pen.tilt_y = static_cast<float>(tilt.y * 60.0);
+void init(SDL_Window*) {
+    if (g_monitor) return;
+    const NSEventMask mask = NSEventMaskTabletPoint | NSEventMaskTabletProximity | NSEventMaskMouseMoved | NSEventMaskLeftMouseDragged | NSEventMaskLeftMouseDown;
+    g_monitor = [NSEvent addLocalMonitorForEventsMatchingMask:mask handler:^NSEvent*(NSEvent* e) {
+        const NSEventType t = [e type];
+        if (t == NSEventTypeTabletProximity) {
+            g_latest.present = [e isEnteringProximity];
+            g_latest.eraser = [e pointingDeviceType] == NSPointingDeviceTypeEraser;
+            g_dirty = true;
+            return e;
+        }
+        const bool tablet_point = t == NSEventTypeTabletPoint || [e subtype] == NSEventSubtypeTabletPoint;
+        if (!tablet_point) return e;
+        g_latest.present = true;
+        g_latest.pressure = static_cast<float>([e pressure]);
+        const NSPoint tilt = [e tilt];
+        g_latest.tilt_x = static_cast<float>(tilt.x * 60.0);
+        g_latest.tilt_y = static_cast<float>(tilt.y * 60.0);
+        g_dirty = true;
+        return e;
+    }];
+}
+
+void poll(PenState& pen) {
+    if (!g_dirty) return;
+    g_dirty = false;
+    pen.present = g_latest.present;
+    pen.pressure = g_latest.pressure;
+    pen.tilt_x = g_latest.tilt_x;
+    pen.tilt_y = g_latest.tilt_y;
+    pen.eraser = g_latest.eraser;
     pen.last_seen = ImGui::GetTime();
 }
 
-const char* backend() { return "Cocoa tablet events"; }
+void syswm(const SDL_Event&, PenState&) {}
+
+const char* backend() { return g_monitor ? "Cocoa tablet events" : "none"; }
 
 }  // namespace tablet

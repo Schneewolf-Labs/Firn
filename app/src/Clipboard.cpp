@@ -22,7 +22,7 @@ std::vector<uint8_t> encode_png(const firn::Image& img) {
 
 #if !defined(_WIN32)
 // Runs a command, feeding `input` to its stdin and collecting its stdout.
-bool run(const std::string& cmd, const std::vector<uint8_t>* input, std::vector<uint8_t>* output) {
+[[maybe_unused]] bool run(const std::string& cmd, const std::vector<uint8_t>* input, std::vector<uint8_t>* output) {
     if (input) {
         FILE* f = popen((cmd + " >/dev/null 2>&1").c_str(), "w");
         if (!f) return false;
@@ -37,11 +37,13 @@ bool run(const std::string& cmd, const std::vector<uint8_t>* input, std::vector<
     return pclose(f) == 0 && !output->empty();
 }
 
+#if !defined(__APPLE__)
 bool have(const char* tool) {
     return std::system((std::string("command -v ") + tool + " >/dev/null 2>&1").c_str()) == 0;
 }
 
 bool wayland() { const char* w = std::getenv("WAYLAND_DISPLAY"); return w && *w; }
+#endif
 #endif
 
 }  // namespace
