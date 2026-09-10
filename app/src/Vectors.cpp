@@ -426,9 +426,9 @@ void App::object_arrange(int delta) {
         if (delta > 0) { for (auto& x : b) blocks.push_back(std::move(x)); for (auto& x : a) blocks.push_back(std::move(x)); }
         else { for (auto& x : a) blocks.push_back(std::move(x)); for (auto& x : b) blocks.push_back(std::move(x)); }
     } else if (delta > 0) {
-        for (int i = n - 2; i >= 0; --i) if (sel[i] && !sel[i + 1]) { std::swap(blocks[i], blocks[i + 1]); std::swap(sel[i], sel[i + 1]); }
+        for (int i = n - 2; i >= 0; --i) if (sel[i] && !sel[i + 1]) { std::swap(blocks[i], blocks[i + 1]); sel[i] = false; sel[i + 1] = true; }
     } else {
-        for (int i = 1; i < n; ++i) if (sel[i] && !sel[i - 1]) { std::swap(blocks[i], blocks[i - 1]); std::swap(sel[i], sel[i - 1]); }
+        for (int i = 1; i < n; ++i) if (sel[i] && !sel[i - 1]) { std::swap(blocks[i], blocks[i - 1]); sel[i] = false; sel[i - 1] = true; }
     }
     objs.clear();
     for (auto& blk : blocks) for (auto& o : blk) objs.push_back(std::move(o));
