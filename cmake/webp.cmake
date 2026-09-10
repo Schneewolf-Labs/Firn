@@ -22,6 +22,13 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(libwebp)
 
+# Users of the libraries include <webp/...> from the source tree.
+foreach(t webp libwebpmux)
+  if(TARGET ${t})
+    target_include_directories(${t} INTERFACE $<BUILD_INTERFACE:${libwebp_SOURCE_DIR}/src>)
+  endif()
+endforeach()
+
 # Third-party warnings are not ours to fix.
 foreach(t webp webpdecoder webpdecode webpdsp webpdspdecode webpencode webputils webputilsdecode webpdemux libwebpmux sharpyuv cpufeatures)
   if(TARGET ${t})
