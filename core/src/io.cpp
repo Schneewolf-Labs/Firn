@@ -81,7 +81,8 @@ bool save_png16(const Image16& img, const std::string& path, std::string* err) {
         for (size_t i = 0; i < static_cast<size_t>(img.width()) * 4; ++i) { *d++ = static_cast<uint8_t>(s[i] >> 8); *d++ = static_cast<uint8_t>(s[i] & 255); }
     }
     int zlen = 0;
-    unsigned char* z = stbi_zlib_compress(raw.data(), static_cast<int>(raw.size()), &zlen, 8);
+    // Big images take a lighter compression level: several times faster for a few percent of size.
+    unsigned char* z = stbi_zlib_compress(raw.data(), static_cast<int>(raw.size()), &zlen, raw.size() > (32u << 20) ? 4 : 8);
     if (!z) { if (err) *err = "deflate failed"; return false; }
     std::vector<uint8_t> out{0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A};
     std::vector<uint8_t> ihdr;
@@ -190,6 +191,7 @@ bool embed_icc(const std::string& path, const std::vector<uint8_t>& icc, std::st
 }
 
 bool save_png(const Image& img, const std::string& path, std::string* err) {
+    stbi_write_png_compression_level = img.size_bytes() > (32u << 20) ? 4 : 8;
     int ok = stbi_write_png(path.c_str(), img.width(), img.height(), 4, img.data(), img.width() * 4);
     if (!ok && err) *err = "stbi_write_png failed";
     return ok != 0;

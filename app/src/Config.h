@@ -13,6 +13,7 @@ struct Config {
     int grid_spacing = 10;
     int jpeg_quality = 90;
     int undo_limit = 100;             // history entries kept per document
+    int undo_memory_mb = 1024;        // pixel snapshots kept by the history, per document
     int checker_size = 12;            // transparency checkerboard cell, in screen px
     int new_width = 800, new_height = 600;
     bool color_managed_display = true;   // convert tagged images to sRGB for the screen

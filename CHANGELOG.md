@@ -8,6 +8,13 @@ section into the next version.
 
 ### Added
 - Apache License 2.0.
+- Preferences: undo memory budget per image (default 1 GB).
+
+### Changed
+- Large images: Gaussian blur, resampling and native-file compression run
+  across all cores (20 MP: blur 2.0 s to 0.55 s, native save 9.8 s to 3.3 s);
+  undo entries for painting keep only the changed rectangle; big PNGs use
+  a lighter compression level.
 
 ## 0.1.0 (2026-09-10)
 

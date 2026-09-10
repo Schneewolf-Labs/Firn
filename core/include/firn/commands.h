@@ -16,7 +16,12 @@ public:
     virtual std::string name() const = 0;
     virtual void execute(Document& doc) = 0;
     virtual void undo(Document& doc) = 0;
+    // Approximate bytes of pixel data this entry keeps alive, for the undo budget.
+    virtual size_t memory_bytes() const { return 0; }
 };
+
+// Bytes held by a document snapshot (layers, deep data, masks, selection).
+size_t state_bytes(const Document::State& s);
 
 class CommandStack {
 public:
@@ -29,9 +34,12 @@ public:
     void undo(Document& doc);
     void redo(Document& doc);
     void clear();
-    // Oldest entries are dropped beyond this many (0 = unlimited).
+    // Oldest entries are dropped beyond this many (0 = unlimited), or once
+    // the entries' pixel snapshots exceed the byte budget (0 = unlimited).
     void set_limit(size_t n) { limit_ = n; trim(); }
     size_t limit() const { return limit_; }
+    void set_memory_limit(size_t bytes) { memory_limit_ = bytes; trim(); }
+    size_t memory_bytes() const;
 
     // For the history panel.
     size_t size() const { return done_.size(); }
@@ -43,6 +51,7 @@ private:
     std::vector<std::unique_ptr<Command>> done_;
     size_t cursor_ = 0;  // entries [0, cursor_) are applied
     size_t limit_ = 0;
+    size_t memory_limit_ = 0;
 };
 
 // --- Concrete commands -------------------------------------------------
@@ -64,6 +73,8 @@ protected:
     size_t layer_;
     Image before_;
     std::shared_ptr<const Image16> before_deep_;
+public:
+    size_t memory_bytes() const override { return before_.size_bytes() + (before_deep_ ? before_deep_->size() * 2 : 0); }
 };
 
 class InvertCommand : public LayerPixelCommand {
@@ -156,6 +167,8 @@ public:
 private:
     std::string name_;
     Mask before_, after_;
+public:
+    size_t memory_bytes() const override { return before_.size() + after_.size(); }
 };
 
 // Inserts a new raster layer holding `pixels` (document-sized) above the
@@ -179,16 +192,19 @@ private:
 // Tools paint at 8 bits: the layer's deep data is dropped, undoably.
 class LayerSnapshotCommand : public Command {
 public:
-    LayerSnapshotCommand(size_t layer, std::string name, Image before, Image after)
-        : layer_(layer), name_(std::move(name)), before_(std::move(before)), after_(std::move(after)) {}
+    // Keeps only the rectangle where `before` and `after` differ.
+    LayerSnapshotCommand(size_t layer, std::string name, Image before, Image after);
     std::string name() const override { return name_; }
     void execute(Document& doc) override;
     void undo(Document& doc) override;
     // For edits already applied live: remembers and drops the layer's deep data.
     void capture_deep(Document& doc);
+    size_t memory_bytes() const override { return before_.size_bytes() + after_.size_bytes() + (before_deep_ ? before_deep_->size() * 2 : 0); }
+    const raster::Rect& rect() const { return rect_; }
 private:
     size_t layer_;
     std::string name_;
+    raster::Rect rect_;          // the changed area; before_/after_ are crops of it
     Image before_, after_;
     std::shared_ptr<const Image16> before_deep_;
 };
@@ -233,6 +249,9 @@ public:
 private:
     size_t index_;
     Document::State before_;
+public:
+    size_t memory_bytes() const override { return state_bytes(before_); }
+private:
 };
 
 // Removes a group layer, promoting its members one level.
@@ -245,6 +264,9 @@ public:
 private:
     size_t index_;
     Document::State before_;
+public:
+    size_t memory_bytes() const override { return state_bytes(before_); }
+private:
 };
 
 // Any change to a vector layer's objects: snapshots the object list.
@@ -315,6 +337,9 @@ public:
 private:
     size_t index_;
     Document::State before_;
+public:
+    size_t memory_bytes() const override { return state_bytes(before_); }
+private:
 };
 
 // Sets (or clears, with an empty mask) a layer's mask.
@@ -355,6 +380,9 @@ public:
 private:
     size_t index_;
     Document::State before_;
+public:
+    size_t memory_bytes() const override { return state_bytes(before_); }
+private:
 };
 
 // Moves a layer (or group block) past its neighboring sibling: +1 up
@@ -371,6 +399,9 @@ private:
     std::string name_;
     std::function<void(Document&)> fn_;
     Document::State before_;
+public:
+    size_t memory_bytes() const override { return state_bytes(before_); }
+private:
 };
 
 class ArrangeLayerCommand : public Command {
@@ -383,6 +414,9 @@ private:
     size_t index_;
     int steps_;
     Document::State before_;
+public:
+    size_t memory_bytes() const override { return state_bytes(before_); }
+private:
 };
 
 class PromoteBackgroundCommand : public Command {
@@ -424,6 +458,9 @@ protected:
     // out.width x out.height.
     virtual void transform(const Document::State& in, Document::State& out) = 0;
     Document::State before_;
+public:
+    size_t memory_bytes() const override { return state_bytes(before_); }
+private:
 };
 
 class CropCommand : public GeometryCommand {
@@ -497,6 +534,9 @@ public:
 private:
     size_t index_;
     Document::State before_;
+public:
+    size_t memory_bytes() const override { return state_bytes(before_); }
+private:
 };
 
 }  // namespace firn

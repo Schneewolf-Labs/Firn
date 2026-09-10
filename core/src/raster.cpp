@@ -1,4 +1,5 @@
 #include "firn/raster.h"
+#include "firn/parallel.h"
 #include "firn/adjust.h"
 
 #include "firn/mask.h"
@@ -325,30 +326,36 @@ void gaussian_blur(Image& img, float radius) {
     for (float& k : kernel) k /= sum;
 
     // Blur premultiplied so transparent pixels don't bleed their color in.
+    // Both passes run in row bands across the cores.
     std::vector<float> pre(static_cast<size_t>(w) * h * 4), tmp(pre.size());
     const uint8_t* src = img.data();
-    for (size_t i = 0; i < static_cast<size_t>(w) * h; ++i) {
-        const float a = src[i * 4 + 3] / 255.0f;
-        pre[i * 4 + 0] = src[i * 4 + 0] * a;
-        pre[i * 4 + 1] = src[i * 4 + 1] * a;
-        pre[i * 4 + 2] = src[i * 4 + 2] * a;
-        pre[i * 4 + 3] = src[i * 4 + 3];
-    }
-    for (int y = 0; y < h; ++y) {
-        for (int x = 0; x < w; ++x) {
-            float acc[4] = {0, 0, 0, 0};
-            for (int k = -extent; k <= extent; ++k) {
-                const int xx = std::clamp(x + k, 0, w - 1);
-                const float* s = &pre[(static_cast<size_t>(y) * w + xx) * 4];
-                const float kw = kernel[k + extent];
-                for (int c = 0; c < 4; ++c) acc[c] += s[c] * kw;
-            }
-            float* d = &tmp[(static_cast<size_t>(y) * w + x) * 4];
-            for (int c = 0; c < 4; ++c) d[c] = acc[c];
+    const size_t per_row = static_cast<size_t>(w) * (2 * extent + 1);
+    parallel::rows(h, static_cast<size_t>(w), [&](int y0, int y1) {
+        for (size_t i = static_cast<size_t>(y0) * w; i < static_cast<size_t>(y1) * w; ++i) {
+            const float a = src[i * 4 + 3] / 255.0f;
+            pre[i * 4 + 0] = src[i * 4 + 0] * a;
+            pre[i * 4 + 1] = src[i * 4 + 1] * a;
+            pre[i * 4 + 2] = src[i * 4 + 2] * a;
+            pre[i * 4 + 3] = src[i * 4 + 3];
         }
-    }
+    });
+    parallel::rows(h, per_row, [&](int y0, int y1) {
+        for (int y = y0; y < y1; ++y)
+            for (int x = 0; x < w; ++x) {
+                float acc[4] = {0, 0, 0, 0};
+                for (int k = -extent; k <= extent; ++k) {
+                    const int xx = std::clamp(x + k, 0, w - 1);
+                    const float* s = &pre[(static_cast<size_t>(y) * w + xx) * 4];
+                    const float kw = kernel[k + extent];
+                    for (int c = 0; c < 4; ++c) acc[c] += s[c] * kw;
+                }
+                float* d = &tmp[(static_cast<size_t>(y) * w + x) * 4];
+                for (int c = 0; c < 4; ++c) d[c] = acc[c];
+            }
+    });
     uint8_t* out = img.data();
-    for (int y = 0; y < h; ++y) {
+    parallel::rows(h, per_row, [&](int y0, int y1) {
+    for (int y = y0; y < y1; ++y) {
         for (int x = 0; x < w; ++x) {
             float acc[4] = {0, 0, 0, 0};
             for (int k = -extent; k <= extent; ++k) {
@@ -364,6 +371,7 @@ void gaussian_blur(Image& img, float radius) {
             d[3] = static_cast<uint8_t>(std::clamp(acc[3], 0.0f, 255.0f) + 0.5f);
         }
     }
+    });
 }
 
 // Separable box blur on all four channels. Straight-alpha blur is not
@@ -502,43 +510,49 @@ Image resample(const Image& src, int w, int h, Filter filter) {
         const float a = s[3] / 255.0f;
         pre[i * 4 + 0] = s[0] * a; pre[i * 4 + 1] = s[1] * a; pre[i * 4 + 2] = s[2] * a; pre[i * 4 + 3] = s[3];
     }
-    // Horizontal pass: sw x sh -> w x sh
+    // Horizontal pass: sw x sh -> w x sh, in row bands across the cores.
     const Taps tx = make_taps(sw, w, filter);
     std::vector<float> mid(static_cast<size_t>(w) * sh * 4, 0.0f);
-    for (int y = 0; y < sh; ++y) {
-        const float* row = &pre[static_cast<size_t>(y) * sw * 4];
-        size_t wi = 0;
-        for (int x = 0; x < w; ++x) {
-            float acc[4] = {0, 0, 0, 0};
-            for (int k = 0; k < tx.count[x]; ++k, ++wi) {
-                const float* s = row + (tx.start[x] + k) * 4;
-                const float wt = tx.weights[wi];
-                for (int c = 0; c < 4; ++c) acc[c] += s[c] * wt;
+    parallel::rows(sh, static_cast<size_t>(w) * 4, [&](int y0, int y1) {
+        for (int y = y0; y < y1; ++y) {
+            const float* row = &pre[static_cast<size_t>(y) * sw * 4];
+            size_t wi = 0;
+            for (int x = 0; x < w; ++x) {
+                float acc[4] = {0, 0, 0, 0};
+                for (int k = 0; k < tx.count[x]; ++k, ++wi) {
+                    const float* s = row + (tx.start[x] + k) * 4;
+                    const float wt = tx.weights[wi];
+                    for (int c = 0; c < 4; ++c) acc[c] += s[c] * wt;
+                }
+                float* d = &mid[(static_cast<size_t>(y) * w + x) * 4];
+                for (int c = 0; c < 4; ++c) d[c] = acc[c];
             }
-            float* d = &mid[(static_cast<size_t>(y) * w + x) * 4];
-            for (int c = 0; c < 4; ++c) d[c] = acc[c];
         }
-    }
-    // Vertical pass: w x sh -> w x h
+    });
+    // Vertical pass: w x sh -> w x h. Weights are packed per output row;
+    // an offset table lets each band start at its own row.
     const Taps ty = make_taps(sh, h, filter);
+    std::vector<size_t> row_offset(static_cast<size_t>(h) + 1, 0);
+    for (int y = 0; y < h; ++y) row_offset[y + 1] = row_offset[y] + static_cast<size_t>(ty.count[y]);
     Image out(w, h);
-    size_t wi = 0;
-    for (int y = 0; y < h; ++y) {
-        const size_t wi0 = wi;
-        for (int x = 0; x < w; ++x) {
-            wi = wi0;
-            float acc[4] = {0, 0, 0, 0};
-            for (int k = 0; k < ty.count[y]; ++k, ++wi) {
-                const float* s = &mid[(static_cast<size_t>(ty.start[y] + k) * w + x) * 4];
-                const float wt = ty.weights[wi];
-                for (int c = 0; c < 4; ++c) acc[c] += s[c] * wt;
+    parallel::rows(h, static_cast<size_t>(w) * 4, [&](int y0, int y1) {
+        for (int y = y0; y < y1; ++y) {
+            const size_t wi0 = row_offset[y];
+            for (int x = 0; x < w; ++x) {
+                size_t wi = wi0;
+                float acc[4] = {0, 0, 0, 0};
+                for (int k = 0; k < ty.count[y]; ++k, ++wi) {
+                    const float* s = &mid[(static_cast<size_t>(ty.start[y] + k) * w + x) * 4];
+                    const float wt = ty.weights[wi];
+                    for (int c = 0; c < 4; ++c) acc[c] += s[c] * wt;
+                }
+                uint8_t* d = out.data() + (static_cast<size_t>(y) * w + x) * 4;
+                const float a = std::clamp(acc[3], 0.0f, 255.0f);
+                for (int c = 0; c < 3; ++c) d[c] = a > 0.0f ? static_cast<uint8_t>(std::clamp(acc[c] / (a / 255.0f), 0.0f, 255.0f) + 0.5f) : 0;
+                d[3] = static_cast<uint8_t>(a + 0.5f);
             }
-            uint8_t* d = out.data() + (static_cast<size_t>(y) * w + x) * 4;
-            const float a = std::clamp(acc[3], 0.0f, 255.0f);
-            for (int c = 0; c < 3; ++c) d[c] = a > 0.0f ? static_cast<uint8_t>(std::clamp(acc[c] / (a / 255.0f), 0.0f, 255.0f) + 0.5f) : 0;
-            d[3] = static_cast<uint8_t>(a + 0.5f);
         }
-    }
+    });
     return out;
 }
 

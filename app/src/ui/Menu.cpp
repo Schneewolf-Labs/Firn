@@ -548,6 +548,7 @@ void App::draw_dialogs() {
         Config& c = prefs_edit;
         ImGui::SeparatorText("General");
         ImGui::SetNextItemWidth(160); ImGui::SliderInt("Undo steps per image", &c.undo_limit, 1, 1000);
+        ImGui::SetNextItemWidth(160); ImGui::SliderInt("Undo memory per image (MB)", &c.undo_memory_mb, 64, 16384, "%d", ImGuiSliderFlags_Logarithmic);
         ImGui::SetNextItemWidth(160); ImGui::SliderInt("Default JPEG quality", &c.jpeg_quality, 1, 100);
         ImGui::SetNextItemWidth(160); ImGui::SliderInt("Checkerboard cell (px)", &c.checker_size, 2, 64);
         ImGui::SetNextItemWidth(160); ImGui::InputInt("New image width", &c.new_width);

@@ -29,7 +29,8 @@ void App::apply_config() {
     new_w = config.new_width;
     new_h = config.new_height;
     history.set_limit(config.undo_limit);
-    for (DocState& d : docs) d.history.set_limit(config.undo_limit);
+    history.set_memory_limit(static_cast<size_t>(config.undo_memory_mb) << 20);
+    for (DocState& d : docs) { d.history.set_limit(config.undo_limit); d.history.set_memory_limit(static_cast<size_t>(config.undo_memory_mb) << 20); }
     if (color_managed_display != config.color_managed_display) {
         color_managed_display = config.color_managed_display;
         canvas_tex_revision = ~0ull;
@@ -106,6 +107,7 @@ void App::add_document(std::unique_ptr<Document> d, const std::string& path) {
     doc = std::move(d);
     history.clear();
     history.set_limit(config.undo_limit);
+    history.set_memory_limit(static_cast<size_t>(config.undo_memory_mb) << 20);
     doc_path = path;
     if (path.empty()) doc_title = "Untitled " + std::to_string(++untitled_counter);
     else { const auto slash = path.find_last_of("/\\"); doc_title = slash == std::string::npos ? path : path.substr(slash + 1); }

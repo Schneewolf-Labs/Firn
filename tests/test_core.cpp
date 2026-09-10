@@ -1310,6 +1310,37 @@ static void test_vector_core() {
     CHECK(doc.layer(1).is_vector() && doc.layer(1).objects.size() == 1);
 }
 
+static void test_snapshot_crop_and_undo_budget() {
+    Document doc(40, 30);
+    Layer& L = doc.add_layer("L");
+    L.pixels = Image(40, 30, Color{10, 20, 30, 255});
+    Image before = L.pixels;
+    Image after = before;
+    after.set(5, 7, {200, 0, 0, 255});
+    after.set(9, 12, {0, 200, 0, 255});
+    auto cmd = std::make_unique<LayerSnapshotCommand>(0, "Dab", before, after);
+    CHECK(cmd->rect().x0 == 5 && cmd->rect().y0 == 7 && cmd->rect().x1 == 10 && cmd->rect().y1 == 13);
+    CHECK(cmd->memory_bytes() == 2u * 5 * 6 * 4);   // two 5x6 crops
+    CommandStack stack;
+    stack.run(doc, std::move(cmd));
+    CHECK(doc.layer(0).pixels.get(5, 7).r == 200 && doc.layer(0).pixels.get(9, 12).g == 200 && doc.layer(0).pixels.get(0, 0).b == 30);
+    stack.undo(doc);
+    CHECK(doc.layer(0).pixels.get(5, 7).r == 10 && doc.layer(0).pixels.get(9, 12).g == 20);
+    stack.redo(doc);
+    CHECK(doc.layer(0).pixels.get(5, 7).r == 200);
+    // Memory budget: the oldest applied entries go first, the newest stays.
+    for (int i = 0; i < 4; ++i) {
+        Image b = doc.layer(0).pixels, a = b;
+        a.set(i, 0, {static_cast<uint8_t>(100 + i), 0, 0, 255});
+        stack.run(doc, std::make_unique<LayerSnapshotCommand>(0, "Dab", b, a));
+    }
+    CHECK(stack.size() == 5 && stack.memory_bytes() > 0);
+    stack.set_memory_limit(1);
+    CHECK(stack.size() == 1 && stack.can_undo());
+    stack.undo(doc);
+    CHECK(doc.layer(0).pixels.get(3, 0).r == 200 || doc.layer(0).pixels.get(3, 0).r == 10);
+}
+
 static void test_selection_modify_ops() {
     // Specks and holes: a 1-px speck and a 1-px hole in a 20x20 mask.
     Mask m(20, 20, 0);
@@ -2005,6 +2036,7 @@ int main() {
     test_vector_roundtrip();
     test_material_texture_and_gradient_file();
     test_selection_modify_ops();
+    test_snapshot_crop_and_undo_budget();
     test_vector_core();
     test_history_limit();
     test_brush_texture();

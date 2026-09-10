@@ -6,6 +6,8 @@
 #include <cmath>
 #include <cctype>
 #include <cstring>
+#include <functional>
+#include <future>
 #include <ctime>
 #include <fstream>
 #include <iterator>
@@ -1090,8 +1092,12 @@ std::vector<uint8_t> bitmap_and_channels(const Image& tile, bool with_alpha, uin
     w.u16(with_alpha ? 2 : 1);
     w.u16(with_alpha ? 4 : 3);
     const size_t padded = (static_cast<size_t>(tile.width()) + 3) / 4 * 4 * tile.height();
-    for (int c = 0; c < 3; ++c) w.bytes(channel_block(dib_image, static_cast<uint16_t>(c + 1), planes[c], padded * 3));
-    if (with_alpha) w.bytes(channel_block(dib_trans, 0, planes[3], padded));
+    // Each channel compresses on its own thread; the blocks are appended in order.
+    std::future<std::vector<uint8_t>> jobs[4];
+    for (int c = 0; c < 3; ++c) jobs[c] = std::async(std::launch::async, [&, c] { return channel_block(dib_image, static_cast<uint16_t>(c + 1), planes[c], padded * 3); });
+    if (with_alpha) jobs[3] = std::async(std::launch::async, [&] { return channel_block(dib_trans, 0, planes[3], padded); });
+    for (int c = 0; c < 3; ++c) w.bytes(jobs[c].get());
+    if (with_alpha) w.bytes(jobs[3].get());
     return w.out;
 }
 
@@ -1110,8 +1116,11 @@ std::vector<uint8_t> bitmap_and_channels16(const Image16& tile, bool with_alpha,
     w.u16(with_alpha ? 2 : 1);
     w.u16(with_alpha ? 4 : 3);
     const size_t padded = (static_cast<size_t>(tile.width()) * 2 + 3) / 4 * 4 * tile.height();
-    for (int c = 0; c < 3; ++c) w.bytes(channel_block(dib_image, static_cast<uint16_t>(c + 1), planes[c], padded * 3));
-    if (with_alpha) w.bytes(channel_block(dib_trans, 0, planes[3], padded));
+    std::future<std::vector<uint8_t>> jobs[4];
+    for (int c = 0; c < 3; ++c) jobs[c] = std::async(std::launch::async, [&, c] { return channel_block(dib_image, static_cast<uint16_t>(c + 1), planes[c], padded * 3); });
+    if (with_alpha) jobs[3] = std::async(std::launch::async, [&] { return channel_block(dib_trans, 0, planes[3], padded); });
+    for (int c = 0; c < 3; ++c) w.bytes(jobs[c].get());
+    if (with_alpha) w.bytes(jobs[3].get());
     return w.out;
 }
 
@@ -1499,6 +1508,10 @@ std::vector<uint8_t> save_psp_to_memory(const Document& doc) {
     Writer bank;
     uint32_t block_count = 0;
     bool has_groups = false, has_masks = false, has_vectors = false, has_adjustments = false;
+    // Blocks are built concurrently (each raster layer compresses on its own
+    // threads) and appended in stack order afterwards.
+    std::vector<std::future<std::vector<uint8_t>>> jobs;
+    auto emit = [&](std::function<std::vector<uint8_t>()> fn) { jobs.push_back(std::async(std::launch::async, std::move(fn))); };
     {
         size_t i = 0;
         while (i < doc.layer_count()) {
@@ -1512,13 +1525,13 @@ std::vector<uint8_t> save_psp_to_memory(const Document& doc) {
                     j = M.type == LayerType::Group ? doc.group_end(j) : j + 1;
                 }
                 if (L.has_mask()) ++members;
-                bank.bytes(group_block(L, members));
+                { const Layer* Lp = &L; emit([Lp, members] { return group_block(*Lp, members); }); }
                 ++block_count; has_groups = true;
                 ++i;
                 continue;
             }
             if (L.is_adjustment()) {
-                bank.bytes(adjustment_block(L, doc.width(), doc.height()));
+                { const Layer* Lp = &L; const int dw = doc.width(), dh = doc.height(); emit([Lp, dw, dh] { return adjustment_block(*Lp, dw, dh); }); }
                 ++block_count; has_adjustments = true;
                 ++i;
                 continue;
@@ -1530,7 +1543,7 @@ std::vector<uint8_t> save_psp_to_memory(const Document& doc) {
                 payload.u32(8); payload.u16(0); payload.u16(0);
                 Writer vb;
                 vb.block(kLayerBlock, payload.out);
-                bank.bytes(vb.out);
+                { std::vector<uint8_t> bytes = vb.out; emit([bytes] { return bytes; }); }
                 ++block_count; has_vectors = true;
                 ++i;
                 continue;
@@ -1539,14 +1552,14 @@ std::vector<uint8_t> save_psp_to_memory(const Document& doc) {
                 Layer g = L;
                 g.type = LayerType::Group;
                 g.mask = Mask();
-                bank.bytes(group_block(g, 2));
+                { const Layer gc = g; emit([gc] { return group_block(gc, 2); }); }
                 Layer plain = L;
                 plain.opacity = 1.0f; plain.blend = BlendMode::Normal; plain.visible = true;
-                bank.bytes(layer_block(plain, doc.width(), doc.height(), deep_file));
-                bank.bytes(mask_block(L.name, L.mask, L.mask_enabled, doc.width(), doc.height()));
+                { const Layer pc = plain; const int dw = doc.width(), dh = doc.height(); emit([pc, dw, dh, deep_file] { return layer_block(pc, dw, dh, deep_file); }); }
+                { const Layer* Lp = &L; const int dw = doc.width(), dh = doc.height(); emit([Lp, dw, dh] { return mask_block(Lp->name, Lp->mask, Lp->mask_enabled, dw, dh); }); }
                 block_count += 3; has_groups = true; has_masks = true;
             } else {
-                bank.bytes(layer_block(L, doc.width(), doc.height(), deep_file));
+                { const Layer* Lp = &L; const int dw = doc.width(), dh = doc.height(); emit([Lp, dw, dh, deep_file] { return layer_block(*Lp, dw, dh, deep_file); }); }
                 ++block_count;
             }
             ++i;
@@ -1554,12 +1567,13 @@ std::vector<uint8_t> save_psp_to_memory(const Document& doc) {
             for (int g = doc.parent_group(i - 1); g >= 0; g = doc.parent_group(g)) {
                 if (doc.group_end(g) != i) break;
                 if (doc.layer(g).has_mask()) {
-                    bank.bytes(mask_block(doc.layer(g).name, doc.layer(g).mask, doc.layer(g).mask_enabled, doc.width(), doc.height()));
+                    { const Layer* Gp = &doc.layer(g); const int dw = doc.width(), dh = doc.height(); emit([Gp, dw, dh] { return mask_block(Gp->name, Gp->mask, Gp->mask_enabled, dw, dh); }); }
                     ++block_count; has_masks = true;
                 }
             }
         }
     }
+    for (auto& j : jobs) bank.bytes(j.get());
     if (has_vectors) contents |= 0x00000002u; // vector layers
     if (has_adjustments) contents |= 0x00000004u; // adjustment layers
     if (has_groups) contents |= 0x00000008u;  // group layers

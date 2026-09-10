@@ -27,10 +27,30 @@ void CommandStack::push_applied(std::unique_ptr<Command> cmd) {
     trim();
 }
 
+size_t state_bytes(const Document::State& s) {
+    size_t n = s.selection.size();
+    for (const Layer& L : s.layers) n += L.pixels.size_bytes() + L.mask.size() + (L.deep ? L.deep->size() * 2 : 0);
+    for (const auto& a : s.alpha) n += a.mask.size();
+    return n;
+}
+
+size_t CommandStack::memory_bytes() const {
+    size_t n = 0;
+    for (const auto& c : done_) n += c->memory_bytes();
+    return n;
+}
+
 void CommandStack::trim() {
-    if (limit_ == 0 || done_.size() <= limit_) return;
-    const size_t drop = done_.size() - limit_;
-    done_.erase(done_.begin(), done_.begin() + drop);
+    size_t drop = 0;
+    if (limit_ != 0 && done_.size() > limit_) drop = done_.size() - limit_;
+    if (memory_limit_ != 0) {
+        // Drop the oldest applied entries until the budget fits; the newest
+        // applied entry always stays so one undo is possible.
+        size_t total = memory_bytes();
+        while (total > memory_limit_ && drop + 1 < cursor_) { total -= done_[drop]->memory_bytes(); ++drop; }
+    }
+    if (drop == 0) return;
+    done_.erase(done_.begin(), done_.begin() + static_cast<long>(drop));
     cursor_ = cursor_ > drop ? cursor_ - drop : 0;
 }
 
@@ -110,18 +130,56 @@ void GaussianBlurCommand::apply(Image& img) { raster::gaussian_blur(img, radius_
 
 // --- Snapshot / geometry -----------------------------------------------
 
+namespace {
+// Pastes a crop back into a document-sized layer image.
+void paste_rect(Image& dst, const Image& crop, const raster::Rect& r) {
+    if (crop.width() == dst.width() && crop.height() == dst.height()) { dst = crop; return; }
+    for (int y = r.y0; y < r.y1 && y < dst.height(); ++y)
+        std::memcpy(dst.data() + (static_cast<size_t>(y) * dst.width() + r.x0) * 4, crop.data() + static_cast<size_t>(y - r.y0) * crop.width() * 4, static_cast<size_t>(crop.width()) * 4);
+}
+}  // namespace
+
+LayerSnapshotCommand::LayerSnapshotCommand(size_t layer, std::string name, Image before, Image after)
+    : layer_(layer), name_(std::move(name)) {
+    const int w = after.width(), h = after.height();
+    if (before.width() != w || before.height() != h || w == 0 || h == 0) {
+        rect_ = {0, 0, w, h};
+        before_ = std::move(before); after_ = std::move(after);
+        return;
+    }
+    // Bounding box of the pixels that changed.
+    int x0 = w, y0 = h, x1 = 0, y1 = 0;
+    const size_t row_bytes = static_cast<size_t>(w) * 4;
+    for (int y = 0; y < h; ++y) {
+        const uint8_t* a = before.data() + static_cast<size_t>(y) * row_bytes;
+        const uint8_t* b = after.data() + static_cast<size_t>(y) * row_bytes;
+        if (std::memcmp(a, b, row_bytes) == 0) continue;
+        int lx = 0, rx = w - 1;
+        while (lx < w && std::memcmp(a + static_cast<size_t>(lx) * 4, b + static_cast<size_t>(lx) * 4, 4) == 0) ++lx;
+        while (rx > lx && std::memcmp(a + static_cast<size_t>(rx) * 4, b + static_cast<size_t>(rx) * 4, 4) == 0) --rx;
+        x0 = std::min(x0, lx); x1 = std::max(x1, rx + 1);
+        y0 = std::min(y0, y); y1 = y + 1;
+    }
+    if (x1 <= x0 || y1 <= y0) { rect_ = {0, 0, 0, 0}; return; }  // nothing changed
+    rect_ = {x0, y0, x1, y1};
+    if (x0 == 0 && y0 == 0 && x1 == w && y1 == h) { before_ = std::move(before); after_ = std::move(after); return; }
+    before_ = raster::crop(before, rect_);
+    after_ = raster::crop(after, rect_);
+}
+
 void LayerSnapshotCommand::execute(Document& doc) {
     Layer& L = doc.layer(layer_);
     if (L.is_deep() && !before_deep_) before_deep_ = L.deep;
     L.deep.reset();
-    L.pixels = after_;
-    doc.touch();
+    if (!rect_.empty()) paste_rect(L.pixels, after_, rect_);
+    if (rect_.empty()) doc.touch(); else doc.touch(rect_);
 }
 
 void LayerSnapshotCommand::undo(Document& doc) {
-    doc.layer(layer_).pixels = before_;
-    doc.layer(layer_).deep = before_deep_;
-    doc.touch();
+    Layer& L = doc.layer(layer_);
+    if (!rect_.empty()) paste_rect(L.pixels, before_, rect_);
+    L.deep = before_deep_;
+    if (rect_.empty()) doc.touch(); else doc.touch(rect_);
 }
 
 void LayerSnapshotCommand::capture_deep(Document& doc) {
