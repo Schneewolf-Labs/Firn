@@ -199,6 +199,7 @@ void App::draw_menu() {
             if (ImGui::MenuItem("Add Noise...")) open_adjust = Adj::AddNoise;
             if (ImGui::MenuItem("Median Filter...")) open_adjust = Adj::Median;
             if (ImGui::MenuItem("Despeckle")) run(std::make_unique<AdjustCommand>(layer, "Despeckle", [](Image& i) { effects::median(i, 1); }));
+            if (ImGui::MenuItem("Edge Preserving Smooth...")) open_adjust = Adj::EdgeSmooth;
             if (ImGui::MenuItem("Salt and Pepper Filter...")) open_adjust = Adj::SaltPepper;
             if (ImGui::MenuItem("JPEG Artifact Removal...")) open_adjust = Adj::JpegArtifacts;
             if (ImGui::MenuItem("Digital Camera Noise Removal...")) open_adjust = Adj::NoiseRemoval;

@@ -32,8 +32,11 @@ section into the next version.
   by GIMP, Krita and MyPaint. Save As suggests .ora for layered images
   and autosave uses it; the classic format stays supported for files
   meant for the original.
-- Scripting: 26 more of the original's commands run, taking it from 69 to
-  95 of the 115 names its own bundled scripts use. Selections (smooth,
+- Adjust > Add/Remove Noise > Edge Preserving Smooth: averages within flat
+  areas while leaving edges alone, the last of the original's photo filters
+  we were missing.
+- Scripting: 27 more of the original's commands run, taking it from 69 to
+  96 of the 115 names its own bundled scripts use. Selections (smooth,
   save and load alpha channels, float), tools (select by name, previous
   tool), channel splitting, masks, paste into selection, palettes, grid
   and guide visibility, and the effects Glowing Edges, Colored Edges,

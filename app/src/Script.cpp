@@ -581,6 +581,7 @@ std::string App::do_command(const std::string& name, const Value& p, bool* ok) {
     }
 
     // --- effects ---
+    if (name == "EdgePreservingSmooth") return adjust("Edge Preserving Smooth", [f = static_cast<int>(num("SmoothingFactor", 30))](Image& i) { photo::edge_preserving_smooth(i, f); });
     if (name == "BrushStrokes")
         // Our filter takes length, density, width and opacity; the original's
         // bristle, angle, color and softness settings have no equivalent.

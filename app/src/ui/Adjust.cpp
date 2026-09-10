@@ -224,7 +224,7 @@ static const char* kTitles[] = {nullptr, "Brightness/Contrast", "Curves", "Gamma
                                     "Lens Distortion", "Halftone", "Chrome", "Outer Bevel", "Fade Correction",
                                     "Kaleidoscope", "Sunburst",
                                     "Automatic Color Balance", "Automatic Contrast Enhancement", "Automatic Saturation Enhancement",
-                                    "Clarify", "Black and White Points", "Histogram Adjustment", "Salt and Pepper Filter",
+                                    "Clarify", "Black and White Points", "Histogram Adjustment", "Salt and Pepper Filter", "Edge Preserving Smooth",
                                     "JPEG Artifact Removal", "Fill Flash", "Backlighting", "Chromatic Aberration Removal",
                                     "Digital Camera Noise Removal",
                                     "Curlicues", "Displacement Map", "Polar Coordinates", "Spiky Halo", "Warp", "Wind",
@@ -630,6 +630,9 @@ void App::draw_adjust_dialogs() {
             return c;
         },
         [&](Image& img) { photo::histogram_adjust(img, ha_low, ha_high, ha_gamma, ha_midtones, ha_channel); });
+    adjust_modal(*this, "Edge Preserving Smooth",
+        [&] { return ImGui::SliderInt("Smoothing", &edge_smooth_amount, 1, 100); },
+        [&](Image& img) { photo::edge_preserving_smooth(img, edge_smooth_amount); });
     adjust_modal(*this, "Salt and Pepper Filter",
         [&] { bool c = ImGui::SliderInt("Speck size", &sp_size, 3, 9); c |= ImGui::SliderInt("Sensitivity to specks", &sp_sensitivity, 1, 30); c |= ImGui::Checkbox("Include all lower speck sizes", &sp_smaller); c |= ImGui::Checkbox("Aggressive action", &sp_aggressive); return c; },
         [&](Image& img) { photo::salt_and_pepper(img, sp_size, sp_sensitivity, sp_smaller, sp_aggressive); });

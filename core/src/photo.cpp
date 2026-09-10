@@ -8,6 +8,7 @@
 
 #include "firn/adjust.h"
 #include "firn/effects.h"
+#include "firn/parallel.h"
 #include "firn/raster.h"
 
 namespace firn::photo {
@@ -207,7 +208,8 @@ static void smooth_flat(Image& img, float radius, float color_sigma, float amoun
     for (int dy = -r; dy <= r; ++dy)
         for (int dx = -r; dx <= r; ++dx) spatial[static_cast<size_t>((dy + r) * (2 * r + 1) + dx + r)] = std::exp(-(dx * dx + dy * dy) / (2.0f * radius * radius));
     const float inv2s = 1.0f / (2.0f * color_sigma * color_sigma);
-    for (int y = 0; y < h; ++y)
+    parallel::rows(h, static_cast<size_t>(w) * (2 * r + 1) * (2 * r + 1), [&](int ry0, int ry1) {
+    for (int y = ry0; y < ry1; ++y)
         for (int x = 0; x < w; ++x) {
             const size_t i = (static_cast<size_t>(y) * w + x) * 4;
             if (!s[i + 3]) continue;
@@ -230,6 +232,14 @@ static void smooth_flat(Image& img, float radius, float color_sigma, float amoun
             if (wsum <= 0.0f) continue;
             for (int c = 0; c < 3; ++c) d[i + c] = clamp8(d[i + c] + (acc[c] / wsum - d[i + c]) * amount);
         }
+    });
+}
+
+void edge_preserving_smooth(Image& img, int smoothing) {
+    const int s = std::clamp(smoothing, 1, 100);
+    // A wider reach and a looser luma tolerance as the setting rises; the
+    // tolerance is what keeps edges, so it grows more slowly than the radius.
+    smooth_flat(img, 1.0f + s / 25.0f, 2.0f + s * 0.30f, 1.0f);
 }
 
 void jpeg_artifact_removal(Image& img, int strength, int crispness) {

@@ -1402,6 +1402,31 @@ static void test_zip() {
 // cannot restore a filter or a style onto the wrong layer.
 // Layers palette drag and drop: a whole group travels with its members and
 // a layer dropped on a group member joins the group.
+// Edge Preserving Smooth flattens noise inside an area but leaves the step
+// between two areas intact.
+static void test_edge_preserving_smooth() {
+    Image img(40, 40);
+    for (int y = 0; y < 40; ++y)
+        for (int x = 0; x < 40; ++x) {
+            const int base = x < 20 ? 60 : 200;
+            const int n = ((x * 7 + y * 13) % 11) - 5;   // +/-5 of noise
+            const uint8_t v = static_cast<uint8_t>(std::clamp(base + n, 0, 255));
+            img.set(x, y, {v, v, v, 255});
+        }
+    auto spread = [](const Image& im, int x0, int x1) {
+        int lo = 255, hi = 0;
+        for (int y = 10; y < 30; ++y)
+            for (int x = x0; x < x1; ++x) { lo = std::min<int>(lo, im.get(x, y).r); hi = std::max<int>(hi, im.get(x, y).r); }
+        return hi - lo;
+    };
+    const int before = spread(img, 4, 16);
+    Image out = img;
+    photo::edge_preserving_smooth(out, 50);
+    CHECK(spread(out, 4, 16) < before / 2);                       // the noise inside the flat area is gone
+    CHECK(out.get(24, 20).r - out.get(15, 20).r > 100);           // the step between the areas survives
+    CHECK(out.get(5, 5).a == 255);
+}
+
 static void test_move_layer() {
     Document doc(8, 8);
     doc.add_layer("Background");          // 0
@@ -2676,6 +2701,7 @@ int main() {
     test_openraster();
     test_firn_stash_resolution();
     test_move_layer();
+    test_edge_preserving_smooth();
     test_vector_core();
     test_history_limit();
     test_brush_texture();

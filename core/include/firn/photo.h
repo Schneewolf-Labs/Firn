@@ -37,6 +37,9 @@ void backlighting(Image& img, int strength);
 // Chromatic Aberration Removal: radial scale of the red and blue channels
 // in pixels at the image corners (-20..20).
 void chromatic_aberration(Image& img, float red_shift, float blue_shift);
+// Edge Preserving Smooth: averages within flat areas while leaving edges
+// alone. `smoothing` 1..100 widens both the reach and the tolerance.
+void edge_preserving_smooth(Image& img, int smoothing);
 // Digital Camera Noise Removal: edge-preserving smoothing. strength 0..100,
 // blend (how much of the result to keep) 0..100, sharpening 0..100.
 void noise_removal(Image& img, int strength, int blend, int sharpening);

@@ -188,7 +188,7 @@ struct App {
                      Average, Gaussian, Posterize, Solarize, UnsharpMask, Median, MotionBlur, Mosaic, AddNoise, DropShadow,
                      ColorBalance, Sepia, HueMap, Wave, Pinch, Twirl, Buttonize, InnerBevel, Cutout,
                      Ripple, Spherize, Lens, Halftone, Chrome, OuterBevel, FadeCorrection, Kaleidoscope, Sunburst,
-                     AutoColor, AutoContrast, AutoSaturation, Clarify, BlackWhitePoints, HistogramAdjust, SaltPepper,
+                     AutoColor, AutoContrast, AutoSaturation, Clarify, BlackWhitePoints, HistogramAdjust, SaltPepper, EdgeSmooth,
                      JpegArtifacts, FillFlash, Backlighting, ChromaticAberration, NoiseRemoval,
                      Curlicues, DisplacementMap, PolarCoordinates, SpikyHalo, Warp, Wind, Circle, Cylinder, Pentagon,
                      Perspective, Skew, Feedback, Pattern, RotatingMirror, Offset, SeamlessTiling, PageCurl,
@@ -256,6 +256,7 @@ struct App {
     int clarify_strength = 2;
     float bwp_src_black[3] = {0, 0, 0}, bwp_src_white[3] = {1, 1, 1}, bwp_dst_black[3] = {0, 0, 0}, bwp_dst_white[3] = {1, 1, 1};
     float ha_low = 0.5f, ha_high = 0.5f, ha_gamma = 1.0f; int ha_midtones = 0, ha_channel = 0;
+    int edge_smooth_amount = 30;        // Edge Preserving Smooth
     int sp_size = 3, sp_sensitivity = 15; bool sp_smaller = true, sp_aggressive = false;
     int jpeg_strength = 1, jpeg_crispness = 30;
     int flash_strength = 40, backlight_strength = 40;
