@@ -24,6 +24,11 @@
 #include "firn/photo.h"
 #include "firn/vector.h"
 
+// Scratch files go to the platform's temp directory (no /tmp on Windows).
+static std::string tmp_path(const char* name) {
+    return (std::filesystem::temp_directory_path() / name).string();
+}
+
 #define CHECK(cond)                                                              \
     do {                                                                         \
         if (!(cond)) {                                                           \
@@ -1382,7 +1387,7 @@ static void test_material_texture_and_gradient_file() {
     g.name = "Firn test";
     g.colors = {{{10, 20, 30, 255}, 0, 50}, {{255, 128, 0, 255}, 40, 25}, {{0, 0, 255, 255}, 100, 50}};
     g.opacities = {{100, 0, 50}, {30, 100, 50}};
-    const std::string path = "/tmp/firn_test.PspGradient";
+    const std::string path = tmp_path("firn_test.PspGradient");
     CHECK(io::save_gradients({g}, path));
     auto back = io::load_gradients(path);
     std::remove(path.c_str());
@@ -1475,7 +1480,7 @@ static void test_vector_roundtrip() {
         CHECK(b < a && b > 0);
         CHECK(c > a);
         // Styled line files round-trip through the writer.
-        const std::string tmp = "/tmp/firn_test_line.PspStyledLine";
+        const std::string tmp = tmp_path("firn_test_line.PspStyledLine");
         CHECK(io::save_styled_line(*line, tmp));
         auto back = io::load_styled_line(tmp);
         CHECK(back && back->dashes == line->dashes && back->first_w == line->first_w && back->miter == line->miter);
@@ -1495,7 +1500,7 @@ static void test_vector_default_bytes() {
     o.stroke.kind = vec::PaintStyle::Kind::Solid;
     o.fill.kind = vec::PaintStyle::Kind::Solid;
     L.objects.push_back(o);
-    const std::string tmp = "/tmp/firn_test_defaults.pspimage";
+    const std::string tmp = tmp_path("firn_test_defaults.pspimage");
     CHECK(io::save_psp(doc, tmp, nullptr));
     std::ifstream f(tmp, std::ios::binary);
     std::vector<uint8_t> d((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
@@ -1602,7 +1607,7 @@ static void test_adjustment_layers() {
         x.mixer.mix[0][1] = 50; x.mixer.constant[2] = -10; x.mixer.monochrome = true;
         x.threshold = 90; x.posterize = 4;
         L.mask = Mask(8, 8, 128);
-        const std::string tmp = "/tmp/firn_test_adj.pspimage";
+        const std::string tmp = tmp_path("firn_test_adj.pspimage");
         CHECK(io::save_psp(d, tmp, nullptr));
         std::string err; std::vector<std::string> warnings;
         auto back = io::load_psp(tmp, &err, &warnings);
@@ -1701,7 +1706,7 @@ static void test_color_ops() {
     CHECK(wrapped.get(0, 0).r == 44);
     Image diff = raster::arithmetic(a, b, raster::ArithOp::Difference, 2, 10, true, 1);
     CHECK(diff.get(0, 0).r == 60 && diff.get(0, 0).g == 100);
-    const std::string tmp = "/tmp/firn_test.PspPalette";
+    const std::string tmp = tmp_path("firn_test.PspPalette");
     CHECK(io::save_palette(pal, tmp));
     auto loaded = io::load_palette(tmp);
     std::remove(tmp.c_str());
@@ -1868,7 +1873,7 @@ static void test_print() {
     Image img(40, 30, {200, 100, 50, 255});
     print::PageSetup ps;
     ps.title = "test (page)";
-    const std::string tmp = "/tmp/firn_test_print.pdf";
+    const std::string tmp = tmp_path("firn_test_print.pdf");
     CHECK(print::write_pdf(img, ps, tmp));
     std::ifstream f(tmp, std::ios::binary);
     std::string data((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
@@ -1919,7 +1924,7 @@ static void test_16bit() {
     Image16 soft = fine;
     for (size_t i = 3; i < soft.size(); i += 4) soft.data()[i] = static_cast<uint16_t>(1000 + i);
     d16.add_layer("Soft").set_deep(soft);
-    const std::string tmp = "/tmp/firn_test_16.pspimage";
+    const std::string tmp = tmp_path("firn_test_16.pspimage");
     CHECK(io::save_psp(d16, tmp, nullptr));
     std::string err; std::vector<std::string> warnings;
     auto rt = io::load_psp(tmp, &err, &warnings);
@@ -1934,7 +1939,7 @@ static void test_16bit() {
     CHECK(rt->layer(0).deep->data()[1] == 12345 && rt->layer(0).deep->data()[2] == 60000 && rt->layer(0).deep->data()[4 * 7] == fine.data()[4 * 7]);
     CHECK(rt->layer(1).is_deep() && rt->layer(1).deep->data()[3] == 1003 && rt->layer(1).deep->data()[4 * 7 + 3] == soft.data()[4 * 7 + 3]);
     CHECK(rt->layer(1).pixels.get(0, 0).a == (1003 + 128) / 257);
-    const std::string png = "/tmp/firn_test_16.png";
+    const std::string png = tmp_path("firn_test_16.png");
     CHECK(io::save_png16(fine, png));
     auto p16 = io::load16(png);
     CHECK(p16 && p16->width() == 6 && p16->data()[1] == 12345 && p16->data()[2] == 60000);
@@ -1967,7 +1972,7 @@ static void test_icc() {
     id.apply(same);
     CHECK(same.get(0, 0).r == 200 && same.get(0, 0).g == 100);
     // Profiles travel through PNG and JPEG files.
-    const std::string png = "/tmp/firn_test_icc.png", jpg = "/tmp/firn_test_icc.jpg";
+    const std::string png = tmp_path("firn_test_icc.png"), jpg = tmp_path("firn_test_icc.jpg");
     CHECK(io::save_png(img, png) && io::embed_icc(png, bytes));
     const auto pb = io::read_icc(png);
     CHECK(pb.size() == bytes.size() && std::equal(pb.begin(), pb.end(), bytes.begin()));
