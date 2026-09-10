@@ -67,12 +67,12 @@ void App::promote_selection_to_layer(bool floating) {
         for (int c = 0; c < 3; ++c) px.data()[i * 4 + c] = L.pixels.data()[i * 4 + c];
         px.data()[i * 4 + 3] = static_cast<uint8_t>(a);
     }
-    run(std::make_unique<PasteLayerCommand>(floating ? "Floating Selection" : "Promoted Selection", std::move(px)));
+    run(std::make_unique<PasteLayerCommand>(floating ? "Floating Selection" : "Promoted Selection", std::move(px), floating));
 }
 
 bool App::has_floating_layer() const {
     if (!doc) return false;
-    for (size_t i = 0; i < doc->layer_count(); ++i) if (doc->layer(i).name == "Floating Selection" && doc->layer(i).is_raster()) return true;
+    for (size_t i = 0; i < doc->layer_count(); ++i) if (doc->layer(i).floating && doc->layer(i).is_raster()) return true;
     return false;
 }
 
@@ -80,7 +80,7 @@ bool App::has_floating_layer() const {
 void App::defloat() {
     if (!doc) return;
     for (size_t i = doc->layer_count(); i-- > 0;) {
-        if (doc->layer(i).name != "Floating Selection" || !doc->layer(i).is_raster() || i == 0) continue;
+        if (!doc->layer(i).floating || !doc->layer(i).is_raster() || i == 0) continue;
         if (!doc->layer(i - 1).is_raster()) { status = "Defloat: the layer under the floating selection is not a raster layer."; return; }
         doc->set_active_layer(static_cast<int>(i));
         run(std::make_unique<MergeLayersCommand>(MergeLayersCommand::Kind::Down, static_cast<int>(i)));

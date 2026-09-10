@@ -97,3 +97,52 @@ void App::draw_about_dialog() {
     if (ImGui::Button("Close", ImVec2(120, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape, false) || ImGui::IsKeyPressed(ImGuiKey_Enter, false)) ImGui::CloseCurrentPopup();
     ImGui::EndPopup();
 }
+
+// Help > Keyboard Shortcuts: the bindings in one place.
+void App::draw_shortcuts_dialog() {
+    if (show_shortcuts_dialog) { ImGui::OpenPopup("Keyboard Shortcuts"); show_shortcuts_dialog = false; }
+    ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowSize(ImVec2(980, 620), ImGuiCond_Appearing);
+    if (!ImGui::BeginPopupModal("Keyboard Shortcuts", nullptr, ImGuiWindowFlags_NoScrollbar)) return;
+    struct Row { const char* keys; const char* what; };
+    static const Row file[] = {{"Ctrl+N", "New image"}, {"Ctrl+O", "Open"}, {"Ctrl+S", "Save"}, {"Ctrl+Shift+S", "Save As"}, {"Ctrl+P", "Print"}, {"Ctrl+W", "Close image"}};
+    static const Row edit[] = {{"Ctrl+Z", "Undo"}, {"Ctrl+Y or Ctrl+Shift+Z", "Redo"}, {"Ctrl+C", "Copy"}, {"Ctrl+X", "Cut"}, {"Ctrl+V", "Paste as new image"}, {"Ctrl+L", "Paste as new layer"}, {"Delete", "Clear the selection"}};
+    static const Row view[] = {{"+ / -", "Zoom in / out"}, {"Mouse wheel", "Zoom about the cursor"}, {"Ctrl+0", "Fit to window"}, {"Ctrl+Alt+0", "Actual size"}, {"Space + drag, middle drag", "Pan"}, {"Shift+I", "Image information"}, {"Ctrl+Shift+M", "Hide / show the marquee"}};
+    static const Row sel[] = {{"Ctrl+A", "Select all"}, {"Ctrl+D", "Select none"}, {"Ctrl+Shift+I", "Invert selection"}, {"Shift / Ctrl while selecting", "Add to / remove from the selection"}, {"Ctrl+Shift+R", "Crop to selection"}, {"Ctrl+F", "Float"}, {"Ctrl+Shift+F", "Defloat"}, {"Enter, double-click", "Close a point-to-point selection"}, {"Backspace", "Remove the last point"}, {"Escape", "Cancel the gesture"}};
+    static const Row img[] = {{"Ctrl+I", "Negative image"}, {"[ / ]", "Brush size down / up"}};
+    auto table = [&](const char* title, const Row* rows, size_t n) {
+        ImGui::SeparatorText(title);
+        if (ImGui::BeginTable(title, 2, ImGuiTableFlags_SizingFixedFit)) {
+            for (size_t i = 0; i < n; ++i) {
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn(); ImGui::TextUnformatted(rows[i].keys);
+                ImGui::TableNextColumn(); ImGui::TextDisabled("%s", rows[i].what);
+            }
+            ImGui::EndTable();
+        }
+    };
+    const float footer = ImGui::GetFrameHeightWithSpacing() + 8;
+    if (ImGui::BeginChild("rows", ImVec2(0, -footer))) {
+        ImGui::Columns(2, nullptr, false);
+        table("File", file, sizeof(file) / sizeof(file[0]));
+        table("Edit", edit, sizeof(edit) / sizeof(edit[0]));
+        table("View", view, sizeof(view) / sizeof(view[0]));
+        ImGui::NextColumn();
+        table("Selections", sel, sizeof(sel) / sizeof(sel[0]));
+        table("Image and brushes", img, sizeof(img) / sizeof(img[0]));
+        ImGui::SeparatorText("Tools");
+        if (ImGui::BeginTable("tools", 2, ImGuiTableFlags_SizingFixedFit)) {
+            for (const auto& t : tools) {
+                if (!t->shortcut()) continue;
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn(); ImGui::TextUnformatted(t->shortcut());
+                ImGui::TableNextColumn(); ImGui::TextDisabled("%s", t->name());
+            }
+            ImGui::EndTable();
+        }
+        ImGui::Columns(1);
+    }
+    ImGui::EndChild();
+    if (ImGui::Button("Close", ImVec2(110, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape, false)) ImGui::CloseCurrentPopup();
+    ImGui::EndPopup();
+}

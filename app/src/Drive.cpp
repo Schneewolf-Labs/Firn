@@ -321,6 +321,7 @@ void Driver::before_frame(App& app, SDL_Window* window) {
                 const float v = s.x;
                 if (n == "material_dialog") app.open_material_dialog(v < 2);   // 1 foreground, 2 background
                 else if (n == "theme_editor") app.open_theme_editor();
+                else if (n == "shortcuts_dialog") app.show_shortcuts_dialog = true;
                 else if (n == "effect_browser") { app.reset_effect_browser(); app.show_effect_browser = v != 0; }
                 else if (n == "theme_index") { app.ensure_themes(); const int i = static_cast<int>(v); if (i >= 0 && i < static_cast<int>(app.themes.size())) { app.config.theme = app.themes[i].name; app.apply_theme(app.config.theme); } }
                 else if (n == "sel_type") app.sel_freehand_type = static_cast<int>(v);

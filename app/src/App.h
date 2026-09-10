@@ -265,6 +265,8 @@ struct App {
     float sun_x = 0.5f, sun_y = 0.5f, sun_brightness = 0.8f, sun_ray_brightness = 0.6f; int sun_rays = 12; float sun_color[3] = {1, 1, 0.9f};
     bool show_info_dialog = false;
     bool show_about_dialog = false;
+    bool show_shortcuts_dialog = false;
+    void draw_shortcuts_dialog();       // Help > Keyboard Shortcuts (app/src/ui/About.cpp)
     GLuint about_tex = 0;               // the icon, uploaded when the About window first opens
     std::string about_gl;               // renderer and version strings, read once
     void draw_about_dialog();           // app/src/ui/About.cpp

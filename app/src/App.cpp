@@ -965,6 +965,8 @@ void App::handle_shortcuts() {
         run(std::make_unique<InvertCommand>(active_layer()));
     if (ctrl && ImGui::IsKeyPressed(ImGuiKey_A, false)) select_all();
     if (ctrl && ImGui::IsKeyPressed(ImGuiKey_D, false)) select_none();
+    if (ctrl && ImGui::IsKeyPressed(ImGuiKey_F, false)) { if (io.KeyShift) defloat(); else if (doc && doc->has_selection() && !has_floating_layer()) promote_selection_to_layer(true); }
+    if (ctrl && io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_M, false)) show_marquee = !show_marquee;
     if (ctrl && ImGui::IsKeyPressed(ImGuiKey_C, false)) copy();
     if (ctrl && ImGui::IsKeyPressed(ImGuiKey_X, false)) cut();
     if (ctrl && ImGui::IsKeyPressed(ImGuiKey_V, false)) paste_as_new_image();

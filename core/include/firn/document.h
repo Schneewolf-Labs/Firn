@@ -26,6 +26,7 @@ struct Layer {
     // A Background layer has no transparency: the eraser paints the
     // background color on it instead of clearing alpha.
     bool background = false;
+    bool floating = false;    // a floating selection (Selections > Float); not saved
     float opacity = 1.0f;  // 0..1
     BlendMode blend = BlendMode::Normal;
     // Optional document-sized mask (0 hides, 255 shows); empty = none.

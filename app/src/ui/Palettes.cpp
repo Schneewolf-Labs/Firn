@@ -228,6 +228,7 @@ static void draw_layers(App& app) {
             if (editing) ImGui::PopStyleColor();
         }
         if (L.background) { ImGui::SameLine(); ImGui::TextDisabled("(background)"); }
+        else if (L.floating) { ImGui::SameLine(); ImGui::TextDisabled("(floating)"); }
         else if (L.opacity < 1.0f) { ImGui::SameLine(); ImGui::TextDisabled("%.0f%%", L.opacity * 100.0f); }
         // Objects of an expanded vector layer, top-most first; clicking
         // selects the object (Shift adds), the checkbox hides it.

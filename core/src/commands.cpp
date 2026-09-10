@@ -234,6 +234,7 @@ void PasteLayerCommand::execute(Document& doc) {
     layer->name = layer_name_;
     layer->pixels = pixels_;
     layer->depth = depth;
+    layer->floating = floating_;
     doc.insert_layer(std::move(layer), index_);
 }
 

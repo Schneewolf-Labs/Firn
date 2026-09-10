@@ -417,6 +417,8 @@ void App::draw_menu() {
         ImGui::EndMenu();
     }
     if (ImGui::BeginMenu("Help")) {
+        if (ImGui::MenuItem("Keyboard Shortcuts...")) show_shortcuts_dialog = true;
+        ImGui::Separator();
         if (ImGui::MenuItem("About Firn...")) show_about_dialog = true;
         ImGui::EndMenu();
     }
@@ -499,6 +501,7 @@ void App::draw_dialogs() {
     draw_image_dialogs();
     draw_material_dialog();
     draw_about_dialog();
+    draw_shortcuts_dialog();
     draw_theme_editor();
     draw_effect_browser();
 
