@@ -602,6 +602,7 @@ struct App {
     void clear_selection();
     void paste_as_new_layer();
     void paste_as_new_image();
+    bool clipboard_for_paste(firn::Image& px, firn::raster::Rect& bounds);   // system clipboard, else the internal one
     bool show_alpha_save_dialog = false;
     char alpha_name_buf[128] = "Selection #1";
     void request_load_selection();

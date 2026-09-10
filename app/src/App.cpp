@@ -6,6 +6,7 @@
 #include <cstring>
 #include <filesystem>
 
+#include "Clipboard.h"
 #include "imgui.h"
 #include "firn/io.h"
 #include "firn/io_psp.h"
@@ -360,7 +361,30 @@ void App::copy() {
         for (size_t i = 0; i < sel.size(); ++i) p[i * 4 + 3] = static_cast<uint8_t>((p[i * 4 + 3] * sel.data()[i] + 127) / 255);
     }
     clipboard = {std::move(out), bounds};
-    status = "Copied";
+    // The same pixels go to the system clipboard for other programs.
+    const Image cropped = raster::crop(clipboard.pixels, bounds);
+    status = clipboard::write_image(cropped) ? "Copied" : std::string("Copied (internal only: ") + clipboard::unavailable_reason() + ")";
+}
+
+// Pixels to paste: the system clipboard when another program filled it,
+// otherwise the internal one (which keeps the copied region's position).
+bool App::clipboard_for_paste(Image& px, raster::Rect& bounds) {
+    std::optional<Image> sys = clipboard::read_image();
+    if (sys && !sys->empty()) {
+        bool ours = false;
+        if (!clipboard.empty()) {
+            const raster::Rect b = clipboard.bounds;
+            if (sys->width() == b.x1 - b.x0 && sys->height() == b.y1 - b.y0) {
+                const Image cropped = raster::crop(clipboard.pixels, b);
+                ours = std::memcmp(cropped.data(), sys->data(), cropped.size_bytes()) == 0;
+            }
+        }
+        if (!ours) { bounds = {0, 0, sys->width(), sys->height()}; px = std::move(*sys); return true; }
+    }
+    if (clipboard.empty()) return false;
+    px = clipboard.pixels;
+    bounds = clipboard.bounds;
+    return !bounds.empty();
 }
 
 void App::clear_selection() {
@@ -379,30 +403,29 @@ void App::cut() {
 }
 
 void App::paste_as_new_layer() {
-    if (!doc || clipboard.empty()) return;
-    // Clipboard from a different-sized document is placed at its top-left.
+    if (!doc) return;
+    Image src;
+    raster::Rect b;
+    if (!clipboard_for_paste(src, b)) { status = "Nothing to paste"; return; }
+    // The internal clipboard is document-sized (its region stays in place);
+    // an image from another program is placed at the top-left.
     Image px(doc->width(), doc->height());
-    const int w = std::min(px.width(), clipboard.pixels.width()), h = std::min(px.height(), clipboard.pixels.height());
+    const int w = std::min(px.width(), src.width()), h = std::min(px.height(), src.height());
     for (int y = 0; y < h; ++y)
-        std::memcpy(px.data() + static_cast<size_t>(y) * px.width() * 4,
-                    clipboard.pixels.data() + static_cast<size_t>(y) * clipboard.pixels.width() * 4, static_cast<size_t>(w) * 4);
+        std::memcpy(px.data() + static_cast<size_t>(y) * px.width() * 4, src.data() + static_cast<size_t>(y) * src.width() * 4, static_cast<size_t>(w) * 4);
     run(std::make_unique<PasteLayerCommand>("Raster " + std::to_string(doc->layer_count()), std::move(px)));
 }
 
 void App::paste_as_new_image() {
-    if (clipboard.empty()) return;
-    const raster::Rect b = clipboard.bounds;
-    if (b.empty()) return;
-    tool().cancel(*this);
-    doc = std::make_unique<Document>(b.x1 - b.x0, b.y1 - b.y0);
-    Layer& L = doc->add_layer("Raster 1");
+    Image src;
+    raster::Rect b;
+    if (!clipboard_for_paste(src, b)) { status = "Nothing to paste"; return; }
+    auto d = std::make_unique<Document>(b.x1 - b.x0, b.y1 - b.y0);
+    Layer& L = d->add_layer("Raster 1");
     for (int y = b.y0; y < b.y1; ++y)
         std::memcpy(L.pixels.data() + static_cast<size_t>(y - b.y0) * L.pixels.width() * 4,
-                    clipboard.pixels.data() + (static_cast<size_t>(y) * clipboard.pixels.width() + b.x0) * 4,
-                    static_cast<size_t>(b.x1 - b.x0) * 4);
-    history.clear();
-    doc_path.clear();
-    fit_requested = true;
+                    src.data() + (static_cast<size_t>(y) * src.width() + b.x0) * 4, static_cast<size_t>(b.x1 - b.x0) * 4);
+    add_document(std::move(d), "");
     status = "Pasted as new image";
 }
 

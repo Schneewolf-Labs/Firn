@@ -57,8 +57,8 @@ void App::draw_menu() {
         ImGui::Separator();
         if (ImGui::MenuItem("Cut", "Ctrl+X", false, has_layer)) cut();
         if (ImGui::MenuItem("Copy", "Ctrl+C", false, has_layer)) copy();
-        if (ImGui::MenuItem("Paste As New Image", "Ctrl+V", false, !clipboard.empty())) paste_as_new_image();
-        if (ImGui::MenuItem("Paste As New Layer", "Ctrl+L", false, has_doc && !clipboard.empty())) paste_as_new_layer();
+        if (ImGui::MenuItem("Paste As New Image", "Ctrl+V")) paste_as_new_image();
+        if (ImGui::MenuItem("Paste As New Layer", "Ctrl+L", false, has_doc)) paste_as_new_layer();
         if (ImGui::MenuItem("Clear", "Delete", false, has_layer)) clear_selection();
         ImGui::EndMenu();
     }

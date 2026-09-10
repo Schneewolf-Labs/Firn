@@ -15,6 +15,16 @@
 
 namespace firn::io {
 
+std::vector<uint8_t> encode_png(const Image& img) {
+    int len = 0;
+    stbi_write_png_compression_level = img.size_bytes() > (32u << 20) ? 4 : 8;
+    unsigned char* png = stbi_write_png_to_mem(img.data(), img.width() * 4, img.width(), img.height(), 4, &len);
+    if (!png) return {};
+    std::vector<uint8_t> out(png, png + len);
+    STBIW_FREE(png);
+    return out;
+}
+
 std::optional<Image> load_memory(const uint8_t* data, size_t size, std::string* err) {
     int w = 0, h = 0, n = 0;
     unsigned char* px = stbi_load_from_memory(data, static_cast<int>(size), &w, &h, &n, 4);

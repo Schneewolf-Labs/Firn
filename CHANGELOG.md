@@ -13,6 +13,10 @@ section into the next version.
   included: they reopen as editable text here and in the original.
 - Effects > Effect Browser: every adjustment and effect previewed on the
   active layer with its current settings; click a tile to open its dialog.
+- System clipboard: Copy puts the selection on the OS clipboard as an
+  image, and Paste As New Image / Layer take images copied in other
+  programs (Windows clipboard, xclip on X11, wl-clipboard on Wayland,
+  osascript on macOS).
 - Help > Keyboard Shortcuts; Ctrl+F / Ctrl+Shift+F float and defloat,
   Ctrl+Shift+M hides the marquee. Floating selections are tracked by a
   layer flag (shown as "(floating)") instead of their name.

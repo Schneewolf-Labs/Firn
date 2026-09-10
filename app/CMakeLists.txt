@@ -38,6 +38,7 @@ add_executable(firn
   src/Drive.cpp
   src/Script.cpp
   src/Config.cpp
+  src/Clipboard.cpp
   src/ui/Canvas.cpp
   src/ui/Palettes.cpp
   src/ui/Menu.cpp
