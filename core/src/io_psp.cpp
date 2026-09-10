@@ -1144,8 +1144,17 @@ bool is_psp_extension(const std::string& path) {
     return ext == "pspimage" || ext == "psp" || ext == "psptube" || ext == "pspframe" || ext == "pspselection" || ext == "pspbrush";
 }
 
+bool is_psd_extension(const std::string& path) {
+    const auto dot = path.rfind('.');
+    if (dot == std::string::npos) return false;
+    std::string ext = path.substr(dot + 1);
+    for (char& c : ext) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    return ext == "psd" || ext == "psb";
+}
+
 std::unique_ptr<Document> load_document(const std::string& path, std::string* err, std::vector<std::string>* warnings) {
     if (is_psp_extension(path)) return load_psp(path, err, warnings);
+    if (is_psd_extension(path)) return load_psd(path, err, warnings);
     if (auto deep = load16(path, nullptr)) {
         auto doc = std::make_unique<Document>(deep->width(), deep->height());
         Layer& bg = doc->add_layer("Background");

@@ -26,6 +26,9 @@ std::unique_ptr<Document> load_psp_from_memory(const uint8_t* data, size_t size,
 std::unique_ptr<Document> load_document(const std::string& path, std::string* err, std::vector<std::string>* warnings);
 
 bool is_psp_extension(const std::string& path);
+// Photoshop PSD/PSB import (core/src/io_psd.cpp): layers, groups, masks, 8 and 16 bit RGB or grayscale.
+std::unique_ptr<Document> load_psd(const std::string& path, std::string* err, std::vector<std::string>* warnings);
+bool is_psd_extension(const std::string& path);
 
 // Preset shape files (.PspShape) are ordinary images holding vector layers;
 // returns the objects of every vector layer, or empty on failure.

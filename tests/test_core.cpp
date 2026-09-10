@@ -2,6 +2,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -1369,6 +1370,65 @@ static void test_text_objects_survive_native_save() {
     CHECK(std::abs(rx0 - qx0) < 2.0f && std::abs(ry0 - qy0) < 2.0f && std::abs(rx1 - qx1) < 2.0f && std::abs(ry1 - qy1) < 2.0f);
 }
 
+static void test_psd_import() {
+    // A 4x2 RGB 8-bit PSD: a group holding one layer, then a plain layer on top, raw channels.
+    std::vector<uint8_t> d;
+    auto u8 = [&](int v) { d.push_back(static_cast<uint8_t>(v)); };
+    auto u16 = [&](int v) { u8(v >> 8); u8(v & 255); };
+    auto u32 = [&](uint32_t v) { u8(v >> 24); u8((v >> 16) & 255); u8((v >> 8) & 255); u8(v & 255); };
+    auto str = [&](const char* s) { for (const char* p = s; *p; ++p) u8(*p); };
+    str("8BPS"); u16(1); for (int i = 0; i < 6; ++i) u8(0); u16(3); u32(2); u32(4); u16(8); u16(3);
+    u32(0); u32(0);  // color mode data, image resources
+    const size_t lm_at = d.size(); u32(0);   // layer and mask info length (patched)
+    const size_t li_at = d.size(); u32(0);   // layer info length (patched)
+    u16(3);  // three records: divider, member, group
+    struct Rec { const char* name; int section; int x0, y0, x1, y1; int nch; };
+    const Rec recs[3] = {{"</Layer group>", 3, 0, 0, 0, 0, 4}, {"inner", 0, 1, 0, 3, 2, 5}, {"Group A", 1, 0, 0, 0, 0, 4}};
+    for (const Rec& r : recs) {
+        u32(r.y0); u32(r.x0); u32(r.y1); u32(r.x1);
+        u16(r.nch);
+        const int w = r.x1 - r.x0, h = r.y1 - r.y0;
+        const int ids[5] = {-1, 0, 1, 2, -2};
+        for (int k = 0; k < r.nch; ++k) { u16(static_cast<uint16_t>(ids[k])); u32(2 + static_cast<uint32_t>(ids[k] == -2 ? 2 * 1 : w * h)); }
+        str("8BIM"); str(r.section == 0 ? "mul " : "norm"); u8(r.section == 0 ? 128 : 255); u8(0); u8(0); u8(0);
+        const size_t extra_at = d.size(); u32(0);
+        if (r.section == 0) { u32(20); u32(0); u32(1); u32(1); u32(3); u8(0); u8(0); u16(0); }  // mask rect y0 0,x0 1,y1 1,x1 3, default 0
+        else u32(0);
+        u32(0);  // blending ranges
+        const size_t nlen = std::strlen(r.name); u8(static_cast<int>(nlen)); str(r.name);
+        for (size_t p = nlen + 1; p % 4; ++p) u8(0);
+        if (r.section) { str("8BIM"); str("lsct"); u32(4); u32(static_cast<uint32_t>(r.section)); }
+        const uint32_t extra_len = static_cast<uint32_t>(d.size() - extra_at - 4);
+        d[extra_at] = extra_len >> 24; d[extra_at + 1] = (extra_len >> 16) & 255; d[extra_at + 2] = (extra_len >> 8) & 255; d[extra_at + 3] = extra_len & 255;
+    }
+    // Channel data in record order: divider (empty), inner (2x2: alpha, r, g, b, mask 2x1), group (empty).
+    for (int k = 0; k < 4; ++k) u16(0);
+    u16(0); for (int i = 0; i < 4; ++i) u8(255);           // alpha
+    u16(0); u8(200); u8(200); u8(10); u8(10);               // red
+    u16(0); u8(20); u8(20); u8(220); u8(220);               // green
+    u16(0); for (int i = 0; i < 4; ++i) u8(40);             // blue
+    u16(0); u8(255); u8(0);                                  // mask row: show, hide
+    for (int k = 0; k < 4; ++k) u16(0);
+    const uint32_t li_len = static_cast<uint32_t>(d.size() - li_at - 4);
+    d[li_at] = li_len >> 24; d[li_at + 1] = (li_len >> 16) & 255; d[li_at + 2] = (li_len >> 8) & 255; d[li_at + 3] = li_len & 255;
+    const uint32_t lm_len = static_cast<uint32_t>(d.size() - lm_at - 4);
+    d[lm_at] = lm_len >> 24; d[lm_at + 1] = (lm_len >> 16) & 255; d[lm_at + 2] = (lm_len >> 8) & 255; d[lm_at + 3] = lm_len & 255;
+    u16(0); for (int i = 0; i < 3 * 8; ++i) u8(99);  // merged image, unused
+    const std::string tmp = tmp_path("firn_test.psd");
+    { std::ofstream f(tmp, std::ios::binary); f.write(reinterpret_cast<const char*>(d.data()), static_cast<std::streamsize>(d.size())); }
+    std::string err; std::vector<std::string> warnings;
+    auto doc = io::load_document(tmp, &err, &warnings);
+    std::remove(tmp.c_str());
+    CHECK(doc != nullptr);
+    if (!doc) { std::printf("  psd: %s\n", err.c_str()); return; }
+    CHECK(doc->width() == 4 && doc->height() == 2 && doc->layer_count() == 2);
+    CHECK(doc->layer(0).type == LayerType::Group && doc->layer(0).name == "Group A" && doc->layer(0).depth == 0);
+    const Layer& L = doc->layer(1);
+    CHECK(L.name == "inner" && L.depth == 1 && L.blend == BlendMode::Multiply && std::abs(L.opacity - 128.0f / 255.0f) < 0.01f);
+    CHECK(L.pixels.get(1, 0).r == 200 && L.pixels.get(2, 1).g == 220 && L.pixels.get(1, 0).a == 255 && L.pixels.get(0, 0).a == 0);
+    CHECK(L.has_mask() && L.mask.at(1, 0) == 255 && L.mask.at(2, 0) == 0 && L.mask.at(0, 1) == 0);
+}
+
 static void test_snapshot_crop_and_undo_budget() {
     Document doc(40, 30);
     Layer& L = doc.add_layer("L");
@@ -2097,6 +2157,7 @@ int main() {
     test_selection_modify_ops();
     test_snapshot_crop_and_undo_budget();
     test_text_objects_survive_native_save();
+    test_psd_import();
     test_vector_core();
     test_history_limit();
     test_brush_texture();

@@ -253,7 +253,7 @@ bool save(const Image& img, const std::string& path, std::string* err, int jpeg_
 }
 
 const std::vector<std::string>& load_extensions() {
-    static const std::vector<std::string> v{"pspimage", "psp", "psptube", "pspframe", "png", "jpg", "jpeg", "bmp", "tga", "gif", "pnm", "ppm", "pgm"};
+    static const std::vector<std::string> v{"pspimage", "psp", "psptube", "pspframe", "psd", "psb", "png", "jpg", "jpeg", "bmp", "tga", "gif", "pnm", "ppm", "pgm"};
     return v;
 }
 
