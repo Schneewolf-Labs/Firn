@@ -139,6 +139,7 @@ std::string Driver::state_text(App& app) const {
     std::ostringstream o;
     o << "tool=\"" << app.tool().name() << "\"";
     o << " docs=" << app.docs.size() << " windows=" << (app.image_windows ? 1 : 0);
+    o << " ui_scale=" << app.ui_scale << " auto_scale=" << app.auto_ui_scale << " font=\"" << (app.font_current_path.empty() ? "sans" : app.font_current_path == "builtin" ? "builtin" : app.font_current_path.substr(app.font_current_path.find_last_of('/') + 1)) << "\" font_size=" << app.font_current_size;
     if (app.doc) {
         o << " title=\"" << app.doc_title << "\" modified=" << (app.modified() ? 1 : 0);
         o << " size=" << app.doc->width() << "x" << app.doc->height() << " depth=" << app.doc->bit_depth() << " layers=" << app.doc->layer_count();
@@ -322,6 +323,7 @@ void Driver::before_frame(App& app, SDL_Window* window) {
                 if (n == "material_dialog") app.open_material_dialog(v < 2);   // 1 foreground, 2 background
                 else if (n == "theme_editor") app.open_theme_editor();
                 else if (n == "shortcuts_dialog") app.show_shortcuts_dialog = true;
+                else if (n == "ui_scale") { app.config.ui_scale = v; app.apply_theme(app.config.theme); }
                 else if (n == "autosave_now") { app.config.autosave_minutes = 1; app.autosave_last = -1e9; }
                 else if (n == "effect_browser") { app.reset_effect_browser(); app.show_effect_browser = v != 0; }
                 else if (n == "theme_index") { app.ensure_themes(); const int i = static_cast<int>(v); if (i >= 0 && i < static_cast<int>(app.themes.size())) { app.config.theme = app.themes[i].name; app.apply_theme(app.config.theme); } }

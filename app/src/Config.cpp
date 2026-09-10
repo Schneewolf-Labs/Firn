@@ -40,6 +40,7 @@ void Config::load() {
         else if (key == "undo_limit") undo_limit = std::clamp(std::atoi(value.c_str()), 1, 10000);
         else if (key == "undo_memory_mb") undo_memory_mb = std::clamp(std::atoi(value.c_str()), 64, 65536);
         else if (key == "autosave_minutes") autosave_minutes = std::clamp(std::atoi(value.c_str()), 0, 120);
+        else if (key == "ui_scale") ui_scale = std::clamp(static_cast<float>(std::atof(value.c_str())), 0.0f, 4.0f);
         else if (key == "checker_size") checker_size = std::clamp(std::atoi(value.c_str()), 2, 64);
         else if (key == "color_managed_display") color_managed_display = value == "1";
         else if (key == "image_windows") image_windows = value == "1";
@@ -63,6 +64,7 @@ void Config::save() const {
     f << "color_managed_display=" << (color_managed_display ? 1 : 0) << "\n";
     f << "image_windows=" << (image_windows ? 1 : 0) << "\n";
     f << "autosave_minutes=" << autosave_minutes << "\n";
+    f << "ui_scale=" << ui_scale << "\n";
     f << "theme=" << theme << "\n";
     f << "new_width=" << new_width << "\nnew_height=" << new_height << "\n";
     f << "extra_tube_dir=" << extra_tube_dir << "\nextra_brush_dir=" << extra_brush_dir << "\nextra_texture_dir=" << extra_texture_dir << "\n";

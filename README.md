@@ -53,6 +53,7 @@ cmake --build build
 ctest --test-dir build
 ./build/app/firn [image.png]
 FIRN_WINDOW=1280x800 ./build/app/firn   # override the initial window size
+FIRN_UI_SCALE=1.5 ./build/app/firn      # force the UI scale (otherwise it follows the display)
 ```
 
 Help > About shows the version, git commit and build facts (the build

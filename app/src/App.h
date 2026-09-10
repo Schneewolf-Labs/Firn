@@ -285,6 +285,11 @@ struct App {
     // user's files; the current one is named by config.theme.
     std::vector<Theme> themes;
     bool themes_loaded = false;
+    // HiDPI: the effective UI scale (config.ui_scale, or the display's factor
+    // measured at startup) multiplies the style sizes and the font size.
+    float ui_scale = 1.0f;
+    float auto_ui_scale = 1.0f;
+    void set_auto_ui_scale(float s);
     void ensure_themes();
     const Theme* find_theme(const std::string& name) const;
     void apply_theme(const std::string& name);
@@ -306,6 +311,7 @@ struct App {
     void draw_theme_editor();
     bool show_prefs_dialog = false;
     Config prefs_edit;                  // working copy while the dialog is open
+    float prefs_scale_before = 0.0f;    // UI scale to restore when the dialog is cancelled
     void apply_config();                // push config values into live state
     int threshold_value = 128, posterize_levels = 6, solarize_threshold = 128;
     firn::adjust::ChannelMix mixer;

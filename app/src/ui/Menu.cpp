@@ -46,7 +46,7 @@ void App::draw_menu() {
         if (ImGui::MenuItem("Save", "Ctrl+S", false, has_doc)) save();
         if (ImGui::MenuItem("Save As...", "Ctrl+Shift+S", false, has_doc)) request_save_as();
         ImGui::Separator();
-        if (ImGui::MenuItem("Preferences...")) { prefs_edit = config; show_prefs_dialog = true; }
+        if (ImGui::MenuItem("Preferences...")) { prefs_edit = config; prefs_scale_before = config.ui_scale; show_prefs_dialog = true; }
         ImGui::Separator();
         if (ImGui::MenuItem("Exit")) request_quit();
         ImGui::EndMenu();
@@ -573,6 +573,14 @@ void App::draw_dialogs() {
             }
             ImGui::SameLine();
             if (ImGui::Button("Edit Themes...")) { config.theme = c.theme; open_theme_editor(); }
+            static const float scales[] = {0.0f, 1.0f, 1.25f, 1.5f, 1.75f, 2.0f, 2.5f, 3.0f};
+            int cur = 0;
+            for (int i = 1; i < 8; ++i) if (std::abs(c.ui_scale - scales[i]) < 0.01f) cur = i;
+            char auto_label[48];
+            std::snprintf(auto_label, sizeof(auto_label), "Automatic (%d%%)", static_cast<int>(auto_ui_scale * 100 + 0.5f));
+            const char* labels[] = {auto_label, "100%", "125%", "150%", "175%", "200%", "250%", "300%"};
+            ImGui::SetNextItemWidth(200);
+            if (ImGui::Combo("UI scale", &cur, labels, 8)) { c.ui_scale = scales[cur]; config.ui_scale = c.ui_scale; apply_theme(c.theme); }  // previews live
             if (ImGui::IsItemHovered()) ImGui::SetTooltip("Colors, shape, font and text size; save, import and export themes");
         }
         ImGui::Checkbox("Rulers", &c.show_rulers); ImGui::SameLine(); ImGui::Checkbox("Grid", &c.show_grid);
@@ -601,7 +609,7 @@ void App::draw_dialogs() {
             ImGui::CloseCurrentPopup();
         }
         ImGui::SameLine();
-        if (ImGui::Button("Cancel", ImVec2(90, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape, false)) { apply_theme(config.theme); ImGui::CloseCurrentPopup(); }
+        if (ImGui::Button("Cancel", ImVec2(90, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape, false)) { config.ui_scale = prefs_scale_before; apply_theme(config.theme); ImGui::CloseCurrentPopup(); }
         ImGui::EndPopup();
     }
 

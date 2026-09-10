@@ -1,5 +1,7 @@
 // Firn: SDL2 + OpenGL3 + Dear ImGui (docking) bootstrap.
+#include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <cstdlib>
 #include <string>
 
@@ -118,6 +120,37 @@ int main(int argc, char** argv) {
     ImGui_ImplOpenGL3_Init(glsl_version);
 
     App app;
+    // HiDPI: the drawable-to-window ratio (macOS, Wayland) or the display DPI (X11, Windows).
+    {
+        int ww = 1, wh = 1, dw = 1, dh = 1;
+        SDL_GetWindowSize(window, &ww, &wh);
+        SDL_GL_GetDrawableSize(window, &dw, &dh);
+        float scale = ww > 0 ? static_cast<float>(dw) / static_cast<float>(ww) : 1.0f;
+        const char* driver = SDL_GetCurrentVideoDriver();
+        const bool x11 = driver && std::strcmp(driver, "x11") == 0;
+        float ddpi = 0.0f;
+        // X11 reports the monitor's physical DPI, which says nothing about the
+        // desktop's scale; there the toolkit scale variables decide instead.
+        if (scale <= 1.01f && !x11 && SDL_GetDisplayDPI(SDL_GetWindowDisplayIndex(window), &ddpi, nullptr, nullptr) == 0 && ddpi > 0.0f) scale = ddpi / 96.0f;
+        if (scale <= 1.01f) {
+            if (const char* e = std::getenv("GDK_SCALE")) scale = static_cast<float>(std::atof(e));
+            else if (const char* q = std::getenv("QT_SCALE_FACTOR")) scale = static_cast<float>(std::atof(q));
+        }
+#if !defined(_WIN32) && !defined(__APPLE__)
+        if (scale <= 1.01f && x11) {
+            // Xft.dpi is what X11 desktops set when the user picks a scale.
+            if (FILE* p = popen("xrdb -query 2>/dev/null", "r")) {
+                char line[256];
+                while (std::fgets(line, sizeof(line), p))
+                    if (std::strncmp(line, "Xft.dpi:", 8) == 0) { const float dpi = static_cast<float>(std::atof(line + 8)); if (dpi > 0) scale = dpi / 96.0f; }
+                pclose(p);
+            }
+        }
+#endif
+        if (const char* e = std::getenv("FIRN_UI_SCALE")) scale = static_cast<float>(std::atof(e));
+        scale = std::round(scale * 4.0f) / 4.0f;   // quarter steps: 1, 1.25, 1.5, ...
+        if (scale > 1.01f) app.set_auto_ui_scale(scale);
+    }
     Driver driver;
     if (const char* sock = std::getenv("FIRN_DRIVE")) driver.start(sock);
     bool first_frame = true;

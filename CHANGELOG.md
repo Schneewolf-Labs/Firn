@@ -13,6 +13,9 @@ section into the next version.
   included: they reopen as editable text here and in the original.
 - Effects > Effect Browser: every adjustment and effect previewed on the
   active layer with its current settings; click a tile to open its dialog.
+- HiDPI: the UI follows the display's scale factor (drawable ratio on
+  macOS and Wayland, DPI on Windows, GDK_SCALE / QT_SCALE_FACTOR / Xft.dpi
+  on X11), with a UI scale setting in Preferences and FIRN_UI_SCALE to force it.
 - Photoshop PSD/PSB import: layers with opacity, blend modes, visibility,
   masks and groups (8 and 16 bit RGB or grayscale; 16-bit files read at 8 bits).
 - Autosave: modified images are written in the background every few

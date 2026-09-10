@@ -42,11 +42,22 @@ void App::apply_theme(const std::string& name) {
 
 void App::apply_theme_values(const Theme& t) {
     t.apply_style();
-    if (t.font_path != font_current_path || std::abs(t.font_size - font_current_size) > 0.01f) {
-        font_pending_path = t.font_path;
-        font_pending_size = t.font_size;
+    ui_scale = config.ui_scale > 0.0f ? config.ui_scale : auto_ui_scale;
+    if (std::abs(ui_scale - 1.0f) > 0.01f) ImGui::GetStyle().ScaleAllSizes(ui_scale);
+    // The bitmap font only exists at 13 px, so a scaled UI takes the system sans.
+    std::string path = t.font_path;
+    if (path == "builtin" && std::abs(ui_scale - 1.0f) > 0.01f) path.clear();
+    const float size = t.font_size * ui_scale;
+    if (path != font_current_path || std::abs(size - font_current_size) > 0.01f) {
+        font_pending_path = path;
+        font_pending_size = size;
         font_pending = true;
     }
+}
+
+void App::set_auto_ui_scale(float s) {
+    auto_ui_scale = std::clamp(s, 1.0f, 4.0f);
+    apply_theme(config.theme);
 }
 
 // Default UI face when a theme asks for text at a size but names no font.
@@ -274,6 +285,7 @@ void App::draw_theme_editor() {
     if (changed) {
         // Colors and shape preview immediately; the font waits for the slider release.
         t.apply_style();
+        if (std::abs(ui_scale - 1.0f) > 0.01f) ImGui::GetStyle().ScaleAllSizes(ui_scale);
         if (!ImGui::IsAnyItemActive() && (t.font_path != font_current_path || std::abs(t.font_size - font_current_size) > 0.01f)) apply_theme_values(t);
     } else if (!ImGui::IsAnyItemActive() && (t.font_path != font_current_path || std::abs(t.font_size - font_current_size) > 0.01f)) {
         apply_theme_values(t);
