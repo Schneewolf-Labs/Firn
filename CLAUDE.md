@@ -283,11 +283,11 @@ whether the program works.
 
 ## Checking UI changes
 
-`scripts/app_tests.py` is the app's test suite: 84 checks over documents,
+`scripts/app_tests.py` is the app's test suite: 106 checks over documents,
 the view, layers, selections, painting and materials, the edit actions,
-tools and history, image geometry and the action API itself, asserting on
-the JSON the program reports and on pixels it writes. It runs in CI beside
-`scripts/smoke.py`. Anything living in `App` is covered by this and nothing
+tools and history, image geometry, metadata and the action API itself,
+asserting on the JSON the program reports and on pixels it writes. It runs
+in CI beside `scripts/smoke.py`. Anything living in `App` is covered by this and nothing
 else, so add a case here when you change behaviour there, and run it before
 and after any restructuring:
 
