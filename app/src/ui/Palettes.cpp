@@ -193,8 +193,6 @@ static void draw_layers(App& app) {
     ImGui::Begin("Layers");
     if (!app.doc) { ImGui::TextDisabled("No image"); ImGui::End(); return; }
     Document& doc = *app.doc;
-    const int active = app.active_layer();
-
     bool first_button = true;
     auto layer_button = [&](const char* label) {
         const float width = ImGui::CalcTextSize(label).x + ImGui::GetStyle().FramePadding.x * 2;
@@ -208,6 +206,9 @@ static void draw_layers(App& app) {
     if (layer_button("Up")) app.layer_arrange(+1);
     if (layer_button("Down")) app.layer_arrange(-1);
     if (layer_button("Merge Down")) app.layer_merge(0);
+
+    // Toolbar actions can change both the stack and the active index.
+    const int active = app.active_layer();
 
     // Active layer controls: blend mode and opacity. The slider previews
     // live and commits one Layer Properties entry when released.
@@ -294,9 +295,10 @@ static void draw_layers(App& app) {
         if (ImGui::BeginDragDropTarget()) {
             if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("FIRN_LAYER")) {
                 const int from = *static_cast<const int*>(payload->Data);
+                const int row_depth = L.depth;
                 app.layer_move_onto(from, i);
                 ImGui::EndDragDropTarget();
-                ImGui::Unindent(L.depth * 14.0f);
+                ImGui::Unindent(row_depth * 14.0f);
                 ImGui::PopID();
                 break;   // the stack changed under us
             }
@@ -305,10 +307,14 @@ static void draw_layers(App& app) {
         // Right-click: the Layers menu for this layer.
         if (ImGui::BeginPopupContextItem("layer_context")) {
             if (ImGui::IsWindowAppearing()) doc.set_active_layer(i);
+            const int row_depth = L.depth;
+            const uint64_t revision = doc.revision();
             ImGuiMenuBuilder builder;
             app.draw_layer_menu_items(builder);
             ImGui::EndPopup();
-            if (!app.doc || i >= static_cast<int>(app.doc->layer_count())) { ImGui::Unindent(L.depth * 14.0f); ImGui::PopID(); break; }
+            // A menu action may replace the stack even when its count stays
+            // the same. L and the visibility map then belong to the old stack.
+            if (app.doc.get() != &doc || doc.revision() != revision) { ImGui::Unindent(row_depth * 14.0f); ImGui::PopID(); break; }
         }
         if (L.has_mask()) {
             ImGui::SameLine();

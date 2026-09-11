@@ -558,8 +558,18 @@ void App::draw_layer_menu_items(MenuBuilder& m) {
     const bool is_group = has_any_layer && doc->layer(layer).type == LayerType::Group;
     const int n = has_doc ? static_cast<int>(doc->layer_count()) : 0;
     const bool is_bg = has_layer && doc->layer(layer).background;
-    m.item("New Raster Layer", nullptr, has_doc, [&] { layer_new(); });
-    m.item("New Vector Layer", nullptr, has_doc, [&] { layer_new_vector(); });
+    // ImGui invokes actions while building this menu. Capture predicates
+    // before an action can replace/delete layers; later entries must not
+    // dereference the original index after Flatten, Delete or Merge.
+    const bool is_vector = has_any_layer && doc->layer(layer).is_vector();
+    const bool is_adjustment = has_any_layer && doc->layer(layer).is_adjustment();
+    const bool has_mask = has_any_layer && doc->layer(layer).has_mask();
+    const bool mask_on = has_mask && doc->layer(layer).mask_enabled;
+    const bool editing = mask_edit && static_cast<int>(mask_proxy_layer) == layer;
+    const bool has_selection = has_doc && doc->has_selection();
+    const bool can_merge_down = has_layer && layer > 0 && doc->layer(layer - 1).is_raster() && doc->layer(layer - 1).depth == doc->layer(layer).depth;
+    m.item("New Raster Layer", nullptr, has_doc, [=, this] { layer_new(); });
+    m.item("New Vector Layer", nullptr, has_doc, [=, this] { layer_new_vector(); });
     if (m.begin_menu("New Adjustment Layer", has_doc)) {
         using K = Adjustment::Kind;
         static const K kinds[] = {K::BrightnessContrast, K::ChannelMixer, K::ColorBalance, K::Curves, K::HSL, K::Invert, K::Levels, K::Posterize, K::Threshold};
@@ -572,55 +582,53 @@ void App::draw_layer_menu_items(MenuBuilder& m) {
         for (K k : kinds) m.item(Adjustment::kind_name(k), nullptr, true, [this, k] { layer_new_adjustment(k); });
         m.end_menu();
     }
-    m.item("New Layer Group", nullptr, has_any_layer, [&] { layer_new_group(); });
+    m.item("New Layer Group", nullptr, has_any_layer, [=, this] { layer_new_group(); });
     if (m.begin_menu("New Mask Layer", has_any_layer)) {
-        m.item("Show All", nullptr, true, [&] { layer_set_mask("New Mask Layer", Mask(doc->width(), doc->height(), 255)); });
-        m.item("Hide All", nullptr, true, [&] { layer_set_mask("New Mask Layer", Mask(doc->width(), doc->height(), 0)); });
-        m.item("From Selection", nullptr, doc->has_selection(), [&] { layer_mask_from_selection(); });
-        m.item("From Image", nullptr, true, [&] { layer_mask_from_image(); });
+        m.item("Show All", nullptr, true, [=, this] { layer_set_mask("New Mask Layer", Mask(doc->width(), doc->height(), 255)); });
+        m.item("Hide All", nullptr, true, [=, this] { layer_set_mask("New Mask Layer", Mask(doc->width(), doc->height(), 0)); });
+        m.item("From Selection", nullptr, has_selection, [=, this] { layer_mask_from_selection(); });
+        m.item("From Image", nullptr, true, [=, this] { layer_mask_from_image(); });
         m.end_menu();
     }
-    m.item("Duplicate", nullptr, has_any_layer, [&] { layer_duplicate(); });
-    m.item("Delete", nullptr, has_any_layer && n > 1, [&] { layer_delete(); });
-    m.item("Ungroup Layers", nullptr, is_group, [&] { layer_ungroup(); });
-    m.item("Properties...", nullptr, has_any_layer, [&] {
+    m.item("Duplicate", nullptr, has_any_layer, [=, this] { layer_duplicate(); });
+    m.item("Delete", nullptr, has_any_layer && n > 1, [=, this] { layer_delete(); });
+    m.item("Ungroup Layers", nullptr, is_group, [=, this] { layer_ungroup(); });
+    m.item("Properties...", nullptr, has_any_layer, [=, this] {
         if (doc->layer(layer).is_adjustment()) open_adjustment_dialog(layer, false);
         else open_layer_properties();
     });
-    m.item("Layer Styles...", nullptr, has_any_layer && !doc->layer(layer).is_adjustment(), [&] { open_layer_styles(layer); });
+    m.item("Layer Styles...", nullptr, has_any_layer && !is_adjustment, [=, this] { open_layer_styles(layer); });
     m.separator();
-    if (m.begin_menu("Mask", has_any_layer && doc->layer(layer).has_mask())) {
-        const bool mask_on = doc->layer(layer).mask_enabled;
-        m.item("Enable Mask", nullptr, true, [&] { layer_set_mask(!mask_on ? "Enable Mask" : "Disable Mask", doc->layer(layer).mask, !mask_on); }, mask_on);
-        const bool editing = mask_edit && static_cast<int>(mask_proxy_layer) == layer;
-        m.item("Edit Mask", nullptr, true, [&] { set_mask_edit(!editing); }, editing);
-        m.item("Invert Mask", nullptr, true, [&] { Mask msk = doc->layer(layer).mask; mask::invert(msk); layer_set_mask("Invert Mask", std::move(msk), doc->layer(layer).mask_enabled); });
-        m.item("Delete Mask", nullptr, true, [&] { layer_set_mask("Delete Mask", Mask()); });
-        m.item("Load Selection From Mask", nullptr, true, [&] { set_selection("Load Selection From Mask", doc->layer(layer).mask); });
+    if (m.begin_menu("Mask", has_mask)) {
+        m.item("Enable Mask", nullptr, true, [=, this] { layer_set_mask(!mask_on ? "Enable Mask" : "Disable Mask", doc->layer(layer).mask, !mask_on); }, mask_on);
+        m.item("Edit Mask", nullptr, true, [=, this] { set_mask_edit(!editing); }, editing);
+        m.item("Invert Mask", nullptr, true, [=, this] { Mask msk = doc->layer(layer).mask; mask::invert(msk); layer_set_mask("Invert Mask", std::move(msk), doc->layer(layer).mask_enabled); });
+        m.item("Delete Mask", nullptr, true, [=, this] { layer_set_mask("Delete Mask", Mask()); });
+        m.item("Load Selection From Mask", nullptr, true, [=, this] { set_selection("Load Selection From Mask", doc->layer(layer).mask); });
         m.end_menu();
     }
     if (m.begin_menu("View", has_any_layer)) {
-        m.item("Current Only", nullptr, true, [&] { layer_view_only(true); });
-        m.item("All", nullptr, true, [&] { layer_view_only(false); });
+        m.item("Current Only", nullptr, true, [=, this] { layer_view_only(true); });
+        m.item("All", nullptr, true, [=, this] { layer_view_only(false); });
         m.end_menu();
     }
     if (m.begin_menu("Arrange", has_any_layer)) {
         m.item("Bring to Top", nullptr, true, [this, n] { layer_arrange(n); });
-        m.item("Move Up", nullptr, true, [&] { layer_arrange(+1); });
-        m.item("Move Down", nullptr, true, [&] { layer_arrange(-1); });
+        m.item("Move Up", nullptr, true, [=, this] { layer_arrange(+1); });
+        m.item("Move Down", nullptr, true, [=, this] { layer_arrange(-1); });
         m.item("Send to Bottom", nullptr, true, [this, n] { layer_arrange(-n); });
         m.end_menu();
     }
     if (m.begin_menu("Merge", has_any_layer)) {
-        m.item("Merge Down", nullptr, has_layer && layer > 0 && doc->layer(layer - 1).is_raster() && doc->layer(layer - 1).depth == doc->layer(layer).depth, [&] { layer_merge(0); });
-        m.item("Merge Visible", nullptr, n > 1, [&] { layer_merge(1); });
-        m.item("Merge All (Flatten)", nullptr, n > 1, [&] { layer_merge(2); });
+        m.item("Merge Down", nullptr, can_merge_down, [=, this] { layer_merge(0); });
+        m.item("Merge Visible", nullptr, n > 1, [=, this] { layer_merge(1); });
+        m.item("Merge All (Flatten)", nullptr, n > 1, [=, this] { layer_merge(2); });
         m.end_menu();
     }
     m.separator();
-    m.item("Promote Background Layer", nullptr, is_bg, [&] { layer_promote_background(); });
-    m.item("Promote Selection to Layer", nullptr, has_layer && doc->has_selection(), [&] { promote_selection_to_layer(false); });
-    m.item("Convert to Raster Layer", nullptr, has_any_layer && doc->layer(layer).is_vector(), [&] { layer_convert_to_raster(); });
+    m.item("Promote Background Layer", nullptr, is_bg, [=, this] { layer_promote_background(); });
+    m.item("Promote Selection to Layer", nullptr, has_layer && has_selection, [=, this] { promote_selection_to_layer(false); });
+    m.item("Convert to Raster Layer", nullptr, is_vector, [=, this] { layer_convert_to_raster(); });
 }
 
 void App::draw_dialogs() {

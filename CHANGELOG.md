@@ -7,6 +7,8 @@ section into the next version.
 ## Unreleased
 
 ### Added
+- Fixed a crash when flattening from a layer context menu. Menu and palette
+  rendering no longer read the old layer stack after merges or deletion.
 - Searchable tools with common tools first and collapsible specialist categories.
   Tool labels wrap, and the default Firn theme uses a 15 px system sans font.
 - A start screen with New Image, Open Image, recent files and access to deferred
