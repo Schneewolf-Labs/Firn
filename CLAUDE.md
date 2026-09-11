@@ -197,6 +197,13 @@ docs/    notes on the original: command inventory, module mapping, FORMAT.md
   (within their group) through their mask and opacity. Create with
   `AddAdjustmentLayerCommand`, edit with `SetAdjustmentCommand`; the dialog
   in `app/src/ui/AdjustmentLayer.cpp` edits the layer live and commits on OK.
+- **Actions** (`app/src/Actions.h`): every menu item and tool option worth
+  automating is registered with a dotted name, a summary and typed
+  parameters, and calls the same `App` method the menu does. `describe`
+  reports the table, `firn-cli` (`tools/cli.cpp`) and the driver socket both
+  dispatch through it, and `App::do_command` falls through to it after the
+  original's command names. Add new UI here as well as in the menu, or the
+  API falls behind. See `docs/API.md`.
 - **Scripting** (`app/src/Script.cpp`): `App::do_command(name, json)`
   implements the original's `App.Do` commands with its parameter names
   (the command API reference is linked from `docs/FORMAT.md`). The driver

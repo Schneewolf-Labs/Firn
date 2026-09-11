@@ -94,6 +94,20 @@ AppImage, tarballs and Windows zip, checks them, and publishes a GitHub
 release whose notes are that version's CHANGELOG section.
 
 
+## Driving it from outside
+
+Everything the menus do is also an action with a name and parameters, so the
+program can be scripted without a mouse:
+
+```sh
+firn-cli --launch
+firn-cli describe                       # the whole API, as JSON
+firn-cli do image.resize '{"width":1600,"filter":"lanczos"}'
+firn-cli state
+```
+
+`docs/API.md` covers the command line, the socket and `.PspScript` files.
+
 ## File formats
 
 Projects are saved as **OpenRaster** (`.ora`), the open layered format

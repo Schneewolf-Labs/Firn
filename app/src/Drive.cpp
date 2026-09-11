@@ -31,6 +31,7 @@ void Driver::poll_socket() {}
 bool Driver::parse_line(const std::string&, App&) { return false; }
 void Driver::ack(const std::string&) {}
 std::string Driver::state_text(App&) const { return {}; }
+std::string Driver::state_json(App&) const { return "{}"; }
 ImVec2 Driver::image_to_window(const App&, float x, float y) const { return ImVec2(x, y); }
 #else
 
@@ -166,6 +167,53 @@ std::string Driver::state_text(App& app) const {
     return o.str();
 }
 
+std::string Driver::state_json(App& app) const {
+    using firn::json::Value;
+    Value r = Value::object();
+    r.set("tool", Value::string(app.tool().name()));
+    r.set("documents", Value::number(static_cast<double>(app.docs.size())));
+    r.set("popup", Value::boolean(ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId)));
+    r.set("status", Value::string(app.status.substr(0, app.status.find('\n'))));
+    if (app.doc) {
+        Value d = Value::object();
+        d.set("title", Value::string(app.doc_title));
+        d.set("path", Value::string(app.doc_path));
+        d.set("modified", Value::boolean(app.modified()));
+        d.set("width", Value::number(app.doc->width()));
+        d.set("height", Value::number(app.doc->height()));
+        d.set("depth", Value::number(app.doc->bit_depth()));
+        d.set("selection", Value::boolean(app.doc->has_selection()));
+        d.set("zoom", Value::number(app.zoom));
+        const ImVec2 origin = image_to_window(app, 0, 0);
+        Value o = Value::array();
+        o.push(Value::number(origin.x));
+        o.push(Value::number(origin.y));
+        d.set("origin", std::move(o));
+        d.set("history", Value::number(static_cast<double>(app.history.size())));
+        d.set("history_cursor", Value::number(static_cast<double>(app.history.cursor())));
+        if (app.history.cursor() > 0) d.set("last", Value::string(app.history.at(app.history.cursor() - 1).name()));
+        d.set("active_layer", Value::number(app.active_layer()));
+        Value layers = Value::array();
+        for (size_t i = 0; i < app.doc->layer_count(); ++i) {
+            const firn::Layer& L = app.doc->layer(i);
+            Value e = Value::object();
+            e.set("index", Value::number(static_cast<double>(i)));
+            e.set("name", Value::string(L.name));
+            e.set("type", Value::string(L.is_vector() ? "vector" : L.is_adjustment() ? (L.adjustment.is_filter() ? "filter" : "adjustment")
+                                        : L.type == firn::LayerType::Group ? "group" : "raster"));
+            e.set("visible", Value::boolean(L.visible));
+            e.set("opacity", Value::number(L.opacity * 100.0));
+            e.set("blend", Value::string(firn::blend_mode_name(L.blend)));
+            e.set("depth", Value::number(L.depth));
+            e.set("mask", Value::boolean(L.has_mask()));
+            layers.push(std::move(e));
+        }
+        d.set("layers", std::move(layers));
+        r.set("image", std::move(d));
+    }
+    return firn::json::dump(r);
+}
+
 // One text command becomes a list of per-frame steps ending in an Ack.
 bool Driver::parse_line(const std::string& line, App& app) {
     std::vector<std::string> a = split(line, ' ');
@@ -253,14 +301,24 @@ bool Driver::parse_line(const std::string& line, App& app) {
         // drop:PATH pushes the SDL drop event, exercising the same path as a real drag-and-drop.
         Step s{Step::Drop}; s.text = line.substr(5); steps_.push_back(s); wait(2);
     } else if (op == "do" && a.size() >= 2) {
-        // do <Command> <json params>
-        Step s{Step::Do}; s.text = line.substr(3); steps_.push_back(s); wait(1);
+        // do <Command> <json params>. One action belongs to the driver: a
+        // screenshot has to be taken after a render, not during a command.
+        if (a[1] == "app.screenshot") {
+            firn::json::Value params;
+            std::string path;
+            if (firn::json::parse(line.substr(3 + a[1].size() + 1), params)) path = params.get("path").as_string();
+            if (path.empty()) { ack("error app.screenshot needs a path"); return true; }
+            Step s{Step::Shot}; s.text = path; steps_.push_back(s);
+        } else {
+            Step s{Step::Do}; s.text = line.substr(3); steps_.push_back(s); wait(1);
+        }
     } else if (op == "profile" && a.size() >= 3) {
         // profile assign|convert|remove sRGB|AdobeRGB|ProPhoto
         Step s{Step::Profile}; s.text = a[1] + " " + a[2]; steps_.push_back(s); wait(2);
     } else if (op == "adjust" && a.size() >= 2) {
         Step s{Step::Adjust}; s.text = line.substr(7); steps_.push_back(s); wait(2);
-    } else if (op == "state") {
+    } else if (op == "state" || op == "state_json") {
+        state_json_ = op == "state_json";
         // ack carries the state
     } else if (op == "quit") {
         steps_.push_back({Step::Quit});
@@ -426,7 +484,7 @@ void Driver::before_frame(App& app, SDL_Window* window) {
                 consumed_frame = true;
                 break;
             }
-            case Step::Ack: steps_.pop_front(); ack(state_text(app)); continue;
+            case Step::Ack: steps_.pop_front(); ack(state_json_ ? state_json(app) : state_text(app)); state_json_ = false; continue;
         }
         steps_.pop_front();
         if (consumed_frame) return;

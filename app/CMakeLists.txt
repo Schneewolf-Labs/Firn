@@ -36,6 +36,7 @@ add_executable(firn
   src/App.cpp
   src/Vectors.cpp
   src/Drive.cpp
+  src/Actions.cpp
   src/Script.cpp
   src/Config.cpp
   src/Clipboard.cpp

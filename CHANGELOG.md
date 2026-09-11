@@ -7,6 +7,13 @@ section into the next version.
 ## Unreleased
 
 ### Added
+- Everything the menus and tool options do is now an action with a name and
+  typed parameters, registered beside the menu item it shares an App method
+  with, so the program can be driven from outside without a mouse.
+  `firn-cli` is the command line client: `firn-cli describe` reports the
+  whole API as JSON, `firn-cli do image.resize '{"width":1600}'` runs one,
+  `firn-cli state` says what is open, down to the layer list. The driver
+  socket and .PspScript files reach the same surface. See docs/API.md.
 - Image > Resize offers Lanczos and Mitchell alongside the existing
   filters, and a Smart size option that chooses for you the way the
   original's default does: Lanczos when reducing or enlarging a little

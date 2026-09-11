@@ -96,6 +96,11 @@ def main():
         st = run(s, ['do IncreaseColorsTo16Bit {}', "state"])
         check(field(st, "depth") == "16", "16 bits per channel")
 
+        st = run(s, ['do app.describe {}'])
+        check('"name":"image.resize"' in st and '"tools"' in st, "the action API describes itself")
+        st = run(s, ['do layer.new {}', 'do layer.properties {"name":"FromTheAPI","opacity":50}', "state"])
+        check(field(st, "active_name") == "FromTheAPI", "an action renamed the layer")
+
         s.sendall(b"quit\n")  # the app exits without answering; wait for it to close the socket
         s.settimeout(10.0)
         try:

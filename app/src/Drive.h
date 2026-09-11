@@ -42,6 +42,8 @@ private:
     bool parse_line(const std::string& line, App& app);
     void ack(const std::string& payload);
     std::string state_text(App& app) const;
+    std::string state_json(App& app) const;   // the same facts, for clients that parse JSON
+    bool state_json_ = false;
     ImVec2 image_to_window(const App& app, float x, float y) const;
 
     int listen_fd_ = -1, client_fd_ = -1;

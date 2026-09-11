@@ -9,6 +9,7 @@
 #include <map>
 #include <memory>
 
+#include "Actions.h"
 #include "App.h"
 #include "firn/adjust.h"
 #include "firn/commands.h"
@@ -801,6 +802,9 @@ std::string App::do_command(const std::string& name, const Value& p, bool* ok) {
         return json::dump(result_ok());
     }
 
+    // Firn's own actions share the same entry point, under dotted names that
+    // cannot collide with the original's (see app/src/Actions.cpp).
+    if (const Action* action = find_action(name)) { *ok = true; return action->run(*this, p, ok); }
     *ok = false;
     return "unsupported command " + name;
 }
