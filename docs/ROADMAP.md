@@ -244,6 +244,41 @@ Parsing App.h costs 0.59 s per translation unit: about 0.38 s of core
 headers it genuinely needs and 0.2 s of its own declarations. That is the
 budget any future attempt is working against.
 
+## 18. macOS (2026-09-11)
+
+What is known, so nobody repeats the search:
+
+- The program **builds and runs** on macOS. The CI job starts it and 20 of
+  the 21 smoke checks pass, so this is not a "does it work there" problem.
+- The one failure is `undo removed the selection`: a shortcut sent by the
+  driver does nothing. **Real users are not affected.** ImGui sets
+  `ConfigMacOSXBehaviors` from `__APPLE__` and swaps Cmd and Ctrl inside
+  `AddKeyAnalogEvent`, so a Mac user pressing Cmd+Z already produces
+  `io.KeyCtrl` and the app's own shortcut handling is correct.
+- Only synthetic input is wrong. The driver sent `ImGuiKey_LeftCtrl` plus
+  `ImGuiMod_Ctrl`, which that swap turns into Super, matching nothing.
+- Tried, and still failing: sending `ImGuiKey_LeftSuper` plus
+  `ImGuiMod_Super` so the swap turns them back into Ctrl
+  (`app/src/Drive.cpp`). Two CI round trips, no Mac to debug on.
+- Worth checking next, on a machine with one: whether
+  `ConfigMacOSXBehaviors` is actually true in this build (print it at
+  startup); whether feeding `ImGuiMod_*` events is doing anything at all,
+  since recent ImGui derives `io.KeyMods` from the physical key states in
+  `UpdateKeyboardInputs`; and whether the app should accept
+  `io.KeyCtrl || io.KeySuper` regardless.
+- The macOS CI steps are `continue-on-error` until this is fixed, so the
+  branch stays green. Make them blocking again in
+  `.github/workflows/build.yml` once it passes.
+
+Also worth a look on that machine, none of it verified by anyone:
+
+- [ ] Retina: the HiDPI path uses the drawable ratio, which is where a Mac
+      will exercise it first
+- [ ] The clipboard's `osascript` path (`app/src/Clipboard.cpp`)
+- [ ] The tablet backend `app/src/Tablet_mac.mm`, never run on hardware
+- [ ] Settings land in `~/.config/firn`, not `~/Library/Application Support`;
+      it works, it is just not where a Mac user would look
+
 ## Dropped (not worth the effort for this port)
 
 - Art Media layers and tools (oil brush, chalk, pastel, palette knife,
