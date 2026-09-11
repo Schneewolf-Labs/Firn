@@ -132,23 +132,38 @@ int main(int argc, char** argv) {
     ImGui_ImplOpenGL3_Init(glsl_version);
 
     App app;
-    // HiDPI: the drawable-to-window ratio (macOS, Wayland) or the display DPI (X11, Windows).
+    // Pixel density (the drawable/window ratio: Retina, Wayland buffer scale)
+    // sharpens font rendering but never changes logical sizes on its own —
+    // a real macOS or Wayland app does not get bigger UI just because the
+    // display is high-density, only crisper text. Set before the UI-scale
+    // block below so a font rebuild it triggers already has the right value.
     {
         int ww = 1, wh = 1, dw = 1, dh = 1;
         SDL_GetWindowSize(window, &ww, &wh);
         SDL_GL_GetDrawableSize(window, &dw, &dh);
-        float scale = ww > 0 ? static_cast<float>(dw) / static_cast<float>(ww) : 1.0f;
+        const float density = ww > 0 ? static_cast<float>(dw) / static_cast<float>(ww) : 1.0f;
+        if (density > 1.01f) { app.font_density = density; app.font_pending = true; }
+    }
+    // UI scale: an explicit "make text and widgets bigger" desktop
+    // preference, which is a different thing from pixel density above. X11
+    // and Windows expose this as a DPI percentage; macOS and Wayland have no
+    // such preference to read here (their buffer-scale signal is density,
+    // handled above), so this stays at 1.0 there unless FIRN_UI_SCALE or
+    // Preferences > UI scale asks for more.
+    {
+        float scale = 1.0f;
+#if !defined(__APPLE__)
         const char* driver = SDL_GetCurrentVideoDriver();
         const bool x11 = driver && std::strcmp(driver, "x11") == 0;
         float ddpi = 0.0f;
         // X11 reports the monitor's physical DPI, which says nothing about the
         // desktop's scale; there the toolkit scale variables decide instead.
-        if (scale <= 1.01f && !x11 && SDL_GetDisplayDPI(SDL_GetWindowDisplayIndex(window), &ddpi, nullptr, nullptr) == 0 && ddpi > 0.0f) scale = ddpi / 96.0f;
+        if (!x11 && SDL_GetDisplayDPI(SDL_GetWindowDisplayIndex(window), &ddpi, nullptr, nullptr) == 0 && ddpi > 0.0f) scale = ddpi / 96.0f;
         if (scale <= 1.01f) {
             if (const char* e = std::getenv("GDK_SCALE")) scale = static_cast<float>(std::atof(e));
             else if (const char* q = std::getenv("QT_SCALE_FACTOR")) scale = static_cast<float>(std::atof(q));
         }
-#if !defined(_WIN32) && !defined(__APPLE__)
+#if !defined(_WIN32)
         if (scale <= 1.01f && x11) {
             // Xft.dpi is what X11 desktops set when the user picks a scale.
             if (FILE* p = popen("xrdb -query 2>/dev/null", "r")) {
@@ -158,6 +173,7 @@ int main(int argc, char** argv) {
                 pclose(p);
             }
         }
+#endif
 #endif
         if (const char* e = std::getenv("FIRN_UI_SCALE")) scale = static_cast<float>(std::atof(e));
         scale = std::round(scale * 4.0f) / 4.0f;   // quarter steps: 1, 1.25, 1.5, ...

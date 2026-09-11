@@ -299,6 +299,11 @@ struct App {
     float ui_scale = 1.0f;
     float auto_ui_scale = 1.0f;
     void set_auto_ui_scale(float s);
+    // The drawable/window pixel ratio (Retina, Wayland fractional scale):
+    // rasterizes the font atlas sharper without changing logical sizes. Unlike
+    // ui_scale this is not a user "make things bigger" preference, so it never
+    // multiplies style sizes on its own (see main.cpp).
+    float font_density = 1.0f;
     void ensure_themes();
     const Theme* find_theme(const std::string& name) const;
     void apply_theme(const std::string& name);

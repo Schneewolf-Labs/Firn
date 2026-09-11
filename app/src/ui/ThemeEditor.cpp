@@ -80,10 +80,14 @@ void App::apply_pending_font() {
     io.Fonts->Clear();
     std::string path = font_pending_path;
     if (path.empty()) path = default_ui_font();
+    // Rasterize sharper on a Retina/fractional-scale display without changing
+    // the logical (point) size the rest of the style is built around.
+    ImFontConfig cfg;
+    cfg.RasterizerDensity = font_density;
     ImFont* loaded = nullptr;
-    if (path != "builtin" && !path.empty() && fs::exists(path)) loaded = io.Fonts->AddFontFromFileTTF(path.c_str(), std::max(6.0f, font_pending_size));
+    if (path != "builtin" && !path.empty() && fs::exists(path)) loaded = io.Fonts->AddFontFromFileTTF(path.c_str(), std::max(6.0f, font_pending_size), &cfg);
     if (!loaded) {
-        io.Fonts->AddFontDefault();
+        io.Fonts->AddFontDefault(&cfg);
         io.FontGlobalScale = std::abs(font_pending_size - 13.0f) < 0.01f ? 1.0f : font_pending_size / 13.0f;
     } else {
         io.FontGlobalScale = 1.0f;
