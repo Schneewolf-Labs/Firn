@@ -7,6 +7,15 @@ section into the next version.
 ## Unreleased
 
 ### Added
+- A drawing API, so a script or a model can put marks on the canvas rather
+  than only open, adjust and save. `draw.rectangle`, `draw.ellipse`,
+  `draw.polygon` and `draw.path` place shapes as editable vector objects or
+  rasterize them, honoring the selection, and `draw.stroke` paints one
+  continuous brush stroke. `app.batch` applies a list of actions atomically:
+  they land as one undo step, and if any of them is refused the document is
+  left as it was. `samples/api-cat.json` is a worked example that draws a
+  complete editable picture in one call, and `scripts/cli_tests.py` covers
+  the API's transport and rollback behavior.
 - Fixed retained native menu callbacks reading expired stack variables. ImGui
   menu actions now run after menu construction, so closing documents or merging
   layers cannot invalidate predicates still being rendered.
