@@ -12,16 +12,14 @@ namespace firn {
 // --- CommandStack ------------------------------------------------------
 
 void CommandStack::run(Document& doc, std::unique_ptr<Command> cmd) {
-    // Running a new command discards any redo branch.
-    done_.resize(cursor_);
     cmd->execute(doc);
-    done_.push_back(std::move(cmd));
-    cursor_ = done_.size();
-    trim();
+    push_applied(std::move(cmd));
 }
 
 void CommandStack::push_applied(std::unique_ptr<Command> cmd) {
     done_.resize(cursor_);
+    states_.resize(cursor_ + 1);
+    states_.push_back(next_state_++);
     done_.push_back(std::move(cmd));
     cursor_ = done_.size();
     trim();
@@ -42,16 +40,24 @@ size_t CommandStack::memory_bytes() const {
 
 void CommandStack::trim() {
     size_t drop = 0;
-    if (limit_ != 0 && done_.size() > limit_) drop = done_.size() - limit_;
+    if (limit_ != 0 && done_.size() > limit_) drop = std::min(cursor_, done_.size() - limit_);
     if (memory_limit_ != 0) {
-        // Drop the oldest applied entries until the budget fits; the newest
-        // applied entry always stays so one undo is possible.
         size_t total = memory_bytes();
+        for (size_t i = 0; i < drop; ++i) total -= done_[i]->memory_bytes();
+        // Keep at least the newest applied entry for undo.
         while (total > memory_limit_ && drop + 1 < cursor_) { total -= done_[drop]->memory_bytes(); ++drop; }
     }
-    if (drop == 0) return;
-    done_.erase(done_.begin(), done_.begin() + static_cast<long>(drop));
-    cursor_ = cursor_ > drop ? cursor_ - drop : 0;
+    if (drop) {
+        done_.erase(done_.begin(), done_.begin() + static_cast<long>(drop));
+        states_.erase(states_.begin(), states_.begin() + static_cast<long>(drop));
+        cursor_ -= drop;
+    }
+    // Never drop the beginning of an unapplied redo chain: later commands
+    // depend on those edits. Discard its far end when reducing the limit.
+    if (limit_ != 0 && done_.size() > limit_) {
+        done_.resize(limit_);
+        states_.resize(limit_ + 1);
+    }
 }
 
 void CommandStack::undo(Document& doc) {
@@ -68,6 +74,8 @@ void CommandStack::redo(Document& doc) {
 
 void CommandStack::clear() {
     done_.clear();
+    states_.assign(1, 0);
+    next_state_ = 1;
     cursor_ = 0;
 }
 

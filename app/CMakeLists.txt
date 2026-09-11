@@ -28,8 +28,8 @@ add_custom_target(firn_version
 include(${CMAKE_SOURCE_DIR}/cmake/commands.cmake)
 firn_generate_command_list(${CMAKE_CURRENT_SOURCE_DIR}/src/Script.cpp ${CMAKE_CURRENT_BINARY_DIR}/generated/InheritedCommands.h)
 
-add_executable(firn
-  src/main.cpp
+# Share the application implementation with headless state/menu regression tests.
+add_library(firn_app OBJECT
   ${FIRN_ICON_CPP}
   ${FIRN_VERSION_CPP}
   src/ui/About.cpp
@@ -66,18 +66,18 @@ add_executable(firn
   src/tools/DeformTools.cpp
   src/tools/WarpTools.cpp
 )
-target_include_directories(firn PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/generated src)
-add_dependencies(firn firn_version)
+target_include_directories(firn_app PUBLIC ${CMAKE_CURRENT_BINARY_DIR}/generated src)
+add_dependencies(firn_app firn_version)
 # Lets a development build find the sample tubes in the (gitignored) backup.
-target_compile_definitions(firn PRIVATE FIRN_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
-target_link_libraries(firn PRIVATE firncore imgui SDL2::SDL2 OpenGL::GL)
+target_compile_definitions(firn_app PUBLIC FIRN_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+target_link_libraries(firn_app PUBLIC firncore imgui SDL2::SDL2 OpenGL::GL)
 # Pen tablets: XInput2 on X11 (optional at build time), pointer messages on
 # Windows, NSEvent tablet data on macOS.
 if(UNIX AND NOT APPLE)
   find_package(X11)
   if(X11_FOUND AND X11_Xi_FOUND)
-    target_compile_definitions(firn PRIVATE FIRN_HAVE_XI2)
-    target_link_libraries(firn PRIVATE X11::X11 X11::Xi)
+    target_compile_definitions(firn_app PUBLIC FIRN_HAVE_XI2)
+    target_link_libraries(firn_app PUBLIC X11::X11 X11::Xi)
     message(STATUS "Pen tablets: XInput2")
   else()
     message(STATUS "Pen tablets: libxi not found, pressure disabled")
@@ -85,13 +85,15 @@ if(UNIX AND NOT APPLE)
 endif()
 if(APPLE)
   enable_language(OBJCXX)
-  target_sources(firn PRIVATE src/Tablet_mac.mm src/NativeMenu_mac.mm src/NativePointer_mac.mm)
-  target_link_libraries(firn PRIVATE "-framework Cocoa")
+  target_sources(firn_app PRIVATE src/Tablet_mac.mm src/NativeMenu_mac.mm src/NativePointer_mac.mm)
+  target_link_libraries(firn_app PUBLIC "-framework Cocoa")
   # ARC: NativeMenu_mac.mm allocates one Objective-C object per native menu
   # item on every frame (see FirnMenuAction in NativeMenu_mac.mm); without
   # ARC those would need manual retain/release bookkeeping to avoid leaking.
   set_source_files_properties(src/Tablet_mac.mm src/NativeMenu_mac.mm src/NativePointer_mac.mm PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
 endif()
+add_executable(firn src/main.cpp)
+target_link_libraries(firn PRIVATE firn_app)
 if(WIN32)
   # Plain main(); SDL's own entry point is not used. A GUI subsystem keeps
   # the console window away; the entry point still runs the plain main().

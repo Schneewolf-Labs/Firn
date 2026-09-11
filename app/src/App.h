@@ -38,7 +38,7 @@ struct DocState {
     firn::CommandStack history;
     std::string doc_path;
     std::string title;
-    size_t saved_cursor = 0;
+    uint64_t saved_state = 0;
     float zoom = 1.0f, pan_x = 0.0f, pan_y = 0.0f;
     bool fit_requested = true;
     firn::raster::Rect crop_rect;
@@ -49,7 +49,7 @@ struct DocState {
     uint64_t tex_revision = ~0ull;
     bool placed = false;
     ImVec2 win_pos, win_size;         // last frame's window rect, for keeping it inside the workspace
-    size_t autosave_cursor = static_cast<size_t>(-1);   // history cursor at the last autosave
+    uint64_t autosave_state = static_cast<size_t>(-1);   // history state at the last autosave
 };
 
 struct App {
@@ -61,7 +61,7 @@ struct App {
     firn::CommandStack history;
     std::string doc_path;
     std::string doc_title;
-    size_t saved_cursor = 0;
+    uint64_t saved_state = 0;
     std::vector<DocState> docs;         // one slot per open image; docs[current_doc].doc is null (it lives above)
     int current_doc = -1;
     int untitled_counter = 0;
@@ -80,7 +80,7 @@ struct App {
     void draw_canvas_view(ImVec2 view_pos, ImVec2 view_size);
     int pending_close = -1;             // document awaiting the unsaved-changes prompt
     bool pending_quit = false;
-    bool modified() const { return doc && history.cursor() != saved_cursor; }
+    bool modified() const { return doc && history.state_id() != saved_state; }
     void stash_current();               // App members -> docs[current_doc]
     void activate_document(int index);
     void add_document(std::unique_ptr<firn::Document> d, const std::string& path);

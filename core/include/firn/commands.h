@@ -44,11 +44,15 @@ public:
     // For the history panel.
     size_t size() const { return done_.size(); }
     size_t cursor() const { return cursor_; }
+    // Identifies content, unlike cursor(), which can repeat after branching or trimming.
+    uint64_t state_id() const { return states_.at(cursor_); }
     const Command& at(size_t i) const { return *done_.at(i); }
 
 private:
     void trim();
     std::vector<std::unique_ptr<Command>> done_;
+    std::vector<uint64_t> states_{0}; // one identity for each undo boundary
+    uint64_t next_state_ = 1;
     size_t cursor_ = 0;  // entries [0, cursor_) are applied
     size_t limit_ = 0;
     size_t memory_limit_ = 0;

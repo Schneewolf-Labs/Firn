@@ -7,6 +7,16 @@ section into the next version.
 ## Unreleased
 
 ### Added
+- Fixed retained native menu callbacks reading expired stack variables. ImGui
+  menu actions now run after menu construction, so closing documents or merging
+  layers cannot invalidate predicates still being rendered.
+- Saved/autosaved history states have stable identities: undo-and-edit and
+  history trimming no longer hide unsaved work. Reducing the undo limit preserves
+  the dependencies of the remaining redo commands.
+- Selection edits are finalized before switching, saving, closing or undoing;
+  layer-mask state cannot leak into another document. Leaving an untouched
+  selection edit preserves redo.
+- Headless app-state regressions run under CTest alongside the core tests.
 - Fixed a crash when flattening from a layer context menu. Menu and palette
   rendering no longer read the old layer stack after merges or deletion.
 - Searchable tools with common tools first and collapsible specialist categories.

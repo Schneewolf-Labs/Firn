@@ -57,9 +57,9 @@ void App::autosave_tick() {
     for (int i = 0; i < static_cast<int>(docs.size()); ++i) {
         const bool current = i == current_doc;
         const Document* d = current ? doc.get() : docs[i].doc.get();
-        const size_t cursor = current ? history.cursor() : docs[i].history.cursor();
-        if (!d || !document_modified(i) || docs[i].autosave_cursor == cursor) continue;
-        docs[i].autosave_cursor = cursor;
+        const uint64_t state = current ? history.state_id() : docs[i].history.state_id();
+        if (!d || !document_modified(i) || docs[i].autosave_state == state) continue;
+        docs[i].autosave_state = state;
         // Sidecar first (tiny), then the pixels on a worker thread from a snapshot.
         {
             std::ofstream side(sidecar_path(key_for(docs[i].uid)));
@@ -122,7 +122,7 @@ void App::draw_recovery_dialog() {
             if (!d) { status = "Could not recover " + e.title + ": " + err; recovery_error += status + "\n"; failed.push_back(e); continue; }
             add_document(std::move(d), e.original_path);
             if (e.original_path.empty()) doc_title = e.title;
-            saved_cursor = static_cast<size_t>(-1);  // recovered work counts as unsaved
+            saved_state = static_cast<size_t>(-1);  // recovered work counts as unsaved
             autosave_forget(e.key);
         }
         recover_files = std::move(failed);

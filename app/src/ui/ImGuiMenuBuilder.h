@@ -15,9 +15,14 @@ struct ImGuiMenuBuilder final : MenuBuilder {
 
     void item(const char* label, const char* shortcut, bool enabled,
               const std::function<void()>& action, bool selected, const char* tooltip) override {
-        if (ImGui::MenuItem(label, shortcut ? SC(shortcut) : nullptr, selected, enabled)) action();
+        if (ImGui::MenuItem(label, shortcut ? SC(shortcut) : nullptr, selected, enabled)) pending = action;
         if (tooltip && ImGui::IsItemHovered()) ImGui::SetTooltip("%s", tooltip);
     }
+
+    // Dispatch only after all menu predicates have been evaluated and popups
+    // ended: actions may close documents or replace the layer stack.
+    void dispatch() { if (pending) { auto action = std::move(pending); action(); } }
+    std::function<void()> pending;
 
     void separator() override { ImGui::Separator(); }
     void text(const char* label) override { ImGui::TextDisabled("%s", label); }

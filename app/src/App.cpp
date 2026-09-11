@@ -131,7 +131,7 @@ void App::stash_current() {
     s.history = std::move(history);
     s.doc_path = doc_path;
     s.title = doc_title;
-    s.saved_cursor = saved_cursor;
+    s.saved_state = saved_state;
     s.zoom = zoom; s.pan_x = pan_x; s.pan_y = pan_y;
     s.fit_requested = fit_requested;
     s.crop_rect = crop_rect;
@@ -153,6 +153,7 @@ void App::snap_point(float& x, float& y) const {
 
 void App::activate_document(int index) {
     if (index < 0 || index >= static_cast<int>(docs.size()) || index == current_doc) return;
+    set_selection_edit(false);
     set_mask_edit(false);
     tool().cancel(*this);
     preview_cancel();
@@ -162,7 +163,7 @@ void App::activate_document(int index) {
     history = std::move(s.history);
     doc_path = s.doc_path;
     doc_title = s.title;
-    saved_cursor = s.saved_cursor;
+    saved_state = s.saved_state;
     zoom = s.zoom; pan_x = s.pan_x; pan_y = s.pan_y;
     fit_requested = s.fit_requested;
     crop_rect = s.crop_rect;
@@ -172,6 +173,7 @@ void App::activate_document(int index) {
 }
 
 void App::add_document(std::unique_ptr<Document> d, const std::string& path) {
+    set_selection_edit(false);
     set_mask_edit(false);
     tool().cancel(*this);
     preview_cancel();
@@ -186,7 +188,7 @@ void App::add_document(std::unique_ptr<Document> d, const std::string& path) {
     doc_path = path;
     if (path.empty()) doc_title = "Untitled " + std::to_string(++untitled_counter);
     else { const auto slash = path.find_last_of("/\\"); doc_title = slash == std::string::npos ? path : path.substr(slash + 1); }
-    saved_cursor = 0;
+    saved_state = 0;
     zoom = 1.0f; pan_x = pan_y = 0.0f;
     fit_requested = true;
     crop_rect = {};
@@ -201,15 +203,17 @@ std::string App::document_title(int index) const {
 bool App::document_modified(int index) const {
     if (index == current_doc) return modified();
     const DocState& s = docs[index];
-    return s.doc && s.history.cursor() != s.saved_cursor;
+    return s.doc && s.history.state_id() != s.saved_state;
 }
 
 void App::close_document(int index, bool force) {
     if (index < 0 || index >= static_cast<int>(docs.size())) return;
+    if (index == current_doc) set_selection_edit(false);
     if (!force && document_modified(index)) { pending_close = index; return; }
     if (docs[index].tex) { glDeleteTextures(1, &docs[index].tex); docs[index].tex = 0; }
     autosave_forget(docs[index].uid);   // closing (or discarding) ends the need for a recovery copy
     if (index == current_doc) {
+        set_mask_edit(false);
         tool().cancel(*this);
         preview_cancel();
         doc.reset();
@@ -223,7 +227,7 @@ void App::close_document(int index, bool force) {
             const int next = std::min(index, static_cast<int>(docs.size()) - 1);
             DocState& s = docs[next];
             doc = std::move(s.doc); history = std::move(s.history); doc_path = s.doc_path; doc_title = s.title;
-            saved_cursor = s.saved_cursor; zoom = s.zoom; pan_x = s.pan_x; pan_y = s.pan_y; fit_requested = s.fit_requested; crop_rect = s.crop_rect;
+            saved_state = s.saved_state; zoom = s.zoom; pan_x = s.pan_x; pan_y = s.pan_y; fit_requested = s.fit_requested; crop_rect = s.crop_rect;
             current_doc = next;
             select_tab_request = next;
         }
@@ -235,6 +239,7 @@ void App::close_document(int index, bool force) {
 }
 
 void App::request_quit() {
+    set_selection_edit(false);
     for (size_t i = 0; i < docs.size(); ++i)
         if (document_modified(static_cast<int>(i))) { pending_quit = true; pending_close = static_cast<int>(i); return; }
     quit = true;
@@ -271,6 +276,7 @@ bool App::open_document(const std::string& path) {
 
 bool App::save_document(const std::string& path) {
     if (!doc) return false;
+    set_selection_edit(false);
     // JPEG: ask for the quality first; the dialog calls back with the path.
     {
         const auto dot = path.rfind('.');
@@ -290,8 +296,8 @@ bool App::save_document(const std::string& path) {
     }
     doc_path = path;
     { const auto slash = path.find_last_of("/\\"); doc_title = slash == std::string::npos ? path : path.substr(slash + 1); }
-    saved_cursor = history.cursor();
-    if (current_doc >= 0 && current_doc < static_cast<int>(docs.size())) { docs[current_doc].autosave_cursor = saved_cursor; autosave_forget(docs[current_doc].uid); }
+    saved_state = history.state_id();
+    if (current_doc >= 0 && current_doc < static_cast<int>(docs.size())) { docs[current_doc].autosave_state = saved_state; autosave_forget(docs[current_doc].uid); }
     config.touch_recent(path);
     status = "Saved " + path;
     if (!io::is_psp_extension(path) && !io::is_ora_extension(path) && doc->layer_count() > 1) status += "\nFlattened: only .ora and .pspimage keep layers.";
@@ -370,6 +376,7 @@ void App::zoom_about(ImVec2 screen, float factor) {
 }
 
 void App::undo() {
+    set_selection_edit(false);
     tool().cancel(*this);
     if (doc && history.can_undo()) {
         status = "Undo " + history.at(history.cursor() - 1).name();
@@ -379,6 +386,7 @@ void App::undo() {
 }
 
 void App::redo() {
+    set_selection_edit(false);
     tool().cancel(*this);
     if (doc && history.can_redo()) {
         status = "Redo " + history.at(history.cursor()).name();
@@ -501,7 +509,7 @@ void App::revert() {
     doc = std::move(fresh);
     history = CommandStack();
     history.set_memory_limit(config.undo_memory_mb * 1024ull * 1024ull);
-    saved_cursor = 0;
+    saved_state = 0;
     canvas_tex_revision = ~0ull;
     status = "Reverted to the saved " + doc_path;
     for (const std::string& w : warnings) status += "\n" + w;
@@ -902,7 +910,11 @@ void App::set_selection_edit(bool on) {
         mask_proxy = Image();
         doc->set_selection(selection_edit_before);
         if (!after.any()) after = Mask();
-        set_selection("Edit Selection", std::move(after));
+        const bool unchanged = after.width() == selection_edit_before.width() &&
+            after.height() == selection_edit_before.height() &&
+            (after.size() == 0 || std::memcmp(after.data(), selection_edit_before.data(), after.size()) == 0);
+        // Leaving an untouched edit mode must not discard a pending redo branch.
+        if (!unchanged) set_selection("Edit Selection", std::move(after));
         overlay_tex_revision = ~0ull;
     }
 }
@@ -940,7 +952,7 @@ void App::set_mask_edit(bool on) {
         status = "Editing the mask of \"" + doc->layer(mask_proxy_layer).name + "\": paint black to hide, white to show.";
     } else {
         mask_edit = false;
-        mask_proxy = Image();
+        if (!selection_edit) mask_proxy = Image();
     }
 }
 

@@ -98,42 +98,42 @@ void App::draw_selections_menu(MenuBuilder& m) {
     const bool has_sel = has_doc && doc->has_selection();
     const int layer = active_layer();
     const bool raster = has_doc && layer >= 0 && doc->layer(layer).is_raster();
-    m.item("Select All", "Ctrl+A", has_doc, [&] { select_all(); });
-    m.item("Select None", "Ctrl+D", has_sel, [&] { select_none(); });
-    m.item("From Mask", nullptr, has_doc && layer >= 0 && (doc->layer(layer).has_mask() || raster), [&] { select_from_mask(); });
-    m.item("From Vector Object", nullptr, has_doc && layer >= 0 && doc->layer(layer).is_vector(), [&] { select_from_vector(); });
-    m.item("Invert", "Ctrl+Shift+I", has_doc, [&] { select_invert(); });
+    m.item("Select All", "Ctrl+A", has_doc, [=, this] { select_all(); });
+    m.item("Select None", "Ctrl+D", has_sel, [=, this] { select_none(); });
+    m.item("From Mask", nullptr, has_doc && layer >= 0 && (doc->layer(layer).has_mask() || raster), [=, this] { select_from_mask(); });
+    m.item("From Vector Object", nullptr, has_doc && layer >= 0 && doc->layer(layer).is_vector(), [=, this] { select_from_vector(); });
+    m.item("Invert", "Ctrl+Shift+I", has_doc, [=, this] { select_invert(); });
     m.separator();
     if (m.begin_menu("Matting", raster)) {
-        auto matte = [&](const char* name, Color c) {
+        auto matte = [=, this](const char* name, Color c) {
             run(std::make_unique<AdjustCommand>(static_cast<size_t>(layer), name, [c](Image& img) { raster::remove_matte(img, c); }));
         };
-        m.item("Remove Black Matte", nullptr, true, [&] { matte("Remove Black Matte", {0, 0, 0, 255}); });
-        m.item("Remove White Matte", nullptr, true, [&] { matte("Remove White Matte", {255, 255, 255, 255}); });
-        m.item("Defringe...", nullptr, true, [&] { show_sel_dialog = Defringe; });
+        m.item("Remove Black Matte", nullptr, true, [=, this] { matte("Remove Black Matte", {0, 0, 0, 255}); });
+        m.item("Remove White Matte", nullptr, true, [=, this] { matte("Remove White Matte", {255, 255, 255, 255}); });
+        m.item("Defringe...", nullptr, true, [=, this] { show_sel_dialog = Defringe; });
         m.end_menu();
     }
     if (m.begin_menu("Modify", has_sel)) {
-        m.item("Expand...", nullptr, true, [&] { show_sel_dialog = Expand; });
-        m.item("Contract...", nullptr, true, [&] { show_sel_dialog = Contract; });
-        m.item("Feather...", nullptr, true, [&] { show_sel_dialog = Feather; });
-        m.item("Inside/Outside Feather...", nullptr, true, [&] { show_sel_dialog = InsideOutsideFeather; });
-        m.item("Unfeather", nullptr, true, [&] { Mask msk = doc->selection(); mask::unfeather(msk); set_selection("Unfeather", std::move(msk)); });
+        m.item("Expand...", nullptr, true, [=, this] { show_sel_dialog = Expand; });
+        m.item("Contract...", nullptr, true, [=, this] { show_sel_dialog = Contract; });
+        m.item("Feather...", nullptr, true, [=, this] { show_sel_dialog = Feather; });
+        m.item("Inside/Outside Feather...", nullptr, true, [=, this] { show_sel_dialog = InsideOutsideFeather; });
+        m.item("Unfeather", nullptr, true, [=, this] { Mask msk = doc->selection(); mask::unfeather(msk); set_selection("Unfeather", std::move(msk)); });
         m.separator();
-        m.item("Remove Specks and Holes...", nullptr, true, [&] { show_sel_dialog = SpecksHoles; });
-        m.item("Select Color Range...", nullptr, raster, [&] { show_sel_dialog = ColorRange; });
-        m.item("Select Similar...", nullptr, raster, [&] { show_sel_dialog = Similar; });
-        m.item("Shape-based Anti-alias...", nullptr, true, [&] { show_sel_dialog = ShapeAntialias; });
-        m.item("Smooth...", nullptr, true, [&] { show_sel_dialog = Smooth; });
+        m.item("Remove Specks and Holes...", nullptr, true, [=, this] { show_sel_dialog = SpecksHoles; });
+        m.item("Select Color Range...", nullptr, raster, [=, this] { show_sel_dialog = ColorRange; });
+        m.item("Select Similar...", nullptr, raster, [=, this] { show_sel_dialog = Similar; });
+        m.item("Shape-based Anti-alias...", nullptr, true, [=, this] { show_sel_dialog = ShapeAntialias; });
+        m.item("Smooth...", nullptr, true, [=, this] { show_sel_dialog = Smooth; });
         m.end_menu();
     }
     m.separator();
-    m.item("Hide Marquee", "Ctrl+Shift+M", has_doc, [&] { show_marquee = !show_marquee; }, !show_marquee);
-    m.item("Edit Selection", nullptr, has_doc, [&] { set_selection_edit(!selection_edit); }, selection_edit);
+    m.item("Hide Marquee", "Ctrl+Shift+M", has_doc, [=, this] { show_marquee = !show_marquee; }, !show_marquee);
+    m.item("Edit Selection", nullptr, has_doc, [=, this] { set_selection_edit(!selection_edit); }, selection_edit);
     m.separator();
-    m.item("Promote Selection to Layer", nullptr, raster && has_sel, [&] { promote_selection_to_layer(false); });
-    m.item("Float", "Ctrl+F", raster && has_sel && !has_floating_layer(), [&] { promote_selection_to_layer(true); });
-    m.item("Defloat", "Ctrl+Shift+F", has_floating_layer(), [&] { defloat(); });
+    m.item("Promote Selection to Layer", nullptr, raster && has_sel, [=, this] { promote_selection_to_layer(false); });
+    m.item("Float", "Ctrl+F", raster && has_sel && !has_floating_layer(), [=, this] { promote_selection_to_layer(true); });
+    m.item("Defloat", "Ctrl+Shift+F", has_floating_layer(), [=, this] { defloat(); });
     m.separator();
     if (m.begin_menu("Load/Save Selection", has_doc)) {
         if (m.begin_menu("Load Selection From Alpha Channel", !doc->alpha_channels().empty())) {
@@ -143,16 +143,16 @@ void App::draw_selections_menu(MenuBuilder& m) {
                 m.pop_id();
             }
             m.separator();
-            m.item("Delete All Alpha Channels", nullptr, true, [&] { doc->alpha_channels().clear(); });
+            m.item("Delete All Alpha Channels", nullptr, true, [=, this] { doc->alpha_channels().clear(); });
             m.end_menu();
         }
-        m.item("Save Selection To Alpha Channel...", nullptr, doc->has_selection(), [&] {
+        m.item("Save Selection To Alpha Channel...", nullptr, doc->has_selection(), [=, this] {
             std::snprintf(alpha_name_buf, sizeof(alpha_name_buf), "Selection #%zu", doc->alpha_channels().size() + 1);
             show_alpha_save_dialog = true;
         });
         m.separator();
-        m.item("Load Selection From Disk...", nullptr, true, [&] { request_load_selection(); });
-        m.item("Save Selection To Disk...", nullptr, has_doc && doc->has_selection(), [&] { request_save_selection(); });
+        m.item("Load Selection From Disk...", nullptr, true, [=, this] { request_load_selection(); });
+        m.item("Save Selection To Disk...", nullptr, has_doc && doc->has_selection(), [=, this] { request_save_selection(); });
         m.end_menu();
     }
     m.end_menu();

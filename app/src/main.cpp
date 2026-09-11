@@ -261,6 +261,7 @@ int main(int argc, char** argv) {
             ImGuiMenuBuilder menu_builder;
             app.draw_menu(menu_builder);
             ImGui::EndMainMenuBar();
+            menu_builder.dispatch();
         }
 #endif
         app.draw_canvas();

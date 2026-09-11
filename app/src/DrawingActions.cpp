@@ -124,8 +124,6 @@ std::string batch(App& app, const Value& p, bool* ok) {
         app.status = old_status;
         return fail(ok, "actions[" + std::to_string(index) + "]: " + e.what() + " (batch rolled back)");
     }
-    // Replacing the redo branch must not accidentally match a saved cursor.
-    if (app.saved_cursor > history.cursor()) app.saved_cursor = static_cast<size_t>(-1);
     app.history = std::move(history);
     app.commit(std::move(command));
     Value r = Value::object(); r.set("ok", Value::boolean(true)); r.set("results", std::move(results));

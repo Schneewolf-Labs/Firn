@@ -19,9 +19,9 @@ struct MenuBuilder {
     virtual bool begin_menu(const char* label, bool enabled = true) = 0;
     virtual void end_menu() = 0;
 
-    // action runs when the item is activated: immediately, this frame, on
-    // the ImGui backend; whenever Cocoa delivers the click on the native
-    // one. `selected` draws a checkmark without any other effect.
+    // Actions are retained until menu construction ends (ImGui) or Cocoa
+    // delivers the click (native). Capture local values by value, never
+    // by reference. `selected` draws a checkmark without any other effect.
     virtual void item(const char* label, const char* shortcut, bool enabled,
                        const std::function<void()>& action, bool selected = false,
                        const char* tooltip = nullptr) = 0;

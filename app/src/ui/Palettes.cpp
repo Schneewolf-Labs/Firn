@@ -312,6 +312,7 @@ static void draw_layers(App& app) {
             ImGuiMenuBuilder builder;
             app.draw_layer_menu_items(builder);
             ImGui::EndPopup();
+            builder.dispatch();
             // A menu action may replace the stack even when its count stays
             // the same. L and the visibility map then belong to the old stack.
             if (app.doc.get() != &doc || doc.revision() != revision) { ImGui::Unindent(row_depth * 14.0f); ImGui::PopID(); break; }

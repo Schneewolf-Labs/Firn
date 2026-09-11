@@ -127,8 +127,8 @@ void App::draw_menu(MenuBuilder& m) {
     const bool has_layer = has_any_layer && doc->layer(layer).is_raster();  // pixel operations need a raster layer
 
     if (m.begin_menu("File")) {
-        m.item("New...", "Ctrl+N", true, [&] { show_new_dialog = true; });
-        m.item("Open...", "Ctrl+O", true, [&] { request_open(); });
+        m.item("New...", "Ctrl+N", true, [=, this] { show_new_dialog = true; });
+        m.item("Open...", "Ctrl+O", true, [=, this] { request_open(); });
         if (m.begin_menu("Recent Files", !config.recent_files.empty())) {
             for (size_t i = 0; i < config.recent_files.size(); ++i) {
                 const std::string r = config.recent_files[i];
@@ -138,45 +138,45 @@ void App::draw_menu(MenuBuilder& m) {
             }
             m.end_menu();
         }
-        m.item("Print...", "Ctrl+P", has_doc, [&] { show_print_dialog = true; });
-        m.item("Close", "Ctrl+W", has_doc, [&] { close_document(current_doc); });
-        m.item("Close All", nullptr, has_doc, [&] { for (int i = static_cast<int>(docs.size()) - 1; i >= 0; --i) if (!document_modified(i)) close_document(i); if (!docs.empty()) close_document(0); });
+        m.item("Print...", "Ctrl+P", has_doc, [=, this] { show_print_dialog = true; });
+        m.item("Close", "Ctrl+W", has_doc, [=, this] { close_document(current_doc); });
+        m.item("Close All", nullptr, has_doc, [=, this] { for (int i = static_cast<int>(docs.size()) - 1; i >= 0; --i) if (!document_modified(i)) close_document(i); if (!docs.empty()) close_document(0); });
         m.separator();
-        m.item("Save", "Ctrl+S", has_doc, [&] { save(); });
-        m.item("Save As...", "Ctrl+Shift+S", has_doc, [&] { request_save_as(); });
-        m.item("Revert", nullptr, has_doc && !doc_path.empty(), [&] { if (modified()) show_revert_prompt = true; else revert(); });
+        m.item("Save", "Ctrl+S", has_doc, [=, this] { save(); });
+        m.item("Save As...", "Ctrl+Shift+S", has_doc, [=, this] { request_save_as(); });
+        m.item("Revert", nullptr, has_doc && !doc_path.empty(), [=, this] { if (modified()) show_revert_prompt = true; else revert(); });
         m.separator();
-        m.item("Preferences...", nullptr, true, [&] { menu_state->prefs_edit = config; menu_state->prefs_scale_before = config.ui_scale; show_prefs_dialog = true; });
+        m.item("Preferences...", nullptr, true, [=, this] { menu_state->prefs_edit = config; menu_state->prefs_scale_before = config.ui_scale; show_prefs_dialog = true; });
         m.separator();
-        m.item("Exit", nullptr, true, [&] { request_quit(); });
+        m.item("Exit", nullptr, true, [=, this] { request_quit(); });
         m.end_menu();
     }
     if (m.begin_menu("Edit")) {
-        m.item("Undo", "Ctrl+Z", has_doc && history.can_undo(), [&] { undo(); });
-        m.item("Redo", "Ctrl+Y", has_doc && history.can_redo(), [&] { redo(); });
+        m.item("Undo", "Ctrl+Z", has_doc && history.can_undo(), [=, this] { undo(); });
+        m.item("Redo", "Ctrl+Y", has_doc && history.can_redo(), [=, this] { redo(); });
         m.separator();
-        m.item("Cut", "Ctrl+X", has_layer, [&] { cut(); });
-        m.item("Copy", "Ctrl+C", has_layer, [&] { copy(); });
-        m.item("Copy Merged", "Ctrl+Shift+C", has_doc, [&] { copy_merged(); });
-        m.item("Paste As New Image", "Ctrl+V", true, [&] { paste_as_new_image(); });
-        m.item("Paste As New Layer", "Ctrl+L", has_doc, [&] { paste_as_new_layer(); });
-        m.item("Paste Into Selection", "Ctrl+Shift+L", has_layer && doc->has_selection(), [&] { paste_into_selection(); });
-        m.item("Clear", "Delete", has_layer, [&] { clear_selection(); });
-        m.item("Content-Aware Fill", nullptr, has_layer && doc->has_selection(), [&] { content_aware_fill(); }, false,
+        m.item("Cut", "Ctrl+X", has_layer, [=, this] { cut(); });
+        m.item("Copy", "Ctrl+C", has_layer, [=, this] { copy(); });
+        m.item("Copy Merged", "Ctrl+Shift+C", has_doc, [=, this] { copy_merged(); });
+        m.item("Paste As New Image", "Ctrl+V", true, [=, this] { paste_as_new_image(); });
+        m.item("Paste As New Layer", "Ctrl+L", has_doc, [=, this] { paste_as_new_layer(); });
+        m.item("Paste Into Selection", "Ctrl+Shift+L", has_layer && doc->has_selection(), [=, this] { paste_into_selection(); });
+        m.item("Clear", "Delete", has_layer, [=, this] { clear_selection(); });
+        m.item("Content-Aware Fill", nullptr, has_layer && doc->has_selection(), [=, this] { content_aware_fill(); }, false,
                "Rebuilds the selection from the rest of the picture, to remove something from it.");
         m.separator();
         {
             const std::string label = last_effect.empty() ? "Repeat" : "Repeat " + last_effect;
-            m.item(label.c_str(), "Ctrl+Shift+Y", has_layer && !last_effect.empty(), [&] { repeat_last_effect(); });
+            m.item(label.c_str(), "Ctrl+Shift+Y", has_layer && !last_effect.empty(), [=, this] { repeat_last_effect(); });
         }
         m.end_menu();
     }
     if (m.begin_menu("View")) {
-        m.item("Zoom In", "+", has_doc, [&] { zoom_about(canvas_center, 1.25f); });
-        m.item("Zoom Out", "-", has_doc, [&] { zoom_about(canvas_center, 0.8f); });
-        m.item("Fit to Window", "Ctrl+0", has_doc, [&] { fit_requested = true; });
-        m.item("Actual Size", "Ctrl+Alt+0", has_doc, [&] { zoom = 1.0f; pan_x = pan_y = 0.0f; });
-        m.item("Zoom to Selection", nullptr, has_doc && doc->has_selection(), [&] { zoom_to_selection(); });
+        m.item("Zoom In", "+", has_doc, [=, this] { zoom_about(canvas_center, 1.25f); });
+        m.item("Zoom Out", "-", has_doc, [=, this] { zoom_about(canvas_center, 0.8f); });
+        m.item("Fit to Window", "Ctrl+0", has_doc, [=, this] { fit_requested = true; });
+        m.item("Actual Size", "Ctrl+Alt+0", has_doc, [=, this] { zoom = 1.0f; pan_x = pan_y = 0.0f; });
+        m.item("Zoom to Selection", nullptr, has_doc && doc->has_selection(), [=, this] { zoom_to_selection(); });
         m.separator();
         m.toggle("Rulers", nullptr, &show_rulers);
         m.toggle("Grid", nullptr, &show_grid);
@@ -184,11 +184,11 @@ void App::draw_menu(MenuBuilder& m) {
         m.toggle("Mask Overlay", nullptr, &show_mask_overlay);
         m.toggle("Snap to Guides", nullptr, &snap_to_guides);
         m.toggle("Snap to Grid", nullptr, &snap_to_grid);
-        m.item("Clear Guides", nullptr, !guides_h().empty() || !guides_v().empty(), [&] { guides_h().clear(); guides_v().clear(); });
+        m.item("Clear Guides", nullptr, !guides_h().empty() || !guides_v().empty(), [=, this] { guides_h().clear(); guides_v().clear(); });
         m.toggle("Assistants", nullptr, &show_assistants);
         m.toggle("Snap to Assistants", nullptr, &assistant_snap);
-        m.item("Clear Assistants", nullptr, !assistants().empty(), [&] { assistants().clear(); });
-        m.imgui_only([&] {
+        m.item("Clear Assistants", nullptr, !assistants().empty(), [=, this] { assistants().clear(); });
+        m.imgui_only([=, this] {
             ImGui::SetNextItemWidth(100);
             ImGui::InputInt("Grid spacing", &grid_spacing);
             grid_spacing = std::clamp(grid_spacing, 1, 1000);
@@ -198,271 +198,271 @@ void App::draw_menu(MenuBuilder& m) {
         m.end_menu();
     }
     if (m.begin_menu("Image")) {
-        m.item("Flip", nullptr, has_doc, [&] { run(std::make_unique<FlipCommand>()); });
-        m.item("Mirror", nullptr, has_doc, [&] { run(std::make_unique<MirrorCommand>()); });
+        m.item("Flip", nullptr, has_doc, [=, this] { run(std::make_unique<FlipCommand>()); });
+        m.item("Mirror", nullptr, has_doc, [=, this] { run(std::make_unique<MirrorCommand>()); });
         if (m.begin_menu("Rotate", has_doc)) {
-            m.item("Rotate Clockwise 90", nullptr, true, [&] { rotate(90.0f); });
-            m.item("Rotate Counter-clockwise 90", nullptr, true, [&] { rotate(-90.0f); });
-            m.item("Rotate 180", nullptr, true, [&] { rotate(180.0f); });
-            m.item("Free Rotate...", nullptr, true, [&] { show_rotate_dialog = true; });
+            m.item("Rotate Clockwise 90", nullptr, true, [=, this] { rotate(90.0f); });
+            m.item("Rotate Counter-clockwise 90", nullptr, true, [=, this] { rotate(-90.0f); });
+            m.item("Rotate 180", nullptr, true, [=, this] { rotate(180.0f); });
+            m.item("Free Rotate...", nullptr, true, [=, this] { show_rotate_dialog = true; });
             m.end_menu();
         }
         m.separator();
-        m.item("Crop to Selection", "Ctrl+Shift+R", has_doc && doc->has_selection(), [&] { crop_to_selection(); });
-        m.item("Resize...", nullptr, has_doc, [&] { open_resize_dialog(); });
-        m.item("Canvas Size...", nullptr, has_doc, [&] { open_canvas_dialog(); });
+        m.item("Crop to Selection", "Ctrl+Shift+R", has_doc && doc->has_selection(), [=, this] { crop_to_selection(); });
+        m.item("Resize...", nullptr, has_doc, [=, this] { open_resize_dialog(); });
+        m.item("Canvas Size...", nullptr, has_doc, [=, this] { open_canvas_dialog(); });
         m.separator();
-        m.item("Add Borders...", nullptr, has_doc, [&] { show_borders_dialog = true; });
-        m.item("Picture Frame...", nullptr, has_doc, [&] { show_frame_dialog = true; });
+        m.item("Add Borders...", nullptr, has_doc, [=, this] { show_borders_dialog = true; });
+        m.item("Picture Frame...", nullptr, has_doc, [=, this] { show_frame_dialog = true; });
         m.separator();
-        m.item("Grayscale", nullptr, has_layer, [&] { run(std::make_unique<AdjustCommand>(layer, "Grayscale", raster::grayscale, raster16::grayscale)); });
+        m.item("Grayscale", nullptr, has_layer, [=, this] { run(std::make_unique<AdjustCommand>(layer, "Grayscale", raster::grayscale, raster16::grayscale)); });
         if (m.begin_menu("Decrease Color Depth", has_layer)) {
-            m.item("2 Colors...", nullptr, true, [&] { depth_colors = 2; show_depth_dialog = true; });
-            m.item("16 Colors...", nullptr, true, [&] { depth_colors = 16; show_depth_dialog = true; });
-            m.item("256 Colors...", nullptr, true, [&] { depth_colors = 256; show_depth_dialog = true; });
-            m.item("32K Colors", nullptr, true, [&] { image_decrease_depth(32, false); });
-            m.item("64K Colors", nullptr, true, [&] { image_decrease_depth(64, false); });
-            m.item("8 Bits per Channel", nullptr, doc->bit_depth() == 16, [&] { run(std::make_unique<StateEditCommand>("Decrease to 8 Bits per Channel", [](Document& d) { d.set_bit_depth(8); })); });
+            m.item("2 Colors...", nullptr, true, [=, this] { depth_colors = 2; show_depth_dialog = true; });
+            m.item("16 Colors...", nullptr, true, [=, this] { depth_colors = 16; show_depth_dialog = true; });
+            m.item("256 Colors...", nullptr, true, [=, this] { depth_colors = 256; show_depth_dialog = true; });
+            m.item("32K Colors", nullptr, true, [=, this] { image_decrease_depth(32, false); });
+            m.item("64K Colors", nullptr, true, [=, this] { image_decrease_depth(64, false); });
+            m.item("8 Bits per Channel", nullptr, doc->bit_depth() == 16, [=, this] { run(std::make_unique<StateEditCommand>("Decrease to 8 Bits per Channel", [](Document& d) { d.set_bit_depth(8); })); });
             m.end_menu();
         }
         if (m.begin_menu("Increase Color Depth", has_doc)) {
             m.text("Images are 16 million colors; 16 bits per channel is optional.");
-            m.item("16 Bits per Channel", nullptr, doc->bit_depth() == 8, [&] { run(std::make_unique<StateEditCommand>("Increase to 16 Bits per Channel", [](Document& d) { d.set_bit_depth(16); })); });
+            m.item("16 Bits per Channel", nullptr, doc->bit_depth() == 8, [=, this] { run(std::make_unique<StateEditCommand>("Increase to 16 Bits per Channel", [](Document& d) { d.set_bit_depth(16); })); });
             m.end_menu();
         }
         if (m.begin_menu("Palette", has_layer)) {
-            m.item("Load Palette...", nullptr, true, [&] { request_load_palette(); });
-            m.item("Save Palette...", nullptr, true, [&] { request_save_palette(); });
+            m.item("Load Palette...", nullptr, true, [=, this] { request_load_palette(); });
+            m.item("Save Palette...", nullptr, true, [=, this] { request_save_palette(); });
             m.end_menu();
         }
         if (m.begin_menu("Split Channel", has_doc)) {
-            m.item("Split to RGB", nullptr, true, [&] { image_split_channels(0); });
-            m.item("Split to HSL", nullptr, true, [&] { image_split_channels(1); });
-            m.item("Split to CMYK", nullptr, true, [&] { image_split_channels(2); });
+            m.item("Split to RGB", nullptr, true, [=, this] { image_split_channels(0); });
+            m.item("Split to HSL", nullptr, true, [=, this] { image_split_channels(1); });
+            m.item("Split to CMYK", nullptr, true, [=, this] { image_split_channels(2); });
             m.end_menu();
         }
         if (m.begin_menu("Combine Channel", docs.size() >= 3)) {
-            m.item("Combine from RGB", nullptr, true, [&] { combine_mode = 0; show_combine_dialog = true; });
-            m.item("Combine from HSL", nullptr, true, [&] { combine_mode = 1; show_combine_dialog = true; });
-            m.item("Combine from CMYK", nullptr, true, [&] { combine_mode = 2; show_combine_dialog = true; });
+            m.item("Combine from RGB", nullptr, true, [=, this] { combine_mode = 0; show_combine_dialog = true; });
+            m.item("Combine from HSL", nullptr, true, [=, this] { combine_mode = 1; show_combine_dialog = true; });
+            m.item("Combine from CMYK", nullptr, true, [=, this] { combine_mode = 2; show_combine_dialog = true; });
             m.end_menu();
         }
-        m.item("Arithmetic...", nullptr, docs.size() >= 2, [&] { show_arith_dialog = true; });
+        m.item("Arithmetic...", nullptr, docs.size() >= 2, [=, this] { show_arith_dialog = true; });
         m.separator();
         if (m.begin_menu("Color Management", has_doc)) {
             const icc::Profile prof = document_profile();
             const std::string profile_text = std::string("Profile: ") + (doc->icc().empty() ? "(untagged, treated as sRGB)" : prof.description.empty() ? "(unnamed)" : prof.description.c_str());
             m.text(profile_text.c_str());
-            m.item("Color Managed Display", nullptr, true, [&] {
+            m.item("Color Managed Display", nullptr, true, [=, this] {
                 color_managed_display = !color_managed_display;
                 config.color_managed_display = color_managed_display;
                 canvas_tex_revision = ~0ull;
             }, color_managed_display);
             m.separator();
             if (m.begin_menu("Assign Profile")) {
-                m.item("sRGB", nullptr, true, [&] { assign_profile(icc::encode(icc::srgb(), "sRGB IEC61966-2.1"), "Assign Profile (sRGB)"); });
-                m.item("Adobe RGB (1998)", nullptr, true, [&] { assign_profile(icc::encode(icc::adobe_rgb(), "Adobe RGB (1998)"), "Assign Profile (Adobe RGB)"); });
-                m.item("ProPhoto RGB", nullptr, true, [&] { assign_profile(icc::encode(icc::prophoto_rgb(), "ProPhoto RGB"), "Assign Profile (ProPhoto RGB)"); });
-                m.item("From File...", nullptr, true, [&] { request_load_profile(); });
+                m.item("sRGB", nullptr, true, [=, this] { assign_profile(icc::encode(icc::srgb(), "sRGB IEC61966-2.1"), "Assign Profile (sRGB)"); });
+                m.item("Adobe RGB (1998)", nullptr, true, [=, this] { assign_profile(icc::encode(icc::adobe_rgb(), "Adobe RGB (1998)"), "Assign Profile (Adobe RGB)"); });
+                m.item("ProPhoto RGB", nullptr, true, [=, this] { assign_profile(icc::encode(icc::prophoto_rgb(), "ProPhoto RGB"), "Assign Profile (ProPhoto RGB)"); });
+                m.item("From File...", nullptr, true, [=, this] { request_load_profile(); });
                 m.end_menu();
             }
             if (m.begin_menu("Convert to Profile")) {
-                m.item("sRGB", nullptr, true, [&] { convert_to_profile(icc::srgb(), icc::encode(icc::srgb(), "sRGB IEC61966-2.1"), "Convert to sRGB"); });
-                m.item("Adobe RGB (1998)", nullptr, true, [&] { convert_to_profile(icc::adobe_rgb(), icc::encode(icc::adobe_rgb(), "Adobe RGB (1998)"), "Convert to Adobe RGB"); });
-                m.item("ProPhoto RGB", nullptr, true, [&] { convert_to_profile(icc::prophoto_rgb(), icc::encode(icc::prophoto_rgb(), "ProPhoto RGB"), "Convert to ProPhoto RGB"); });
+                m.item("sRGB", nullptr, true, [=, this] { convert_to_profile(icc::srgb(), icc::encode(icc::srgb(), "sRGB IEC61966-2.1"), "Convert to sRGB"); });
+                m.item("Adobe RGB (1998)", nullptr, true, [=, this] { convert_to_profile(icc::adobe_rgb(), icc::encode(icc::adobe_rgb(), "Adobe RGB (1998)"), "Convert to Adobe RGB"); });
+                m.item("ProPhoto RGB", nullptr, true, [=, this] { convert_to_profile(icc::prophoto_rgb(), icc::encode(icc::prophoto_rgb(), "ProPhoto RGB"), "Convert to ProPhoto RGB"); });
                 m.end_menu();
             }
-            m.item("Remove Profile", nullptr, !doc->icc().empty(), [&] { assign_profile({}, "Remove Profile"); });
+            m.item("Remove Profile", nullptr, !doc->icc().empty(), [=, this] { assign_profile({}, "Remove Profile"); });
             m.end_menu();
         }
-        m.item("Count Colors Used", nullptr, has_doc, [&] { image_count_colors(); });
-        m.item("Image Information...", "Shift+I", has_doc, [&] { show_info_dialog = true; });
+        m.item("Count Colors Used", nullptr, has_doc, [=, this] { image_count_colors(); });
+        m.item("Image Information...", "Shift+I", has_doc, [=, this] { show_info_dialog = true; });
         m.end_menu();
     }
     if (m.begin_menu("Adjust")) {
-        m.item("Color to Alpha...", nullptr, has_layer, [&] { open_adjust = Adj::ColorToAlpha; });
+        m.item("Color to Alpha...", nullptr, has_layer, [=, this] { open_adjust = Adj::ColorToAlpha; });
         m.separator();
         if (m.begin_menu("Brightness and Contrast", has_layer)) {
-            m.item("Brightness/Contrast...", nullptr, true, [&] { open_adjust = Adj::BrightnessContrast; });
-            m.item("Curves...", nullptr, true, [&] { open_adjust = Adj::Curves; });
-            m.item("Gamma Correction...", nullptr, true, [&] { open_adjust = Adj::Gamma; });
-            m.item("Histogram Equalize", nullptr, true, [&] { run(std::make_unique<AdjustCommand>(layer, "Histogram Equalize", adjust::histogram_equalize)); });
-            m.item("Histogram Stretch", nullptr, true, [&] { run(std::make_unique<AdjustCommand>(layer, "Histogram Stretch", adjust::histogram_stretch)); });
-            m.item("Levels...", nullptr, true, [&] { open_adjust = Adj::Levels; });
-            m.item("Threshold...", nullptr, true, [&] { open_adjust = Adj::Threshold; });
+            m.item("Brightness/Contrast...", nullptr, true, [=, this] { open_adjust = Adj::BrightnessContrast; });
+            m.item("Curves...", nullptr, true, [=, this] { open_adjust = Adj::Curves; });
+            m.item("Gamma Correction...", nullptr, true, [=, this] { open_adjust = Adj::Gamma; });
+            m.item("Histogram Equalize", nullptr, true, [=, this] { run(std::make_unique<AdjustCommand>(layer, "Histogram Equalize", adjust::histogram_equalize)); });
+            m.item("Histogram Stretch", nullptr, true, [=, this] { run(std::make_unique<AdjustCommand>(layer, "Histogram Stretch", adjust::histogram_stretch)); });
+            m.item("Levels...", nullptr, true, [=, this] { open_adjust = Adj::Levels; });
+            m.item("Threshold...", nullptr, true, [=, this] { open_adjust = Adj::Threshold; });
             m.end_menu();
         }
         if (m.begin_menu("Color Balance", has_layer)) {
-            m.item("Channel Mixer...", nullptr, true, [&] { open_adjust = Adj::ChannelMixer; });
-            m.item("Color Balance...", nullptr, true, [&] { open_adjust = Adj::ColorBalance; });
+            m.item("Channel Mixer...", nullptr, true, [=, this] { open_adjust = Adj::ChannelMixer; });
+            m.item("Color Balance...", nullptr, true, [=, this] { open_adjust = Adj::ColorBalance; });
             m.end_menu();
         }
         if (m.begin_menu("Hue and Saturation", has_layer)) {
-            m.item("Colorize...", nullptr, true, [&] { open_adjust = Adj::Colorize; });
-            m.item("Hue Map...", nullptr, true, [&] { open_adjust = Adj::HueMap; });
-            m.item("Hue/Saturation/Lightness...", nullptr, true, [&] { open_adjust = Adj::HSL; });
+            m.item("Colorize...", nullptr, true, [=, this] { open_adjust = Adj::Colorize; });
+            m.item("Hue Map...", nullptr, true, [=, this] { open_adjust = Adj::HueMap; });
+            m.item("Hue/Saturation/Lightness...", nullptr, true, [=, this] { open_adjust = Adj::HSL; });
             m.end_menu();
         }
         if (m.begin_menu("Add/Remove Noise", has_layer)) {
-            m.item("Add Noise...", nullptr, true, [&] { open_adjust = Adj::AddNoise; });
-            m.item("Median Filter...", nullptr, true, [&] { open_adjust = Adj::Median; });
-            m.item("Despeckle", nullptr, true, [&] { run(std::make_unique<AdjustCommand>(layer, "Despeckle", [](Image& i) { effects::median(i, 1); })); });
-            m.item("Edge Preserving Smooth...", nullptr, true, [&] { open_adjust = Adj::EdgeSmooth; });
-            m.item("Salt and Pepper Filter...", nullptr, true, [&] { open_adjust = Adj::SaltPepper; });
-            m.item("JPEG Artifact Removal...", nullptr, true, [&] { open_adjust = Adj::JpegArtifacts; });
-            m.item("Digital Camera Noise Removal...", nullptr, true, [&] { open_adjust = Adj::NoiseRemoval; });
-            m.item("Erode", nullptr, true, [&] { run(std::make_unique<AdjustCommand>(layer, "Erode", effects::erode)); });
-            m.item("Dilate", nullptr, true, [&] { run(std::make_unique<AdjustCommand>(layer, "Dilate", effects::dilate)); });
+            m.item("Add Noise...", nullptr, true, [=, this] { open_adjust = Adj::AddNoise; });
+            m.item("Median Filter...", nullptr, true, [=, this] { open_adjust = Adj::Median; });
+            m.item("Despeckle", nullptr, true, [=, this] { run(std::make_unique<AdjustCommand>(layer, "Despeckle", [](Image& i) { effects::median(i, 1); })); });
+            m.item("Edge Preserving Smooth...", nullptr, true, [=, this] { open_adjust = Adj::EdgeSmooth; });
+            m.item("Salt and Pepper Filter...", nullptr, true, [=, this] { open_adjust = Adj::SaltPepper; });
+            m.item("JPEG Artifact Removal...", nullptr, true, [=, this] { open_adjust = Adj::JpegArtifacts; });
+            m.item("Digital Camera Noise Removal...", nullptr, true, [=, this] { open_adjust = Adj::NoiseRemoval; });
+            m.item("Erode", nullptr, true, [=, this] { run(std::make_unique<AdjustCommand>(layer, "Erode", effects::erode)); });
+            m.item("Dilate", nullptr, true, [=, this] { run(std::make_unique<AdjustCommand>(layer, "Dilate", effects::dilate)); });
             m.end_menu();
         }
         if (m.begin_menu("Blur", has_layer)) {
-            m.item("Average...", nullptr, true, [&] { open_adjust = Adj::Average; });
-            m.item("Blur More", nullptr, true, [&] { run(std::make_unique<AdjustCommand>(layer, "Blur More", effects::blur_more)); });
-            m.item("Gaussian Blur...", nullptr, true, [&] { open_adjust = Adj::Gaussian; });
-            m.item("Motion Blur...", nullptr, true, [&] { open_adjust = Adj::MotionBlur; });
+            m.item("Average...", nullptr, true, [=, this] { open_adjust = Adj::Average; });
+            m.item("Blur More", nullptr, true, [=, this] { run(std::make_unique<AdjustCommand>(layer, "Blur More", effects::blur_more)); });
+            m.item("Gaussian Blur...", nullptr, true, [=, this] { open_adjust = Adj::Gaussian; });
+            m.item("Motion Blur...", nullptr, true, [=, this] { open_adjust = Adj::MotionBlur; });
             m.end_menu();
         }
         if (m.begin_menu("Sharpness", has_layer)) {
-            m.item("Sharpen", nullptr, true, [&] { run(std::make_unique<AdjustCommand>(layer, "Sharpen", effects::sharpen)); });
-            m.item("Sharpen More", nullptr, true, [&] { run(std::make_unique<AdjustCommand>(layer, "Sharpen More", effects::sharpen_more)); });
-            m.item("Unsharp Mask...", nullptr, true, [&] { open_adjust = Adj::UnsharpMask; });
+            m.item("Sharpen", nullptr, true, [=, this] { run(std::make_unique<AdjustCommand>(layer, "Sharpen", effects::sharpen)); });
+            m.item("Sharpen More", nullptr, true, [=, this] { run(std::make_unique<AdjustCommand>(layer, "Sharpen More", effects::sharpen_more)); });
+            m.item("Unsharp Mask...", nullptr, true, [=, this] { open_adjust = Adj::UnsharpMask; });
             m.end_menu();
         }
         if (m.begin_menu("Softness", has_layer)) {
-            m.item("Soften", nullptr, true, [&] { run(std::make_unique<AdjustCommand>(layer, "Soften", effects::soften)); });
-            m.item("Soften More", nullptr, true, [&] { run(std::make_unique<AdjustCommand>(layer, "Soften More", effects::soften_more)); });
+            m.item("Soften", nullptr, true, [=, this] { run(std::make_unique<AdjustCommand>(layer, "Soften", effects::soften)); });
+            m.item("Soften More", nullptr, true, [=, this] { run(std::make_unique<AdjustCommand>(layer, "Soften More", effects::soften_more)); });
             m.end_menu();
         }
         if (m.begin_menu("Photo Fix", has_layer)) {
-            m.item("One Step Photo Fix", nullptr, true, [&] { run(std::make_unique<AdjustCommand>(layer, "One Step Photo Fix", photo::one_step_photo_fix)); });
-            m.item("Automatic Color Balance...", nullptr, true, [&] { open_adjust = Adj::AutoColor; });
-            m.item("Automatic Contrast Enhancement...", nullptr, true, [&] { open_adjust = Adj::AutoContrast; });
-            m.item("Automatic Saturation Enhancement...", nullptr, true, [&] { open_adjust = Adj::AutoSaturation; });
-            m.item("Clarify...", nullptr, true, [&] { open_adjust = Adj::Clarify; });
-            m.item("Fade Correction...", nullptr, true, [&] { open_adjust = Adj::FadeCorrection; });
+            m.item("One Step Photo Fix", nullptr, true, [=, this] { run(std::make_unique<AdjustCommand>(layer, "One Step Photo Fix", photo::one_step_photo_fix)); });
+            m.item("Automatic Color Balance...", nullptr, true, [=, this] { open_adjust = Adj::AutoColor; });
+            m.item("Automatic Contrast Enhancement...", nullptr, true, [=, this] { open_adjust = Adj::AutoContrast; });
+            m.item("Automatic Saturation Enhancement...", nullptr, true, [=, this] { open_adjust = Adj::AutoSaturation; });
+            m.item("Clarify...", nullptr, true, [=, this] { open_adjust = Adj::Clarify; });
+            m.item("Fade Correction...", nullptr, true, [=, this] { open_adjust = Adj::FadeCorrection; });
             m.text("Red-eye: use the Red-eye Removal tool.");
             m.end_menu();
         }
         if (m.begin_menu("Photo Fix (more)", has_layer)) {
-            m.item("Black and White Points...", nullptr, true, [&] { open_adjust = Adj::BlackWhitePoints; });
-            m.item("Histogram Adjustment...", nullptr, true, [&] { open_adjust = Adj::HistogramAdjust; });
-            m.item("Fill Flash...", nullptr, true, [&] { open_adjust = Adj::FillFlash; });
-            m.item("Backlighting...", nullptr, true, [&] { open_adjust = Adj::Backlighting; });
-            m.item("Chromatic Aberration Removal...", nullptr, true, [&] { open_adjust = Adj::ChromaticAberration; });
+            m.item("Black and White Points...", nullptr, true, [=, this] { open_adjust = Adj::BlackWhitePoints; });
+            m.item("Histogram Adjustment...", nullptr, true, [=, this] { open_adjust = Adj::HistogramAdjust; });
+            m.item("Fill Flash...", nullptr, true, [=, this] { open_adjust = Adj::FillFlash; });
+            m.item("Backlighting...", nullptr, true, [=, this] { open_adjust = Adj::Backlighting; });
+            m.item("Chromatic Aberration Removal...", nullptr, true, [=, this] { open_adjust = Adj::ChromaticAberration; });
             m.end_menu();
         }
         m.separator();
-        m.item("Negative Image", "Ctrl+I", has_layer, [&] { run(std::make_unique<InvertCommand>(layer)); });
+        m.item("Negative Image", "Ctrl+I", has_layer, [=, this] { run(std::make_unique<InvertCommand>(layer)); });
         m.end_menu();
     }
     if (m.begin_menu("Effects")) {
-        m.item("Effect Browser...", nullptr, has_layer, [&] { reset_effect_browser(); show_effect_browser = true; });
+        m.item("Effect Browser...", nullptr, has_layer, [=, this] { reset_effect_browser(); show_effect_browser = true; });
         m.separator();
         if (m.begin_menu("3D Effects", has_layer)) {
-            m.item("Buttonize...", nullptr, true, [&] { open_adjust = Adj::Buttonize; });
-            m.item("Cutout...", nullptr, true, [&] { open_adjust = Adj::Cutout; });
-            m.item("Drop Shadow...", nullptr, true, [&] { open_adjust = Adj::DropShadow; });
-            m.item("Inner Bevel...", nullptr, true, [&] { open_adjust = Adj::InnerBevel; });
-            m.item("Outer Bevel...", nullptr, true, [&] { open_adjust = Adj::OuterBevel; });
+            m.item("Buttonize...", nullptr, true, [=, this] { open_adjust = Adj::Buttonize; });
+            m.item("Cutout...", nullptr, true, [=, this] { open_adjust = Adj::Cutout; });
+            m.item("Drop Shadow...", nullptr, true, [=, this] { open_adjust = Adj::DropShadow; });
+            m.item("Inner Bevel...", nullptr, true, [=, this] { open_adjust = Adj::InnerBevel; });
+            m.item("Outer Bevel...", nullptr, true, [=, this] { open_adjust = Adj::OuterBevel; });
             m.end_menu();
         }
         if (m.begin_menu("Distortion Effects", has_layer)) {
-            m.item("Lens Distortion...", nullptr, true, [&] { open_adjust = Adj::Lens; });
-            m.item("Pinch / Punch...", nullptr, true, [&] { open_adjust = Adj::Pinch; });
-            m.item("Ripple...", nullptr, true, [&] { open_adjust = Adj::Ripple; });
-            m.item("Spherize...", nullptr, true, [&] { open_adjust = Adj::Spherize; });
-            m.item("Twirl...", nullptr, true, [&] { open_adjust = Adj::Twirl; });
-            m.item("Wave...", nullptr, true, [&] { open_adjust = Adj::Wave; });
+            m.item("Lens Distortion...", nullptr, true, [=, this] { open_adjust = Adj::Lens; });
+            m.item("Pinch / Punch...", nullptr, true, [=, this] { open_adjust = Adj::Pinch; });
+            m.item("Ripple...", nullptr, true, [=, this] { open_adjust = Adj::Ripple; });
+            m.item("Spherize...", nullptr, true, [=, this] { open_adjust = Adj::Spherize; });
+            m.item("Twirl...", nullptr, true, [=, this] { open_adjust = Adj::Twirl; });
+            m.item("Wave...", nullptr, true, [=, this] { open_adjust = Adj::Wave; });
             m.separator();
-            m.item("Curlicues...", nullptr, true, [&] { open_adjust = Adj::Curlicues; });
-            m.item("Displacement Map...", nullptr, true, [&] { open_adjust = Adj::DisplacementMap; });
-            m.item("Polar Coordinates...", nullptr, true, [&] { open_adjust = Adj::PolarCoordinates; });
-            m.item("Spiky Halo...", nullptr, true, [&] { open_adjust = Adj::SpikyHalo; });
-            m.item("Warp...", nullptr, true, [&] { open_adjust = Adj::Warp; });
-            m.item("Wind...", nullptr, true, [&] { open_adjust = Adj::Wind; });
+            m.item("Curlicues...", nullptr, true, [=, this] { open_adjust = Adj::Curlicues; });
+            m.item("Displacement Map...", nullptr, true, [=, this] { open_adjust = Adj::DisplacementMap; });
+            m.item("Polar Coordinates...", nullptr, true, [=, this] { open_adjust = Adj::PolarCoordinates; });
+            m.item("Spiky Halo...", nullptr, true, [=, this] { open_adjust = Adj::SpikyHalo; });
+            m.item("Warp...", nullptr, true, [=, this] { open_adjust = Adj::Warp; });
+            m.item("Wind...", nullptr, true, [=, this] { open_adjust = Adj::Wind; });
             m.end_menu();
         }
         if (m.begin_menu("Geometric Effects", has_layer)) {
-            m.item("Circle...", nullptr, true, [&] { open_adjust = Adj::Circle; });
-            m.item("Cylinder...", nullptr, true, [&] { open_adjust = Adj::Cylinder; });
-            m.item("Pentagon...", nullptr, true, [&] { open_adjust = Adj::Pentagon; });
-            m.item("Perspective...", nullptr, true, [&] { open_adjust = Adj::Perspective; });
-            m.item("Skew...", nullptr, true, [&] { open_adjust = Adj::Skew; });
-            m.item("Spherize...", nullptr, true, [&] { open_adjust = Adj::Spherize; });
+            m.item("Circle...", nullptr, true, [=, this] { open_adjust = Adj::Circle; });
+            m.item("Cylinder...", nullptr, true, [=, this] { open_adjust = Adj::Cylinder; });
+            m.item("Pentagon...", nullptr, true, [=, this] { open_adjust = Adj::Pentagon; });
+            m.item("Perspective...", nullptr, true, [=, this] { open_adjust = Adj::Perspective; });
+            m.item("Skew...", nullptr, true, [=, this] { open_adjust = Adj::Skew; });
+            m.item("Spherize...", nullptr, true, [=, this] { open_adjust = Adj::Spherize; });
             m.end_menu();
         }
         if (m.begin_menu("Image Effects", has_layer)) {
-            m.item("Offset...", nullptr, true, [&] { open_adjust = Adj::Offset; });
-            m.item("Page Curl...", nullptr, true, [&] { open_adjust = Adj::PageCurl; });
-            m.item("Seamless Tiling...", nullptr, true, [&] { open_adjust = Adj::SeamlessTiling; });
+            m.item("Offset...", nullptr, true, [=, this] { open_adjust = Adj::Offset; });
+            m.item("Page Curl...", nullptr, true, [=, this] { open_adjust = Adj::PageCurl; });
+            m.item("Seamless Tiling...", nullptr, true, [=, this] { open_adjust = Adj::SeamlessTiling; });
             m.end_menu();
         }
         if (m.begin_menu("Art Media Effects", has_layer)) {
-            m.item("Black Pencil...", nullptr, true, [&] { open_adjust = Adj::BlackPencil; });
-            m.item("Brush Strokes...", nullptr, true, [&] { open_adjust = Adj::BrushStrokes; });
-            m.item("Charcoal...", nullptr, true, [&] { open_adjust = Adj::Charcoal; });
-            m.item("Colored Chalk...", nullptr, true, [&] { open_adjust = Adj::ColoredChalk; });
-            m.item("Colored Pencil...", nullptr, true, [&] { open_adjust = Adj::ColoredPencil; });
-            m.item("Pencil...", nullptr, true, [&] { open_adjust = Adj::Pencil; });
+            m.item("Black Pencil...", nullptr, true, [=, this] { open_adjust = Adj::BlackPencil; });
+            m.item("Brush Strokes...", nullptr, true, [=, this] { open_adjust = Adj::BrushStrokes; });
+            m.item("Charcoal...", nullptr, true, [=, this] { open_adjust = Adj::Charcoal; });
+            m.item("Colored Chalk...", nullptr, true, [=, this] { open_adjust = Adj::ColoredChalk; });
+            m.item("Colored Pencil...", nullptr, true, [=, this] { open_adjust = Adj::ColoredPencil; });
+            m.item("Pencil...", nullptr, true, [=, this] { open_adjust = Adj::Pencil; });
             m.end_menu();
         }
         if (m.begin_menu("Artistic Effects", has_layer)) {
-            m.item("Aged Newspaper...", nullptr, true, [&] { open_adjust = Adj::AgedNewspaper; });
-            m.item("Balls and Bubbles...", nullptr, true, [&] { open_adjust = Adj::BallsBubbles; });
-            m.item("Chrome...", nullptr, true, [&] { open_adjust = Adj::Chrome; });
-            m.item("Colored Edges...", nullptr, true, [&] { open_adjust = Adj::ColoredEdges; });
-            m.item("Colored Foil...", nullptr, true, [&] { open_adjust = Adj::ColoredFoil; });
-            m.item("Contours...", nullptr, true, [&] { open_adjust = Adj::Contours; });
-            m.item("Enamel...", nullptr, true, [&] { open_adjust = Adj::Enamel; });
-            m.item("Glowing Edges...", nullptr, true, [&] { open_adjust = Adj::GlowingEdges; });
-            m.item("Halftone...", nullptr, true, [&] { open_adjust = Adj::Halftone; });
-            m.item("Hot Wax Coating...", nullptr, true, [&] { open_adjust = Adj::HotWax; });
-            m.item("Magnifying Lens...", nullptr, true, [&] { open_adjust = Adj::MagnifyingLens; });
-            m.item("Neon Glow...", nullptr, true, [&] { open_adjust = Adj::NeonGlow; });
-            m.item("Posterize...", nullptr, true, [&] { open_adjust = Adj::Posterize; });
-            m.item("Sepia Toning...", nullptr, true, [&] { open_adjust = Adj::Sepia; });
-            m.item("Solarize...", nullptr, true, [&] { open_adjust = Adj::Solarize; });
-            m.item("Topography...", nullptr, true, [&] { open_adjust = Adj::Topography; });
+            m.item("Aged Newspaper...", nullptr, true, [=, this] { open_adjust = Adj::AgedNewspaper; });
+            m.item("Balls and Bubbles...", nullptr, true, [=, this] { open_adjust = Adj::BallsBubbles; });
+            m.item("Chrome...", nullptr, true, [=, this] { open_adjust = Adj::Chrome; });
+            m.item("Colored Edges...", nullptr, true, [=, this] { open_adjust = Adj::ColoredEdges; });
+            m.item("Colored Foil...", nullptr, true, [=, this] { open_adjust = Adj::ColoredFoil; });
+            m.item("Contours...", nullptr, true, [=, this] { open_adjust = Adj::Contours; });
+            m.item("Enamel...", nullptr, true, [=, this] { open_adjust = Adj::Enamel; });
+            m.item("Glowing Edges...", nullptr, true, [=, this] { open_adjust = Adj::GlowingEdges; });
+            m.item("Halftone...", nullptr, true, [=, this] { open_adjust = Adj::Halftone; });
+            m.item("Hot Wax Coating...", nullptr, true, [=, this] { open_adjust = Adj::HotWax; });
+            m.item("Magnifying Lens...", nullptr, true, [=, this] { open_adjust = Adj::MagnifyingLens; });
+            m.item("Neon Glow...", nullptr, true, [=, this] { open_adjust = Adj::NeonGlow; });
+            m.item("Posterize...", nullptr, true, [=, this] { open_adjust = Adj::Posterize; });
+            m.item("Sepia Toning...", nullptr, true, [=, this] { open_adjust = Adj::Sepia; });
+            m.item("Solarize...", nullptr, true, [=, this] { open_adjust = Adj::Solarize; });
+            m.item("Topography...", nullptr, true, [=, this] { open_adjust = Adj::Topography; });
             m.end_menu();
         }
         if (m.begin_menu("Edge Effects", has_layer)) {
-            m.item("Enhance", nullptr, true, [&] { run(std::make_unique<AdjustCommand>(layer, "Enhance Edges", effects::enhance_edges)); });
-            m.item("Enhance More", nullptr, true, [&] { run(std::make_unique<AdjustCommand>(layer, "Enhance Edges More", effects::enhance_edges_more)); });
-            m.item("Find All", nullptr, true, [&] { run(std::make_unique<AdjustCommand>(layer, "Find Edges", effects::find_edges)); });
+            m.item("Enhance", nullptr, true, [=, this] { run(std::make_unique<AdjustCommand>(layer, "Enhance Edges", effects::enhance_edges)); });
+            m.item("Enhance More", nullptr, true, [=, this] { run(std::make_unique<AdjustCommand>(layer, "Enhance Edges More", effects::enhance_edges_more)); });
+            m.item("Find All", nullptr, true, [=, this] { run(std::make_unique<AdjustCommand>(layer, "Find Edges", effects::find_edges)); });
             m.end_menu();
         }
         if (m.begin_menu("Illumination Effects", has_layer)) {
-            m.item("Lights...", nullptr, true, [&] { open_adjust = Adj::Lights; });
-            m.item("Sunburst...", nullptr, true, [&] { open_adjust = Adj::Sunburst; });
+            m.item("Lights...", nullptr, true, [=, this] { open_adjust = Adj::Lights; });
+            m.item("Sunburst...", nullptr, true, [=, this] { open_adjust = Adj::Sunburst; });
             m.end_menu();
         }
         if (m.begin_menu("Reflection Effects", has_layer)) {
-            m.item("Feedback...", nullptr, true, [&] { open_adjust = Adj::Feedback; });
-            m.item("Kaleidoscope...", nullptr, true, [&] { open_adjust = Adj::Kaleidoscope; });
-            m.item("Pattern...", nullptr, true, [&] { open_adjust = Adj::Pattern; });
-            m.item("Rotating Mirror...", nullptr, true, [&] { open_adjust = Adj::RotatingMirror; });
+            m.item("Feedback...", nullptr, true, [=, this] { open_adjust = Adj::Feedback; });
+            m.item("Kaleidoscope...", nullptr, true, [=, this] { open_adjust = Adj::Kaleidoscope; });
+            m.item("Pattern...", nullptr, true, [=, this] { open_adjust = Adj::Pattern; });
+            m.item("Rotating Mirror...", nullptr, true, [=, this] { open_adjust = Adj::RotatingMirror; });
             m.end_menu();
         }
         if (m.begin_menu("Texture Effects", has_layer)) {
-            m.item("Blinds...", nullptr, true, [&] { open_adjust = Adj::Blinds; });
-            m.item("Emboss", nullptr, true, [&] { run(std::make_unique<AdjustCommand>(layer, "Emboss", effects::emboss)); });
-            m.item("Fine Leather...", nullptr, true, [&] { open_adjust = Adj::FineLeather; });
-            m.item("Fur...", nullptr, true, [&] { open_adjust = Adj::Fur; });
-            m.item("Mosaic - Antique...", nullptr, true, [&] { open_adjust = Adj::MosaicAntique; });
-            m.item("Mosaic - Glass...", nullptr, true, [&] { open_adjust = Adj::MosaicGlass; });
-            m.item("Pixelate (Mosaic)...", nullptr, true, [&] { open_adjust = Adj::Mosaic; });
-            m.item("Polished Stone...", nullptr, true, [&] { open_adjust = Adj::PolishedStone; });
-            m.item("Rough Leather...", nullptr, true, [&] { open_adjust = Adj::RoughLeather; });
-            m.item("Sandstone...", nullptr, true, [&] { open_adjust = Adj::Sandstone; });
-            m.item("Sculpture...", nullptr, true, [&] { open_adjust = Adj::Sculpture; });
-            m.item("Soft Plastic...", nullptr, true, [&] { open_adjust = Adj::SoftPlastic; });
-            m.item("Straw Wall...", nullptr, true, [&] { open_adjust = Adj::StrawWall; });
-            m.item("Texture...", nullptr, true, [&] { open_adjust = Adj::Texture; });
-            m.item("Tiles...", nullptr, true, [&] { open_adjust = Adj::Tiles; });
-            m.item("Weave...", nullptr, true, [&] { open_adjust = Adj::Weave; });
+            m.item("Blinds...", nullptr, true, [=, this] { open_adjust = Adj::Blinds; });
+            m.item("Emboss", nullptr, true, [=, this] { run(std::make_unique<AdjustCommand>(layer, "Emboss", effects::emboss)); });
+            m.item("Fine Leather...", nullptr, true, [=, this] { open_adjust = Adj::FineLeather; });
+            m.item("Fur...", nullptr, true, [=, this] { open_adjust = Adj::Fur; });
+            m.item("Mosaic - Antique...", nullptr, true, [=, this] { open_adjust = Adj::MosaicAntique; });
+            m.item("Mosaic - Glass...", nullptr, true, [=, this] { open_adjust = Adj::MosaicGlass; });
+            m.item("Pixelate (Mosaic)...", nullptr, true, [=, this] { open_adjust = Adj::Mosaic; });
+            m.item("Polished Stone...", nullptr, true, [=, this] { open_adjust = Adj::PolishedStone; });
+            m.item("Rough Leather...", nullptr, true, [=, this] { open_adjust = Adj::RoughLeather; });
+            m.item("Sandstone...", nullptr, true, [=, this] { open_adjust = Adj::Sandstone; });
+            m.item("Sculpture...", nullptr, true, [=, this] { open_adjust = Adj::Sculpture; });
+            m.item("Soft Plastic...", nullptr, true, [=, this] { open_adjust = Adj::SoftPlastic; });
+            m.item("Straw Wall...", nullptr, true, [=, this] { open_adjust = Adj::StrawWall; });
+            m.item("Texture...", nullptr, true, [=, this] { open_adjust = Adj::Texture; });
+            m.item("Tiles...", nullptr, true, [=, this] { open_adjust = Adj::Tiles; });
+            m.item("Weave...", nullptr, true, [=, this] { open_adjust = Adj::Weave; });
             m.end_menu();
         }
-        m.item("User Defined Filter...", nullptr, has_layer, [&] { open_adjust = Adj::UserFilter; });
+        m.item("User Defined Filter...", nullptr, has_layer, [=, this] { open_adjust = Adj::UserFilter; });
         m.end_menu();
     }
     draw_selections_menu(m);
@@ -489,34 +489,34 @@ void App::draw_menu(MenuBuilder& m) {
             m.end_menu();
         }
         if (m.begin_menu("Make Same Size", nsel > 1)) {
-            m.item("Height", nullptr, true, [&] { object_same_size(0); });
-            m.item("Width", nullptr, true, [&] { object_same_size(1); });
-            m.item("Both", nullptr, true, [&] { object_same_size(2); });
+            m.item("Height", nullptr, true, [=, this] { object_same_size(0); });
+            m.item("Width", nullptr, true, [=, this] { object_same_size(1); });
+            m.item("Both", nullptr, true, [=, this] { object_same_size(2); });
             m.end_menu();
         }
         if (m.begin_menu("Arrange", nsel > 0)) {
             const int n = static_cast<int>(doc->layer(layer).objects.size()) + 1;
             m.item("Bring to Top", nullptr, true, [this, n] { object_arrange(n); });
-            m.item("Move Up", nullptr, true, [&] { object_arrange(1); });
-            m.item("Move Down", nullptr, true, [&] { object_arrange(-1); });
+            m.item("Move Up", nullptr, true, [=, this] { object_arrange(1); });
+            m.item("Move Down", nullptr, true, [=, this] { object_arrange(-1); });
             m.item("Send to Bottom", nullptr, true, [this, n] { object_arrange(-n); });
             m.end_menu();
         }
         m.separator();
-        m.item("Group", nullptr, nsel > 1, [&] { object_group(); });
-        m.item("Ungroup", nullptr, nsel > 0, [&] { object_ungroup(); });
+        m.item("Group", nullptr, nsel > 1, [=, this] { object_group(); });
+        m.item("Ungroup", nullptr, nsel > 0, [=, this] { object_ungroup(); });
         m.separator();
-        m.item("Edit Text...", nullptr, has_text, [&] { open_text_edit(); });
+        m.item("Edit Text...", nullptr, has_text, [=, this] { open_text_edit(); });
         if (m.begin_menu("Convert Text to Curves", has_text)) {
-            m.item("As Single Shape", nullptr, true, [&] { object_text_to_curves(false); });
-            m.item("As Character Shapes", nullptr, true, [&] { object_text_to_curves(true); });
+            m.item("As Single Shape", nullptr, true, [=, this] { object_text_to_curves(false); });
+            m.item("As Character Shapes", nullptr, true, [=, this] { object_text_to_curves(true); });
             m.end_menu();
         }
-        m.item("Properties...", nullptr, nsel > 0, [&] { open_vector_properties(); });
+        m.item("Properties...", nullptr, nsel > 0, [=, this] { open_vector_properties(); });
         m.separator();
-        m.item("Select All", nullptr, on_vector, [&] { object_select_all(); });
-        m.item("Select None", nullptr, nsel > 0, [&] { object_select_none(); });
-        m.item("Delete", nullptr, nsel > 0, [&] { object_delete(); });
+        m.item("Select All", nullptr, on_vector, [=, this] { object_select_all(); });
+        m.item("Select None", nullptr, nsel > 0, [=, this] { object_select_none(); });
+        m.item("Delete", nullptr, nsel > 0, [=, this] { object_delete(); });
         m.end_menu();
     }
     if (m.begin_menu("Window")) {
@@ -528,22 +528,22 @@ void App::draw_menu(MenuBuilder& m) {
         }
         if (docs.empty()) m.item("(no images open)", nullptr, false, [] {});
         m.separator();
-        m.item("Tabbed Documents", nullptr, true, [&] {
+        m.item("Tabbed Documents", nullptr, true, [=, this] {
             image_windows = !image_windows;
             config.image_windows = image_windows;
             config.save();
             if (image_windows) arrange_request = Arrange::Cascade;
         }, !image_windows);
         const bool can_arrange = image_windows && !docs.empty();
-        m.item("Cascade", nullptr, can_arrange, [&] { arrange_request = Arrange::Cascade; });
-        m.item("Tile Horizontally", nullptr, can_arrange, [&] { arrange_request = Arrange::TileHorizontally; });
-        m.item("Tile Vertically", nullptr, can_arrange, [&] { arrange_request = Arrange::TileVertically; });
+        m.item("Cascade", nullptr, can_arrange, [=, this] { arrange_request = Arrange::Cascade; });
+        m.item("Tile Horizontally", nullptr, can_arrange, [=, this] { arrange_request = Arrange::TileHorizontally; });
+        m.item("Tile Vertically", nullptr, can_arrange, [=, this] { arrange_request = Arrange::TileVertically; });
         m.end_menu();
     }
     if (m.begin_menu("Help")) {
-        m.item("Keyboard Shortcuts...", nullptr, true, [&] { show_shortcuts_dialog = true; });
+        m.item("Keyboard Shortcuts...", nullptr, true, [=, this] { show_shortcuts_dialog = true; });
         m.separator();
-        m.item("About Firn...", nullptr, true, [&] { show_about_dialog = true; });
+        m.item("About Firn...", nullptr, true, [=, this] { show_about_dialog = true; });
         m.end_menu();
     }
 }
