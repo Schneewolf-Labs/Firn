@@ -56,11 +56,16 @@ std::vector<Action> build() {
     std::vector<Action> a;
     auto add = [&](const char* name, const char* summary, std::vector<Action::Param> params,
                    std::function<std::string(App&, const Value&, bool*)> run) {
-        a.push_back(Action{name, summary, std::move(params), std::move(run)});
+        Action entry;
+        entry.name = name;
+        entry.summary = summary;
+        entry.params = std::move(params);
+        entry.run = std::move(run);
+        a.push_back(std::move(entry));
     };
 
     // --- documents ---
-    add("file.new", "Create an image", {{"width", "number", "pixels"}, {"height", "number", "pixels"}, {"color", "string", "#RRGGBB background, or transparent"}},
+    add("file.new", "Create an image", {{"width", "number", "pixels", false, nullptr, "800"}, {"height", "number", "pixels", false, nullptr, "600"}, {"color", "string", "#RRGGBB background, or transparent", false, nullptr, "white"}},
         [](App& app, const Value& p, bool*) {
             app.new_document(std::max(1, num(p, "width", 800)), std::max(1, num(p, "height", 600)));
             const std::string c = str(p, "color");
@@ -77,7 +82,7 @@ std::vector<Action> build() {
             }
             return ok_json();
         });
-    add("file.open", "Open an image file", {{"path", "string", "file to open"}},
+    add("file.open", "Open an image file", {{"path", "string", "file to open", true}},
         [](App& app, const Value& p, bool* ok) {
             const std::string path = str(p, "path");
             if (path.empty()) return fail(ok, "file.open needs a path");
@@ -91,7 +96,7 @@ std::vector<Action> build() {
             if (app.doc_path.empty()) return fail(ok, "this image has no path yet; use file.save_as");
             return app.save_document(app.doc_path) ? ok_json() : fail(ok, app.status);
         });
-    add("file.save_as", "Save the image to a path, format taken from the extension", {{"path", "string", "where to write it"}},
+    add("file.save_as", "Save the image to a path, format taken from the extension", {{"path", "string", "where to write it", true}},
         [](App& app, const Value& p, bool* ok) {
             std::string e;
             if (!need_doc(app, ok, e)) return e;
@@ -135,7 +140,7 @@ std::vector<Action> build() {
         [](App& app, const Value&, bool* ok) { std::string e; if (!need_raster(app, ok, e)) return e; app.content_aware_fill(); return ok_json(); });
 
     // --- view ---
-    add("view.zoom", "Set the zoom, or fit / actual size", {{"zoom", "number", "1 is actual size"}, {"mode", "string", "fit, actual or set"}},
+    add("view.zoom", "Set the zoom, or fit / actual size", {{"zoom", "number", "1 is actual size", false, nullptr, "1"}, {"mode", "string", "which way to zoom", false, "fit,actual,set", "fit unless zoom is given"}},
         [](App& app, const Value& p, bool* ok) {
             std::string e;
             if (!need_doc(app, ok, e)) return e;
@@ -147,7 +152,7 @@ std::vector<Action> build() {
         });
     add("view.zoom_to_selection", "Fill the window with the selection", {},
         [](App& app, const Value&, bool* ok) { std::string e; if (!need_doc(app, ok, e)) return e; app.zoom_to_selection(); return ok_json(); });
-    add("view.toggle", "Turn a view aid on or off", {{"what", "string", "rulers, grid, guides, assistants, marquee, snap_guides, snap_grid, snap_assistants"}, {"on", "bool", "leave it out to toggle"}},
+    add("view.toggle", "Turn a view aid on or off", {{"what", "string", "the aid to switch", true, "rulers,grid,guides,assistants,marquee,snap_guides,snap_grid,snap_assistants"}, {"on", "bool", "leave it out to toggle", false, nullptr, "the opposite of now"}},
         [](App& app, const Value& p, bool* ok) {
             const std::string what = str(p, "what");
             bool* target = what == "rulers" ? &app.show_rulers : what == "grid" ? &app.show_grid : what == "guides" ? &app.show_guides
@@ -166,14 +171,14 @@ std::vector<Action> build() {
     add("image.mirror", "Mirror left to right", {}, [](App& app, const Value&, bool* ok) {
         std::string e; if (!need_doc(app, ok, e)) return e;
         app.run(std::make_unique<firn::MirrorCommand>()); return ok_json(); });
-    add("image.rotate", "Rotate the image", {{"degrees", "number", "clockwise"}},
+    add("image.rotate", "Rotate the image", {{"degrees", "number", "clockwise", false, nullptr, "90"}},
         [](App& app, const Value& p, bool* ok) {
             std::string e;
             if (!need_doc(app, ok, e)) return e;
             app.rotate(fnum(p, "degrees", 90.0f));
             return ok_json();
         });
-    add("image.resize", "Resize the image", {{"width", "number", "pixels"}, {"height", "number", "pixels"}, {"filter", "string", "smart, lanczos, mitchell, bicubic, bilinear, nearest, edge_directed"}},
+    add("image.resize", "Resize the image", {{"width", "number", "pixels"}, {"height", "number", "pixels"}, {"filter", "string", "how to resample", false, "smart,lanczos,mitchell,bicubic,bilinear,nearest,edge_directed", "smart"}},
         [](App& app, const Value& p, bool* ok) {
             std::string e;
             if (!need_doc(app, ok, e)) return e;
@@ -189,7 +194,7 @@ std::vector<Action> build() {
     add("select.all", "Select everything", {}, [](App& app, const Value&, bool* ok) { std::string e; if (!need_doc(app, ok, e)) return e; app.select_all(); return ok_json(); });
     add("select.none", "Drop the selection", {}, [](App& app, const Value&, bool* ok) { std::string e; if (!need_doc(app, ok, e)) return e; app.select_none(); return ok_json(); });
     add("select.invert", "Invert the selection", {}, [](App& app, const Value&, bool* ok) { std::string e; if (!need_doc(app, ok, e)) return e; app.select_invert(); return ok_json(); });
-    add("select.rect", "Select a rectangle, in image pixels", {{"x0", "number", ""}, {"y0", "number", ""}, {"x1", "number", ""}, {"y1", "number", ""}, {"feather", "number", "pixels"}},
+    add("select.rect", "Select a rectangle, in image pixels", {{"x0", "number", ""}, {"y0", "number", ""}, {"x1", "number", ""}, {"y1", "number", ""}, {"feather", "number", "pixels of soft edge", false, nullptr, "0"}},
         [](App& app, const Value& p, bool* ok) {
             std::string e;
             if (!need_doc(app, ok, e)) return e;
@@ -200,7 +205,7 @@ std::vector<Action> build() {
             app.set_selection("Select Rectangle", std::move(m));
             return ok_json();
         });
-    add("select.ellipse", "Select an ellipse inside a rectangle, in image pixels", {{"x0", "number", ""}, {"y0", "number", ""}, {"x1", "number", ""}, {"y1", "number", ""}, {"feather", "number", "pixels"}},
+    add("select.ellipse", "Select an ellipse inside a rectangle, in image pixels", {{"x0", "number", ""}, {"y0", "number", ""}, {"x1", "number", ""}, {"y1", "number", ""}, {"feather", "number", "pixels of soft edge", false, nullptr, "0"}},
         [](App& app, const Value& p, bool* ok) {
             std::string e;
             if (!need_doc(app, ok, e)) return e;
@@ -219,7 +224,7 @@ std::vector<Action> build() {
     add("layer.new_group", "Group the active layer", {}, [](App& app, const Value&, bool* ok) { std::string e; if (!need_doc(app, ok, e)) return e; app.layer_new_group(); return ok_json(); });
     add("layer.duplicate", "Duplicate the active layer", {}, [](App& app, const Value&, bool* ok) { std::string e; if (!need_doc(app, ok, e)) return e; app.layer_duplicate(); return ok_json(); });
     add("layer.delete", "Delete the active layer", {}, [](App& app, const Value&, bool* ok) { std::string e; if (!need_doc(app, ok, e)) return e; app.layer_delete(); return ok_json(); });
-    add("layer.select", "Make a layer active, by index from the bottom", {{"index", "number", "0 is the bottom"}},
+    add("layer.select", "Make a layer active, by index from the bottom", {{"index", "number", "0 is the bottom", true}},
         [](App& app, const Value& p, bool* ok) {
             std::string e;
             if (!need_doc(app, ok, e)) return e;
@@ -228,11 +233,11 @@ std::vector<Action> build() {
             app.doc->set_active_layer(i);
             return ok_json();
         });
-    add("layer.arrange", "Move the active layer up or down its group", {{"steps", "number", "positive is up"}},
+    add("layer.arrange", "Move the active layer up or down its group", {{"steps", "number", "positive is up", false, nullptr, "1"}},
         [](App& app, const Value& p, bool* ok) { std::string e; if (!need_doc(app, ok, e)) return e; app.layer_arrange(num(p, "steps", 1)); return ok_json(); });
-    add("layer.move_onto", "Restack a layer where another one sits", {{"from", "number", "index"}, {"onto", "number", "index"}},
+    add("layer.move_onto", "Restack a layer where another one sits", {{"from", "number", "index", true}, {"onto", "number", "index", true}},
         [](App& app, const Value& p, bool* ok) { std::string e; if (!need_doc(app, ok, e)) return e; app.layer_move_onto(num(p, "from", -1), num(p, "onto", -1)); return ok_json(); });
-    add("layer.merge", "Merge layers", {{"what", "string", "down, visible or all"}},
+    add("layer.merge", "Merge layers", {{"what", "string", "which layers to merge", false, "down,visible,all", "down"}},
         [](App& app, const Value& p, bool* ok) {
             std::string e;
             if (!need_doc(app, ok, e)) return e;
@@ -241,7 +246,7 @@ std::vector<Action> build() {
             return ok_json();
         });
     add("layer.properties", "Set the active layer's name, opacity, blend mode or visibility",
-        {{"name", "string", ""}, {"opacity", "number", "0..100"}, {"blend", "string", "Normal, Multiply, Screen, ..."}, {"visible", "bool", ""}},
+        {{"name", "string", ""}, {"opacity", "number", "percent, 0 to 100"}, {"blend", "string", "blend mode name, as the palette shows it"}, {"visible", "bool", ""}},
         [](App& app, const Value& p, bool* ok) {
             std::string e;
             if (!need_doc(app, ok, e)) return e;
@@ -263,16 +268,16 @@ std::vector<Action> build() {
         [](App& app, const Value&, bool* ok) { std::string e; if (!need_doc(app, ok, e)) return e; app.layer_promote_background(); return ok_json(); });
 
     // --- tools ---
-    add("tool.select", "Choose a tool by the name shown in the palette", {{"name", "string", "Paint Brush, Selection, ..."}},
+    add("tool.select", "Choose a tool by the name shown in the palette", {{"name", "string", "the name shown in the tools palette", true}},
         [](App& app, const Value& p, bool* ok) {
             const std::string want = str(p, "name");
             for (size_t i = 0; i < app.tools.size(); ++i)
                 if (want == app.tools[i]->name()) { app.select_tool(static_cast<int>(i)); return ok_json(); }
             return fail(ok, "no tool named \"" + want + "\"");
         });
-    add("tool.brush_size", "Set the brush size in pixels", {{"size", "number", "1..500"}},
+    add("tool.brush_size", "Set the brush size in pixels", {{"size", "number", "pixels, 1 to 500", true}},
         [](App& app, const Value& p, bool*) { app.brush.size = std::clamp(fnum(p, "size", 10.0f), 1.0f, 500.0f); return ok_json(); });
-    add("tool.color", "Set the foreground or background color", {{"color", "string", "#RRGGBB"}, {"which", "string", "foreground or background"}},
+    add("tool.color", "Set the foreground or background color", {{"color", "string", "#RRGGBB", true}, {"which", "string", "which material", false, "foreground,background", "foreground"}},
         [](App& app, const Value& p, bool* ok) {
             unsigned v = 0;
             const std::string c = str(p, "color");
@@ -283,7 +288,7 @@ std::vector<Action> build() {
         });
 
     // --- the program itself ---
-    add("app.screenshot", "Write what the window is showing to a PNG", {{"path", "string", "file to write"}},
+    add("app.screenshot", "Write what the window is showing to a PNG", {{"path", "string", "file to write", true}},
         [](App&, const Value& p, bool* ok) {
             const std::string path = str(p, "path");
             if (path.empty()) return fail(ok, "app.screenshot needs a path");
@@ -316,15 +321,34 @@ std::string describe_json(App& app) {
         Value e = Value::object();
         e.set("name", Value::string(a.name));
         e.set("summary", Value::string(a.summary));
-        Value ps = Value::array();
+        if (a.detail) e.set("detail", Value::string(a.detail));
+        // JSON Schema for the parameters, which is the shape a tool-calling
+        // client already knows how to read.
+        Value schema = Value::object();
+        schema.set("type", Value::string("object"));
+        Value props = Value::object();
+        Value required = Value::array();
         for (const Action::Param& q : a.params) {
             Value pv = Value::object();
-            pv.set("name", Value::string(q.name));
-            pv.set("type", Value::string(q.type));
-            pv.set("summary", Value::string(q.summary));
-            ps.push(std::move(pv));
+            pv.set("type", Value::string(q.type == std::string("bool") ? "boolean" : q.type));
+            pv.set("description", Value::string(q.summary));
+            if (q.choices) {
+                Value list = Value::array();
+                std::string acc;
+                for (const char* c = q.choices;; ++c) {
+                    if (*c == ',' || *c == '\0') { if (!acc.empty()) list.push(Value::string(acc)); acc.clear(); if (!*c) break; }
+                    else acc += *c;
+                }
+                pv.set("enum", std::move(list));
+            }
+            if (q.fallback) pv.set("default", Value::string(q.fallback));
+            props.set(q.name, std::move(pv));
+            if (q.required) required.push(Value::string(q.name));
         }
-        e.set("params", std::move(ps));
+        schema.set("properties", std::move(props));
+        schema.set("required", std::move(required));
+        schema.set("additionalProperties", Value::boolean(false));
+        e.set("input_schema", std::move(schema));
         list.push(std::move(e));
     }
     root.set("actions", std::move(list));

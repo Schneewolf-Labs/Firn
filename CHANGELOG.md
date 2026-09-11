@@ -7,6 +7,12 @@ section into the next version.
 ## Unreleased
 
 ### Added
+- The API documents itself: every action publishes JSON Schema for its
+  parameters, including which are required, what values they accept and
+  what is used when they are left out. `docs/API-reference.md` is the
+  manual and `docs/api.json` the machine-readable form, both generated from
+  the running program by `scripts/gen_api_docs.py`, with CI failing if they
+  fall behind.
 - `describe` publishes the inherited command names beside the actions, so
   one call reports everything that can be invoked. The list is generated
   from the source at build time and cannot fall behind.

@@ -14,11 +14,15 @@ struct App;
 struct Action {
     struct Param {
         const char* name;
-        const char* type;      // number, string, bool
+        const char* type;         // number, string, bool
         const char* summary;
+        bool required = false;    // the call is refused without it
+        const char* choices = nullptr;   // comma separated, when the value is one of a set
+        const char* fallback = nullptr;  // what is used when it is left out
     };
     const char* name;          // stable and dotted: "layer.new", "view.fit"
     const char* summary;
+    const char* detail = nullptr;   // a sentence of context, where it earns one
     std::vector<Param> params;
     // Runs it and returns the JSON reply; `ok` false means the message is an error.
     std::function<std::string(App&, const firn::json::Value&, bool* ok)> run;

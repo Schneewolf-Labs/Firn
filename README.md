@@ -106,7 +106,10 @@ firn-cli do image.resize '{"width":1600,"filter":"lanczos"}'
 firn-cli state
 ```
 
-`docs/API.md` covers the command line, the socket and `.PspScript` files.
+`docs/API-reference.md` is the generated manual of every action and its
+parameters; `docs/api.json` is the same as JSON Schema for tool-calling
+clients. `docs/API.md` covers the command line, the socket and
+`.PspScript` files.
 
 ## File formats
 

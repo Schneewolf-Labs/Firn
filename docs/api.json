@@ -1,0 +1,902 @@
+{
+  "actions": [
+    {
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "color": {
+            "default": "white",
+            "description": "#RRGGBB background, or transparent",
+            "type": "string"
+          },
+          "height": {
+            "default": "600",
+            "description": "pixels",
+            "type": "number"
+          },
+          "width": {
+            "default": "800",
+            "description": "pixels",
+            "type": "number"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "name": "file.new",
+      "summary": "Create an image"
+    },
+    {
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "path": {
+            "description": "file to open",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "type": "object"
+      },
+      "name": "file.open",
+      "summary": "Open an image file"
+    },
+    {
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "name": "file.save",
+      "summary": "Save the image where it came from"
+    },
+    {
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "path": {
+            "description": "where to write it",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "type": "object"
+      },
+      "name": "file.save_as",
+      "summary": "Save the image to a path, format taken from the extension"
+    },
+    {
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "name": "file.close",
+      "summary": "Close the current image, discarding changes"
+    },
+    {
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "name": "file.revert",
+      "summary": "Load the saved file again, dropping every change"
+    },
+    {
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "name": "edit.undo",
+      "summary": "Undo one step"
+    },
+    {
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "name": "edit.redo",
+      "summary": "Redo one step"
+    },
+    {
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "name": "edit.cut",
+      "summary": "Cut the selection"
+    },
+    {
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "name": "edit.copy",
+      "summary": "Copy the active layer through the selection"
+    },
+    {
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "name": "edit.copy_merged",
+      "summary": "Copy the composite through the selection"
+    },
+    {
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "name": "edit.paste_as_image",
+      "summary": "Paste the clipboard as a new image"
+    },
+    {
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "name": "edit.paste_as_layer",
+      "summary": "Paste the clipboard as a new layer"
+    },
+    {
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "name": "edit.paste_into_selection",
+      "summary": "Scale the clipboard into the selection"
+    },
+    {
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "name": "edit.clear",
+      "summary": "Clear the selection"
+    },
+    {
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "name": "edit.repeat",
+      "summary": "Apply the last adjustment or effect again"
+    },
+    {
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "name": "edit.content_aware_fill",
+      "summary": "Rebuild the selection from the rest of the picture"
+    },
+    {
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "mode": {
+            "default": "fit unless zoom is given",
+            "description": "which way to zoom",
+            "enum": [
+              "fit",
+              "actual",
+              "set"
+            ],
+            "type": "string"
+          },
+          "zoom": {
+            "default": "1",
+            "description": "1 is actual size",
+            "type": "number"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "name": "view.zoom",
+      "summary": "Set the zoom, or fit / actual size"
+    },
+    {
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "name": "view.zoom_to_selection",
+      "summary": "Fill the window with the selection"
+    },
+    {
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "on": {
+            "default": "the opposite of now",
+            "description": "leave it out to toggle",
+            "type": "boolean"
+          },
+          "what": {
+            "description": "the aid to switch",
+            "enum": [
+              "rulers",
+              "grid",
+              "guides",
+              "assistants",
+              "marquee",
+              "snap_guides",
+              "snap_grid",
+              "snap_assistants"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "what"
+        ],
+        "type": "object"
+      },
+      "name": "view.toggle",
+      "summary": "Turn a view aid on or off"
+    },
+    {
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "name": "image.flip",
+      "summary": "Flip top to bottom"
+    },
+    {
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "name": "image.mirror",
+      "summary": "Mirror left to right"
+    },
+    {
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "degrees": {
+            "default": "90",
+            "description": "clockwise",
+            "type": "number"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "name": "image.rotate",
+      "summary": "Rotate the image"
+    },
+    {
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "filter": {
+            "default": "smart",
+            "description": "how to resample",
+            "enum": [
+              "smart",
+              "lanczos",
+              "mitchell",
+              "bicubic",
+              "bilinear",
+              "nearest",
+              "edge_directed"
+            ],
+            "type": "string"
+          },
+          "height": {
+            "description": "pixels",
+            "type": "number"
+          },
+          "width": {
+            "description": "pixels",
+            "type": "number"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "name": "image.resize",
+      "summary": "Resize the image"
+    },
+    {
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "name": "image.crop_to_selection",
+      "summary": "Crop to the selection"
+    },
+    {
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "name": "select.all",
+      "summary": "Select everything"
+    },
+    {
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "name": "select.none",
+      "summary": "Drop the selection"
+    },
+    {
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "name": "select.invert",
+      "summary": "Invert the selection"
+    },
+    {
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "feather": {
+            "default": "0",
+            "description": "pixels of soft edge",
+            "type": "number"
+          },
+          "x0": {
+            "description": "",
+            "type": "number"
+          },
+          "x1": {
+            "description": "",
+            "type": "number"
+          },
+          "y0": {
+            "description": "",
+            "type": "number"
+          },
+          "y1": {
+            "description": "",
+            "type": "number"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "name": "select.rect",
+      "summary": "Select a rectangle, in image pixels"
+    },
+    {
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "feather": {
+            "default": "0",
+            "description": "pixels of soft edge",
+            "type": "number"
+          },
+          "x0": {
+            "description": "",
+            "type": "number"
+          },
+          "x1": {
+            "description": "",
+            "type": "number"
+          },
+          "y0": {
+            "description": "",
+            "type": "number"
+          },
+          "y1": {
+            "description": "",
+            "type": "number"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "name": "select.ellipse",
+      "summary": "Select an ellipse inside a rectangle, in image pixels"
+    },
+    {
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "name": "layer.new",
+      "summary": "Add a raster layer"
+    },
+    {
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "name": "layer.new_vector",
+      "summary": "Add a vector layer"
+    },
+    {
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "name": "layer.new_group",
+      "summary": "Group the active layer"
+    },
+    {
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "name": "layer.duplicate",
+      "summary": "Duplicate the active layer"
+    },
+    {
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "name": "layer.delete",
+      "summary": "Delete the active layer"
+    },
+    {
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "index": {
+            "description": "0 is the bottom",
+            "type": "number"
+          }
+        },
+        "required": [
+          "index"
+        ],
+        "type": "object"
+      },
+      "name": "layer.select",
+      "summary": "Make a layer active, by index from the bottom"
+    },
+    {
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "steps": {
+            "default": "1",
+            "description": "positive is up",
+            "type": "number"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "name": "layer.arrange",
+      "summary": "Move the active layer up or down its group"
+    },
+    {
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "from": {
+            "description": "index",
+            "type": "number"
+          },
+          "onto": {
+            "description": "index",
+            "type": "number"
+          }
+        },
+        "required": [
+          "from",
+          "onto"
+        ],
+        "type": "object"
+      },
+      "name": "layer.move_onto",
+      "summary": "Restack a layer where another one sits"
+    },
+    {
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "what": {
+            "default": "down",
+            "description": "which layers to merge",
+            "enum": [
+              "down",
+              "visible",
+              "all"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "name": "layer.merge",
+      "summary": "Merge layers"
+    },
+    {
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "blend": {
+            "description": "blend mode name, as the palette shows it",
+            "type": "string"
+          },
+          "name": {
+            "description": "",
+            "type": "string"
+          },
+          "opacity": {
+            "description": "percent, 0 to 100",
+            "type": "number"
+          },
+          "visible": {
+            "description": "",
+            "type": "boolean"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "name": "layer.properties",
+      "summary": "Set the active layer's name, opacity, blend mode or visibility"
+    },
+    {
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "name": "layer.promote_background",
+      "summary": "Turn the Background layer into an ordinary one"
+    },
+    {
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "description": "the name shown in the tools palette",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "name": "tool.select",
+      "summary": "Choose a tool by the name shown in the palette"
+    },
+    {
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "size": {
+            "description": "pixels, 1 to 500",
+            "type": "number"
+          }
+        },
+        "required": [
+          "size"
+        ],
+        "type": "object"
+      },
+      "name": "tool.brush_size",
+      "summary": "Set the brush size in pixels"
+    },
+    {
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "color": {
+            "description": "#RRGGBB",
+            "type": "string"
+          },
+          "which": {
+            "default": "foreground",
+            "description": "which material",
+            "enum": [
+              "foreground",
+              "background"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "color"
+        ],
+        "type": "object"
+      },
+      "name": "tool.color",
+      "summary": "Set the foreground or background color"
+    },
+    {
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "path": {
+            "description": "file to write",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "type": "object"
+      },
+      "name": "app.screenshot",
+      "summary": "Write what the window is showing to a PNG"
+    },
+    {
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "name": "app.describe",
+      "summary": "List every action, tool and option this build offers"
+    }
+  ],
+  "commands": [
+    "AddBorders",
+    "AddGuide",
+    "AddNoise",
+    "AdjustPosition",
+    "AgedNewspaper",
+    "AutoColorBalance",
+    "AutoContrastEnhancement",
+    "AutoSaturationEnhancement",
+    "Blinds",
+    "Blur",
+    "BlurAverage",
+    "BlurMore",
+    "BrushStrokes",
+    "Buttonize",
+    "Chrome",
+    "Clarify",
+    "ClearSelection",
+    "ColorAdjustBrightnessContrast",
+    "ColorAdjustChannelMixer",
+    "ColorAdjustColorBalance",
+    "ColorAdjustCurves",
+    "ColorAdjustGammaCorrect",
+    "ColorAdjustHSL",
+    "ColorAdjustHueMap",
+    "ColorAdjustLevels",
+    "ColorAdjustThreshold",
+    "ColorInc16",
+    "ColorInc256",
+    "ColoredEdges",
+    "Colorize",
+    "ContentAwareFill",
+    "Copy",
+    "CountImageColors",
+    "Crop",
+    "CropToSelection",
+    "Cut",
+    "DecreaseColorsTo16",
+    "DecreaseColorsTo16Million",
+    "DecreaseColorsTo2",
+    "DecreaseColorsTo256",
+    "DecreaseColorsToX",
+    "DeleteLayer",
+    "Despeckle",
+    "DigitalCameraNoiseRemoval",
+    "Dilate",
+    "DropShadow",
+    "EdgePreservingSmooth",
+    "Emboss",
+    "EnableOptimizedScriptUndo",
+    "EnhanceEdges",
+    "EnhanceEdgesMore",
+    "Erode",
+    "FadeCorrection",
+    "FileClose",
+    "FileOpen",
+    "FileSave",
+    "FileSaveAs",
+    "Fill",
+    "FindEdges",
+    "Flip",
+    "FloatSelection",
+    "GaussianBlur",
+    "GetMaterial",
+    "GetRasterSelectionRect",
+    "GlowingEdges",
+    "Grayscale",
+    "Greyscale",
+    "Halftone",
+    "HistogramAdjustment",
+    "HistogramEqualize",
+    "HistogramStretch",
+    "ImageInfo",
+    "IncreaseColorsTo16Bit",
+    "IncreaseColorsTo16Million",
+    "InnerBevel",
+    "JPEGArtifactRemoval",
+    "Kaleidoscope",
+    "LayerArrange",
+    "LayerArrangeMoveDown",
+    "LayerArrangeMoveIn",
+    "LayerArrangeMoveOut",
+    "LayerArrangeMoveUp",
+    "LayerArrangeToBottom",
+    "LayerArrangeToTop",
+    "LayerArrangeUngroup",
+    "LayerConvertToRaster",
+    "LayerDuplicate",
+    "LayerMergeAll",
+    "LayerMergeDown",
+    "LayerMergeVisible",
+    "LayerPromoteBackground",
+    "LayerProperties",
+    "LayerSetVisibility",
+    "MaskShowAll",
+    "Median",
+    "Mirror",
+    "ModifySelection",
+    "Mosaic",
+    "MotionBlur",
+    "Mover",
+    "MsgBox",
+    "NegativeImage",
+    "NewAdjustmentLayer*",
+    "NewFile",
+    "NewLayerGroup",
+    "NewMaskLayerHide",
+    "NewMaskLayerShow",
+    "NewRasterLayer",
+    "NewVectorLayer",
+    "OneStepPhotoFix",
+    "PageCurl",
+    "PasteAsNewImage",
+    "PasteAsNewLayer",
+    "PasteIntoSelection",
+    "Pinch",
+    "Pixelate",
+    "Posterize",
+    "RedoLastUndo",
+    "Resize",
+    "ResizeCanvas",
+    "ReturnImageInfo",
+    "ReturnLayerProperties",
+    "Ripple",
+    "Rotate",
+    "SaltAndPepper",
+    "SavePalette",
+    "SelectAll",
+    "SelectContract",
+    "SelectDocument",
+    "SelectExpand",
+    "SelectFeather",
+    "SelectInvert",
+    "SelectLayer",
+    "SelectLoadAlpha",
+    "SelectNone",
+    "SelectPreviousTool",
+    "SelectPromote",
+    "SelectSaveAlpha",
+    "SelectSmooth",
+    "SelectTool",
+    "Selection",
+    "Sepia",
+    "SetMaterial",
+    "Sharpen",
+    "SharpenMore",
+    "ShowGrid",
+    "ShowGuides",
+    "Soften",
+    "SoftenMore",
+    "Solarize",
+    "Spherize",
+    "SplitToCMYK",
+    "SplitToHSL",
+    "SplitToRGB",
+    "TextEx",
+    "Twirl",
+    "UndoLastCmd",
+    "UnsharpMask",
+    "UserDefinedFilter",
+    "Wave",
+    "Weave"
+  ],
+  "commands_note": "names from the program this grew out of, taking its parameter names; see docs/COMMANDS.md. A trailing * is a prefix.",
+  "firn": "action api",
+  "tools": [
+    "Pan",
+    "Zoom",
+    "Assistant",
+    "Move",
+    "Crop",
+    "Deform",
+    "Straighten",
+    "Perspective Correction",
+    "Mesh Warp",
+    "Selection",
+    "Freehand Selection",
+    "Magic Wand",
+    "Foreground Select",
+    "Dropper",
+    "Paint Brush",
+    "Airbrush",
+    "Color Smudge",
+    "Warp Brush",
+    "Lighten/Darken",
+    "Dodge/Burn",
+    "Smudge",
+    "Soften Brush",
+    "Sharpen Brush",
+    "Saturation Up/Down",
+    "Hue Up/Down",
+    "Red-eye Removal",
+    "Clone Brush",
+    "Heal Brush",
+    "Scratch Remover",
+    "Object Remover",
+    "Color Replacer",
+    "Eraser",
+    "Flood Fill",
+    "Picture Tube",
+    "Text",
+    "Line",
+    "Preset Shape",
+    "Object Selector",
+    "Pen"
+  ],
+  "version": 1
+}

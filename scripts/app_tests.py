@@ -294,12 +294,22 @@ def test_api_surface(f):
     check(len(names) == len(set(names)), "action names are unique")
     for required in ("file.new", "file.save_as", "layer.new", "select.rect", "image.resize", "view.zoom"):
         check(required in names, f"{required} is published")
+    check(all(a["summary"] for a in api["actions"]), "every action has a summary")
+    check(all("summary" in a and "input_schema" in a for a in api["actions"]), "every action publishes a summary and a schema")
     for a in api["actions"]:
-        check(bool(a["summary"]), f"{a['name']} has a summary")
-        break                                    # one is enough to prove the shape
-    check(all("summary" in a and "params" in a for a in api["actions"]), "every action publishes params and a summary")
+        sch = a["input_schema"]
+        check_once = sch.get("type") == "object" and "properties" in sch and "required" in sch
+        if not check_once:
+            check(False, f"{a['name']} has a well formed schema")
+            break
+    else:
+        check(True, "every schema is a well formed JSON Schema object")
     resize = next(a for a in api["actions"] if a["name"] == "image.resize")
-    check({p["name"] for p in resize["params"]} >= {"width", "height", "filter"}, "image.resize documents its parameters")
+    props = resize["input_schema"]["properties"]
+    check({"width", "height", "filter"} <= set(props), "image.resize documents its parameters")
+    check("smart" in props["filter"]["enum"], "and the values its filter accepts")
+    opened = next(a for a in api["actions"] if a["name"] == "file.open")
+    check(opened["input_schema"]["required"] == ["path"], "a required parameter is marked required")
     check(f.refused("no.such.action"), "an unknown action is refused")
     cmds = api.get("commands", [])
     check(len(cmds) > 120, "describe also publishes the inherited command names")

@@ -34,6 +34,20 @@ at once. `raw` sends the driver's own wire steps for replaying input
 (`raw 'click 100 200'`, `raw 'key z ctrl'`), which is how the UI itself is
 tested.
 
+## The manual
+
+`docs/API-reference.md` is every action with its parameters, and
+`docs/api.json` is the same thing as JSON Schema, one schema per action,
+which is the shape a tool-calling client already reads. Both are generated
+from the running program by `scripts/gen_api_docs.py`, and CI fails if what
+is committed no longer matches what the program reports, so neither can
+fall behind the code.
+
+```sh
+python3 scripts/gen_api_docs.py          # rewrite both after changing an action
+python3 scripts/gen_api_docs.py --check  # what CI runs
+```
+
 ## Discovery
 
 `describe` returns the action list with a summary and typed parameters for

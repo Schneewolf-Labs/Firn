@@ -23,6 +23,8 @@ jobs:
         run: xvfb-run -a --server-args="-screen 0 1400x900x24" python3 scripts/smoke.py build
       - name: App behaviour tests (through the action API)
         run: xvfb-run -a --server-args="-screen 0 1400x900x24" python3 scripts/app_tests.py build
+      - name: API manual is current
+        run: xvfb-run -a --server-args="-screen 0 1400x900x24" python3 scripts/gen_api_docs.py build --check
       - name: Package
         run: cd build && cpack -G TGZ
       - uses: actions/upload-artifact@v4
