@@ -4,7 +4,8 @@
 
 // Persistent user settings: a small key=value file under the config
 // directory (XDG_CONFIG_HOME/firn or ~/.config/firn, %APPDATA%/firn on
-// Windows). The ImGui layout lives next to it.
+// Windows, ~/Library/Application Support/Firn on macOS). The ImGui layout
+// lives next to it.
 struct Config {
     std::vector<std::string> recent_files;  // most recent first, max 10
     int window_w = 1400, window_h = 900;

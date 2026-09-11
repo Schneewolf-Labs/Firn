@@ -1327,7 +1327,7 @@ public:
     const char* name() const override { return "Picture Tube"; }
     void on_press(App& app, const ToolInput& in, ImGuiMouseButton) override {
         app.ensure_tubes();
-        if (!app.active_is_raster() || app.tube_image.empty()) { if (app.tube_image.empty()) app.status = "No picture tubes found (put .PspTube files in ~/.config/firn/tubes)."; return; }
+        if (!app.active_is_raster() || app.tube_image.empty()) { if (app.tube_image.empty()) app.status = "No picture tubes found (put .PspTube files in " + Config::directory() + "/tubes)."; return; }
         layer_ = app.active_layer();
         before_ = app.paint_pixels(layer_);
         active_ = true;

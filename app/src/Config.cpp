@@ -9,11 +9,16 @@ namespace fs = std::filesystem;
 
 std::string Config::directory() {
     fs::path base;
+    fs::path name = "firn";
     if (const char* x = std::getenv("XDG_CONFIG_HOME")) base = x;
     else if (const char* a = std::getenv("APPDATA")) base = a;
+#ifdef __APPLE__
+    else if (const char* h = std::getenv("HOME")) { base = fs::path(h) / "Library" / "Application Support"; name = "Firn"; }
+#else
     else if (const char* h = std::getenv("HOME")) base = fs::path(h) / ".config";
+#endif
     else base = fs::temp_directory_path();
-    const fs::path dir = base / "firn";
+    const fs::path dir = base / name;
     std::error_code ec;
     fs::create_directories(dir, ec);
     return dir.string();

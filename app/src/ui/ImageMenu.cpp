@@ -138,7 +138,7 @@ void App::draw_image_dialogs() {
             }
             ImGui::EndCombo();
         }
-        ImGui::TextDisabled("From ~/.config/firn/frames or FIRN_FRAME_DIRS (.PspFrame files).");
+        ImGui::TextDisabled("From %s/frames or FIRN_FRAME_DIRS (.PspFrame files).", Config::directory().c_str());
         if (ImGui::RadioButton("Frame inside of the image", frame_inside)) frame_inside = true;
         if (ImGui::RadioButton("Frame outside of the image", !frame_inside)) frame_inside = false;
         ImGui::Checkbox("Flip", &frame_flip); ImGui::SameLine(); ImGui::Checkbox("Mirror", &frame_mirror);

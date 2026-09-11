@@ -711,7 +711,7 @@ void App::draw_dialogs() {
         ImGui::Checkbox("Color managed display (convert tagged images to sRGB for the screen)", &c.color_managed_display);
         ImGui::SetNextItemWidth(160); ImGui::InputInt("Grid spacing", &c.grid_spacing);
         c.grid_spacing = std::clamp(c.grid_spacing, 1, 1000);
-        ImGui::SeparatorText("Extra library folders (besides ~/.config/firn/*)");
+        ImGui::SeparatorText(("Extra library folders (besides " + Config::directory() + "/*)").c_str());
         char buf[1024];
         auto path_field = [&](const char* label, std::string& value) {
             std::snprintf(buf, sizeof(buf), "%s", value.c_str());
