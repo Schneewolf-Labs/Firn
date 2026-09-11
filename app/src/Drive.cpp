@@ -270,10 +270,11 @@ bool Driver::parse_line(const std::string& line, App& app) {
         // Super, which ImGui then turns back into Ctrl. Without this every
         // scripted shortcut silently does nothing there.
         auto mod_flag = [](ImGuiKey m) {
-#ifdef __APPLE__
-            if (m == ImGuiKey_LeftCtrl) return ImGuiMod_Super;
-#endif
-            return m == ImGuiKey_LeftCtrl ? ImGuiMod_Ctrl : m == ImGuiKey_LeftShift ? ImGuiMod_Shift : m == ImGuiKey_LeftAlt ? ImGuiMod_Alt : ImGuiKey_None;
+            return m == ImGuiKey_LeftCtrl    ? ImGuiMod_Ctrl
+                   : m == ImGuiKey_LeftSuper ? ImGuiMod_Super
+                   : m == ImGuiKey_LeftShift ? ImGuiMod_Shift
+                   : m == ImGuiKey_LeftAlt   ? ImGuiMod_Alt
+                                             : ImGuiKey_None;
         };
 #ifdef __APPLE__
         for (ImGuiKey& m : mods)
