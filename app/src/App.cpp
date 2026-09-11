@@ -1,5 +1,6 @@
 #include "App.h"
 #include "ui/AdjustState.h"
+#include "firn/inpaint.h"
 
 #include <algorithm>
 #include <cmath>
@@ -497,6 +498,17 @@ void App::zoom_to_rect(raster::Rect r) {
 void App::zoom_to_selection() {
     if (!doc || !doc->has_selection()) { status = "Zoom to Selection needs a selection."; return; }
     zoom_to_rect(doc->selection().bounds());
+}
+
+// Selections > Content-Aware Fill: synthesizes the selected area from the
+// rest of the layer, which is how an unwanted object is removed.
+void App::content_aware_fill() {
+    if (!doc || !active_is_raster()) { status = "Content-Aware Fill needs a raster layer."; return; }
+    if (!doc->has_selection() || !doc->selection().any()) { status = "Content-Aware Fill needs a selection."; return; }
+    const Mask area = doc->selection();
+    status = "Filling from the surrounding picture...";
+    run(std::make_unique<AdjustCommand>(active_layer(), "Content-Aware Fill",
+                                        [area](Image& i) { inpaint::content_aware_fill(i, area); }));
 }
 
 void App::repeat_last_effect() {

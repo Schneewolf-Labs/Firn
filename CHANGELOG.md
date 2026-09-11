@@ -6,6 +6,18 @@ section into the next version.
 
 ## Unreleased
 
+### Added
+- Edit > Content-Aware Fill rebuilds the selection from the rest of the
+  picture, so an unwanted object can be selected and removed. Exemplar
+  synthesis over a resolution pyramid (the PatchMatch approach): patches
+  inside the hole repeatedly look for the most similar patch of untouched
+  image and the hole is rebuilt from those matches. No model or training
+  data, and no new dependency. It reproduces a regular texture exactly; on
+  a photograph it is convincing over texture and can leave a visible edge
+  where it has to invent structure. A 360 x 300 hole in a 3 MP photo takes
+  about two seconds, during which the window does not respond.
+
+
 ## 0.2.0 (2026-09-11)
 
 ### Added

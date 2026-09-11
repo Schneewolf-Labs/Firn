@@ -207,6 +207,19 @@ against the 115 commands its own bundled scripts use.
       GetString, EventNotify, the preferences and file-location queries)
       and two whose mapping is ambiguous (CombineRGB, MoveSelection)
 
+## 16. Beyond the original (2026-09-11)
+
+- [x] Content-Aware Fill (exemplar synthesis, `core/src/inpaint.cpp`)
+- [ ] Run it off the UI thread: a few seconds of frozen window is the worst
+      thing about it today
+- [ ] Better structure in large holes: the fill is convincing over texture
+      but can leave an edge where it has to invent shape. Onion-peel
+      initialization and more search passes are the usual answers
+- [ ] Edge-directed upscaling, which beats bicubic without a model
+- [ ] Neural upscaling or inpainting would mean shipping an inference
+      runtime and weights; that is a dependency and licensing decision,
+      not just a feature
+
 ## Dropped (not worth the effort for this port)
 
 - Art Media layers and tools (oil brush, chalk, pastel, palette knife,

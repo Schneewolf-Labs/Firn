@@ -18,6 +18,7 @@
 #include "firn/document.h"
 #include "firn/icc.h"
 #include "firn/io.h"
+#include "firn/inpaint.h"
 #include "firn/io_psp.h"
 #include "firn/zip.h"
 #include "firn/mask.h"
@@ -1438,6 +1439,55 @@ static void test_zip() {
 // draining the color, which is what it used to do: the contrast stretch
 // collapsed everything below its clip point onto pure black, and clarify
 // then scaled those pixels by zero.
+// Content-aware fill rebuilds a hole from the rest of the picture. On a
+// regular texture the right answer is known, so the fill should land on it
+// almost exactly; a hole so large that no whole patch of known image is
+// left must still be filled rather than abandoned.
+static void test_content_aware_fill() {
+    const int W = 192, H = 192;
+    Image truth(W, H);
+    for (int y = 0; y < H; ++y)
+        for (int x = 0; x < W; ++x) {
+            const bool cell = ((x / 16) + (y / 16)) % 2;
+            const bool stripe = ((x + y) / 4) % 2;
+            truth.set(x, y, {static_cast<uint8_t>(cell ? 200 : 60), static_cast<uint8_t>(stripe ? 180 : 90),
+                             static_cast<uint8_t>(120 + ((x * 5 + y * 3) % 40)), 255});
+        }
+    auto fill_and_score = [&](int hole) {
+        Image img = truth;
+        Mask m(W, H, 0);
+        const int x0 = (W - hole) / 2, y0 = (H - hole) / 2;
+        for (int y = y0; y < y0 + hole; ++y)
+            for (int x = x0; x < x0 + hole; ++x) { m.at(x, y) = 255; img.set(x, y, {255, 0, 255, 255}); }
+        inpaint::content_aware_fill(img, m);
+        double se = 0;
+        int n = 0, magenta = 0;
+        for (int y = y0; y < y0 + hole; ++y)
+            for (int x = x0; x < x0 + hole; ++x) {
+                const Color a = img.get(x, y), b = truth.get(x, y);
+                if (a.r > 250 && a.g < 5 && a.b > 250) ++magenta;
+                se += (a.r - b.r) * (a.r - b.r) + (a.g - b.g) * (a.g - b.g) + (a.b - b.b) * (a.b - b.b);
+                n += 3;
+            }
+        CHECK(magenta == 0);   // nothing of the hole was left untouched
+        return se / n;
+    };
+    CHECK(fill_and_score(32) < 50.0);    // a small hole comes back essentially exact
+    CHECK(fill_and_score(64) < 200.0);
+    // A half-covered selection lands halfway: the synthesized texture mixed
+    // with what was there, rather than replacing it outright.
+    Image img = truth;
+    Mask m(W, H, 0);
+    for (int y = 80; y < 112; ++y)
+        for (int x = 80; x < 112; ++x) { m.at(x, y) = 128; img.set(x, y, {255, 0, 255, 255}); }
+    inpaint::content_aware_fill(img, m);
+    const Color mid = img.get(96, 96), want = truth.get(96, 96);
+    CHECK(std::abs(mid.g - (0 + want.g) / 2) < 40);          // green moved from 0 toward the texture
+    CHECK(mid.r < 255 && mid.r > want.r);                    // red came down from magenta but not all the way
+    // Nothing outside the selection moves.
+    CHECK(img.get(10, 10).r == truth.get(10, 10).r && img.get(180, 180).b == truth.get(180, 180).b);
+}
+
 static void test_one_step_photo_fix() {
     // A photo-like image: a bright colorful half and a dark half that still
     // holds detail.
@@ -2788,6 +2838,7 @@ int main() {
     test_move_layer();
     test_edge_preserving_smooth();
     test_one_step_photo_fix();
+    test_content_aware_fill();
     test_gradient_at_point();
     test_vector_core();
     test_history_limit();

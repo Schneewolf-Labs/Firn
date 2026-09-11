@@ -63,6 +63,8 @@ void App::draw_menu() {
         if (ImGui::MenuItem("Paste As New Layer", "Ctrl+L", false, has_doc)) paste_as_new_layer();
         if (ImGui::MenuItem("Paste Into Selection", "Ctrl+Shift+L", false, has_layer && doc->has_selection())) paste_into_selection();
         if (ImGui::MenuItem("Clear", "Delete", false, has_layer)) clear_selection();
+        if (ImGui::MenuItem("Content-Aware Fill", nullptr, false, has_layer && doc->has_selection())) content_aware_fill();
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Rebuilds the selection from the rest of the picture, to remove something from it.");
         ImGui::Separator();
         {
             const std::string label = last_effect.empty() ? "Repeat" : "Repeat " + last_effect;

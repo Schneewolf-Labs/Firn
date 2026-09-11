@@ -656,6 +656,7 @@ struct App {
     void copy_merged();          // the composite, not just the active layer
     void paste_into_selection(); // scales the clipboard to the selection and paints it through
     void repeat_last_effect();   // re-applies the last Adjust/Effects dialog with its settings
+    void content_aware_fill();   // rebuilds the selection from the rest of the picture
     void revert();               // reloads the file from disk, dropping every change
     bool show_revert_prompt = false;
     void zoom_to_rect(firn::raster::Rect r);   // fills the view with an image rect

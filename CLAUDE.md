@@ -241,6 +241,13 @@ docs/    notes on the original: command inventory, module mapping, FORMAT.md
   Keep the code portable: no GCC-only flags outside the `if(NOT MSVC)`
   blocks, NOMINMAX is defined project-wide, `main()` is plain (SDL's
   entry point is disabled).
+- **Content-aware fill** (`core/include/firn/inpaint.h`) synthesizes a
+  region from the rest of the image by PatchMatch. Two things it is easy to
+  get wrong and that its test pins down: the patch distance must weight
+  known pixels far above ones still being synthesized, or a flat seed
+  matches flat regions and the fill stays flat; and a pyramid level whose
+  hole leaves no whole patch of known image must be dropped, not treated as
+  a failure of the whole fill.
 - Add a test in `tests/test_core.cpp` for every new raster op or command.
 
 ## Checking UI changes

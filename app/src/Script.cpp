@@ -510,6 +510,7 @@ std::string App::do_command(const std::string& name, const Value& p, bool* ok) {
     // per command, so there is nothing to switch on.
     if (name == "EnableOptimizedScriptUndo") return json::dump(result_ok());
 
+    if (name == "ContentAwareFill") { if (auto e = need_doc(); !e.empty()) return e; content_aware_fill(); return json::dump(result_ok()); }
     if (name == "PasteIntoSelection") { if (auto e = need_doc(); !e.empty()) return e; paste_into_selection(); return json::dump(result_ok()); }
     if (name == "MaskShowAll") {
         if (auto e = need_doc(); !e.empty()) return e;
