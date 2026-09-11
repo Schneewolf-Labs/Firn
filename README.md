@@ -71,6 +71,12 @@ firn-cli do edit.content_aware_fill '{}'
 firn-cli do file.save_as '{"path":"out.png"}'
 ```
 
+It draws, too. `draw.rectangle`, `draw.ellipse`, `draw.polygon` and
+`draw.path` place shapes as editable vector objects or rasterize them,
+`draw.stroke` paints a brush stroke, and `app.batch` applies a whole list
+atomically as one undo step that rolls back if any part of it is refused.
+`samples/api-cat.json` draws a complete editable picture in one call.
+
 `firn-cli describe` prints the entire API as JSON Schema, which is enough for
 a language model to operate Firn without being taught anything else.
 [docs/API-reference.md](docs/API-reference.md) is the generated manual, and
@@ -80,10 +86,12 @@ the original program's `.PspScript` files.
 ## File formats
 
 Projects are saved as **OpenRaster** (`.ora`), the open layered format that
-GIMP, Krita and MyPaint also read. Layers, groups, masks, vector objects,
-adjustment and filter layers, layer styles, 16-bit layers, color profiles and
-saved selections all survive a round trip; Firn-only details ride in
-extension attributes other editors ignore.
+GIMP, Krita and MyPaint also read, and nothing is lost in the trip. Layers,
+groups, masks, vector objects, adjustment and filter layers, layer styles,
+16-bit layers, color profiles, saved selections and metadata all come back
+exactly as they were, down to the active layer and the live selection. A
+test walks every field of the document model to keep it that way. Firn-only
+details ride in extension attributes other editors ignore.
 
 Firn also reads and writes the original program's native container
 (`.PspImage`, and the `.PspTube` and `.PspFrame` files that share it) with its
