@@ -646,7 +646,14 @@ Taps make_taps(int src_n, int dst_n, Filter filter) {
 
 }  // namespace
 
+Image resample_edge_directed(const Image& src, int w, int h);
+
 Image resample(const Image& src, int w, int h, Filter filter) {
+    if (filter == Filter::EdgeDirected) {
+        // Only enlargement benefits; shrinking wants the area average.
+        if (w > src.width() && h > src.height()) return resample_edge_directed(src, w, h);
+        filter = Filter::Bicubic;
+    }
     const int sw = src.width(), sh = src.height();
     if (w <= 0 || h <= 0 || sw == 0 || sh == 0) return Image(std::max(w, 0), std::max(h, 0));
     // Premultiply into float.
@@ -1256,6 +1263,140 @@ void defringe(Image& img, int width) {
             }
         settled.swap(next);
     }
+}
+
+}  // namespace firn::raster
+
+// --- Edge-directed enlargement -------------------------------------------
+namespace firn::raster {
+namespace {
+
+// Doubles an image by directional cubic convolution. Each new pixel looks at
+// the two diagonals (or the two axes) through it, measures how much the
+// image changes along each, and interpolates along the quieter one, so an
+// edge is continued instead of being averaged across.
+Image double_edge_directed(const Image& src) {
+    const int sw = src.width(), sh = src.height();
+    const int w = sw * 2, h = sh * 2;
+    Image out(w, h, {0, 0, 0, 0});
+    auto at = [&](int x, int y) { return src.get(std::clamp(x, 0, sw - 1), std::clamp(y, 0, sh - 1)); };
+    auto put = [&](int x, int y, const float v[4]) {
+        uint8_t* d = out.data() + (static_cast<size_t>(y) * w + x) * 4;
+        for (int c = 0; c < 4; ++c) d[c] = static_cast<uint8_t>(std::clamp(v[c], 0.0f, 255.0f) + 0.5f);
+    };
+    auto chan = [](const Color& c, int i) { return i == 0 ? c.r : i == 1 ? c.g : i == 2 ? c.b : c.a; };
+    // Cubic through four samples at -1, 0, 1, 2, evaluated at the midpoint.
+    auto cubic_mid = [](float a, float b, float c, float d) { return (-a + 9.0f * b + 9.0f * c - d) / 16.0f; };
+
+    for (int y = 0; y < sh; ++y)
+        for (int x = 0; x < sw; ++x) {
+            const Color s = src.get(x, y);
+            const float v[4] = {static_cast<float>(s.r), static_cast<float>(s.g), static_cast<float>(s.b), static_cast<float>(s.a)};
+            put(x * 2, y * 2, v);
+        }
+
+    // Pixels at the center of four originals: choose between the two diagonals.
+    for (int y = 0; y < sh; ++y)
+        for (int x = 0; x < sw; ++x) {
+            float d1 = 0.0f, d2 = 0.0f;   // change along the two diagonals
+            for (int k = -1; k <= 2; ++k) {
+                const Color a1 = at(x + k, y + k), b1 = at(x + k - 1, y + k - 1);
+                const Color a2 = at(x + 1 - k, y + k), b2 = at(x + 2 - k, y + k - 1);
+                for (int c = 0; c < 3; ++c) {
+                    d1 += std::abs(static_cast<float>(chan(a1, c)) - static_cast<float>(chan(b1, c)));
+                    d2 += std::abs(static_cast<float>(chan(a2, c)) - static_cast<float>(chan(b2, c)));
+                }
+            }
+            const float w1 = 1.0f / (1.0f + d1 * d1), w2 = 1.0f / (1.0f + d2 * d2);
+            const float sum = w1 + w2;
+            float v[4];
+            for (int c = 0; c < 4; ++c) {
+                const float along1 = cubic_mid(static_cast<float>(chan(at(x - 1, y - 1), c)), static_cast<float>(chan(at(x, y), c)),
+                                               static_cast<float>(chan(at(x + 1, y + 1), c)), static_cast<float>(chan(at(x + 2, y + 2), c)));
+                const float along2 = cubic_mid(static_cast<float>(chan(at(x + 2, y - 1), c)), static_cast<float>(chan(at(x + 1, y), c)),
+                                               static_cast<float>(chan(at(x, y + 1), c)), static_cast<float>(chan(at(x - 1, y + 2), c)));
+                v[c] = (w1 * along1 + w2 * along2) / sum;
+            }
+            put(x * 2 + 1, y * 2 + 1, v);
+        }
+
+    // The remaining half-pixels, now that the diagonals are known: the same
+    // choice between the horizontal and the vertical run through them.
+    auto known = [&](int x, int y, int c) {
+        const int cx = std::clamp(x, 0, w - 1), cy = std::clamp(y, 0, h - 1);
+        return static_cast<float>(out.data()[(static_cast<size_t>(cy) * w + cx) * 4 + c]);
+    };
+    for (int y = 0; y < h; ++y)
+        for (int x = 0; x < w; ++x) {
+            if (((x + y) & 1) == 0) continue;   // already filled
+            float dh = 0.0f, dv = 0.0f;
+            for (int k = -2; k <= 2; k += 2) {
+                for (int c = 0; c < 3; ++c) {
+                    dh += std::abs(known(x + k + 1, y, c) - known(x + k - 1, y, c));
+                    dv += std::abs(known(x, y + k + 1, c) - known(x, y + k - 1, c));
+                }
+            }
+            const float wh = 1.0f / (1.0f + dh * dh), wv = 1.0f / (1.0f + dv * dv);
+            const float sum = wh + wv;
+            float v[4];
+            for (int c = 0; c < 4; ++c) {
+                const float horiz = cubic_mid(known(x - 3, y, c), known(x - 1, y, c), known(x + 1, y, c), known(x + 3, y, c));
+                const float vert = cubic_mid(known(x, y - 3, c), known(x, y - 1, c), known(x, y + 1, c), known(x, y + 3, c));
+                v[c] = (wh * horiz + wv * vert) / sum;
+            }
+            put(x, y, v);
+        }
+    return out;
+}
+
+}  // namespace
+
+namespace {
+
+// Doubling keeps the original samples on even output pixels, which puts the
+// picture half an output pixel off the grid the rest of the program uses.
+// This shifts it back with a Catmull-Rom kernel.
+Image shift_half_pixel(const Image& src) {
+    const int w = src.width(), h = src.height();
+    Image out(w, h);
+    auto at = [&](int x, int y, int c) {
+        return static_cast<float>(src.data()[(static_cast<size_t>(std::clamp(y, 0, h - 1)) * w + std::clamp(x, 0, w - 1)) * 4 + c]);
+    };
+    // Catmull-Rom weights at t = 0.5.
+    const float k[4] = {-1.0f / 16.0f, 9.0f / 16.0f, 9.0f / 16.0f, -1.0f / 16.0f};
+    std::vector<float> row(static_cast<size_t>(w) * h * 4);
+    for (int y = 0; y < h; ++y)
+        for (int x = 0; x < w; ++x)
+            for (int c = 0; c < 4; ++c) {
+                float v = 0;
+                for (int i = 0; i < 4; ++i) v += k[i] * at(x - 2 + i, y, c);
+                row[(static_cast<size_t>(y) * w + x) * 4 + c] = v;
+            }
+    for (int y = 0; y < h; ++y)
+        for (int x = 0; x < w; ++x)
+            for (int c = 0; c < 4; ++c) {
+                float v = 0;
+                for (int i = 0; i < 4; ++i) {
+                    const int yy = std::clamp(y - 2 + i, 0, h - 1);
+                    v += k[i] * row[(static_cast<size_t>(yy) * w + x) * 4 + c];
+                }
+                out.data()[(static_cast<size_t>(y) * w + x) * 4 + c] = static_cast<uint8_t>(std::clamp(v, 0.0f, 255.0f) + 0.5f);
+            }
+    return out;
+}
+
+}  // namespace
+
+Image resample_edge_directed(const Image& src, int w, int h) {
+    if (src.empty() || w <= 0 || h <= 0) return Image(std::max(w, 0), std::max(h, 0));
+    // Double until it is at least the target, then land exactly with bicubic.
+    Image cur = src;
+    while (cur.width() < w && cur.height() < h && cur.width() * 2 <= 1 << 15) {
+        cur = shift_half_pixel(double_edge_directed(cur));
+        if (cur.width() >= w && cur.height() >= h) break;
+    }
+    if (cur.width() == w && cur.height() == h) return cur;
+    return resample(cur, w, h, Filter::Bicubic);
 }
 
 }  // namespace firn::raster

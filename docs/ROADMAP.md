@@ -215,7 +215,8 @@ against the 115 commands its own bundled scripts use.
 - [ ] Better structure in large holes: the fill is convincing over texture
       but can leave an edge where it has to invent shape. Onion-peel
       initialization and more search passes are the usual answers
-- [ ] Edge-directed upscaling, which beats bicubic without a model
+- [x] Edge-directed upscaling (directional cubic convolution): better on
+      graphic edges, a wash on photographs
 - [ ] Neural upscaling or inpainting would mean shipping an inference
       runtime and weights; that is a dependency and licensing decision,
       not just a feature

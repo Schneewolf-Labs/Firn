@@ -397,7 +397,8 @@ std::string App::do_command(const std::string& name, const Value& p, bool* ok) {
         if (percent) { w = doc->width() * (w > 0 ? w : 100) / 100.0; h = doc->height() * (h > 0 ? h : 100) / 100.0; }
         if (flag("MaintainAspectRatio", true) && w > 0) h = doc->height() * w / doc->width();
         const std::string rt = p.get("ResampleType").as_string("SmartSize");
-        const raster::Filter f = rt == "Pixel" ? raster::Filter::Nearest : rt == "Bilinear" ? raster::Filter::Bilinear : raster::Filter::Bicubic;
+        const raster::Filter f = rt == "Pixel" ? raster::Filter::Nearest : rt == "Bilinear" ? raster::Filter::Bilinear
+                                 : rt == "EdgeDirected" ? raster::Filter::EdgeDirected : raster::Filter::Bicubic;
         run(std::make_unique<ResizeCommand>(std::max(1, static_cast<int>(std::lround(w))), std::max(1, static_cast<int>(std::lround(h))), f));
         fit_requested = true;
         return json::dump(result_ok());

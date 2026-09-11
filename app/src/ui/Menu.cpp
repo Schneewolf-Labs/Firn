@@ -806,7 +806,8 @@ void App::draw_dialogs() {
             ImGui::Checkbox("Lock aspect ratio", &resize_lock);
         }
         ImGui::SetNextItemWidth(160);
-        ImGui::Combo("Resample", &resize_filter, "Pixel resize\0Bilinear\0Bicubic\0");
+        ImGui::Combo("Resample", &resize_filter, "Pixel resize\0Bilinear\0Bicubic\0Edge directed\0");
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Edge directed follows edges instead of averaging across them: cleaner diagonals and curves when enlarging, and slower. Shrinking always uses the area average.");
         ImGui::Text("%d x %d  ->  %d x %d", doc ? doc->width() : 0, doc ? doc->height() : 0, resize_w, resize_h);
         if (ImGui::Button("OK") || enter()) {
             if (doc && (resize_w != doc->width() || resize_h != doc->height())) {

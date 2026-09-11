@@ -7,6 +7,12 @@ section into the next version.
 ## Unreleased
 
 ### Added
+- Image > Resize offers Edge directed resampling, which interpolates along
+  an edge instead of averaging across it. On hard-edged artwork enlarged
+  several times it keeps curves and diagonals clean where bicubic
+  staircases them; on a photograph it is close to bicubic and about ten
+  times slower, so bicubic stays the default. Shrinking always uses the
+  area average.
 - Edit > Content-Aware Fill rebuilds the selection from the rest of the
   picture, so an unwanted object can be selected and removed. Exemplar
   synthesis over a resolution pyramid (the PatchMatch approach): patches

@@ -166,11 +166,17 @@ void mirror_horizontal(Image& img);
 // --- Geometry -----------------------------------------------------------
 namespace firn::raster {
 
-enum class Filter { Nearest, Bilinear, Bicubic };
+// EdgeDirected enlarges along edges rather than across them (directional
+// cubic convolution), which keeps diagonals clean where Bicubic softens or
+// staircases them. It only applies when enlarging; shrinking falls back to
+// Bicubic, which is already an area average.
+enum class Filter { Nearest, Bilinear, Bicubic, EdgeDirected };
 
 // Resamples to (w, h). Works in premultiplied alpha; when shrinking, the
 // filter support widens so every source pixel contributes (area average).
 Image resample(const Image& src, int w, int h, Filter filter);
+// The enlargement behind Filter::EdgeDirected, also callable directly.
+Image resample_edge_directed(const Image& src, int w, int h);
 
 // Copies the rect (clipped to the image; outside is transparent).
 // Selections > Matting. `remove_matte` undoes a composite against a solid

@@ -1443,6 +1443,40 @@ static void test_zip() {
 // regular texture the right answer is known, so the fill should land on it
 // almost exactly; a hole so large that no whole patch of known image is
 // left must still be filled rather than abandoned.
+// Edge-directed enlargement interpolates along an edge rather than across
+// it, so on hard-edged artwork enlarged several times it lands closer to
+// the true shape than bicubic. On a photograph it is close to bicubic;
+// this pins the case it exists for.
+static void test_edge_directed_resample() {
+    auto shapes = [](int n) {
+        Image im(n, n, {255, 255, 255, 255});
+        for (int y = 0; y < n; ++y)
+            for (int x = 0; x < n; ++x) {
+                const double fx = (x + 0.5) / n, fy = (y + 0.5) / n;
+                bool ink = std::hypot(fx - 0.35, fy - 0.35) < 0.22;
+                ink |= std::abs((fy - 0.15) - 0.9 * (fx - 0.1)) < 0.018 && fx > 0.45;
+                if (ink) im.set(x, y, {20, 40, 160, 255});
+            }
+        return im;
+    };
+    auto error = [](const Image& a, const Image& b) {
+        double se = 0;
+        size_t n = 0;
+        for (size_t i = 0; i < a.size_bytes(); i += 4)
+            for (int c = 0; c < 3; ++c) { const double d = a.data()[i + c] - b.data()[i + c]; se += d * d; ++n; }
+        return se / n;
+    };
+    const Image small = shapes(96), truth = shapes(384);
+    const Image cubic = raster::resample(small, 384, 384, raster::Filter::Bicubic);
+    const Image edged = raster::resample(small, 384, 384, raster::Filter::EdgeDirected);
+    CHECK(edged.width() == 384 && edged.height() == 384);
+    CHECK(error(edged, truth) < error(cubic, truth));
+    // Shrinking is left to the area average, so it matches bicubic exactly.
+    const Image down_e = raster::resample(truth, 96, 96, raster::Filter::EdgeDirected);
+    const Image down_c = raster::resample(truth, 96, 96, raster::Filter::Bicubic);
+    CHECK(std::memcmp(down_e.data(), down_c.data(), down_c.size_bytes()) == 0);
+}
+
 static void test_content_aware_fill() {
     const int W = 192, H = 192;
     Image truth(W, H);
@@ -2839,6 +2873,7 @@ int main() {
     test_edge_preserving_smooth();
     test_one_step_photo_fix();
     test_content_aware_fill();
+    test_edge_directed_resample();
     test_gradient_at_point();
     test_vector_core();
     test_history_limit();
