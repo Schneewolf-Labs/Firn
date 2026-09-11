@@ -1,5 +1,6 @@
 #include "Drive.h"
 
+#include <algorithm>
 #include <cerrno>
 #include <cmath>
 #include <cstdio>
@@ -8,33 +9,22 @@
 #include <sstream>
 #include <vector>
 
-#include <SDL.h>
-#include <SDL_opengl.h>
-#ifndef _WIN32
+#ifdef _WIN32
+#include "DriveAddress.h"   // winsock2.h, which has to come before windows.h
+#include <filesystem>
+#include <random>
+#else
 #include <fcntl.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/un.h>
 #include <unistd.h>
 #endif
+#include <SDL.h>
+#include <SDL_opengl.h>
 
 #include "App.h"
 #include "firn/io.h"
-
-#ifdef _WIN32
-// Unix sockets only; driving is a development aid for the Linux build.
-Driver::~Driver() {}
-bool Driver::start(const std::string&) { std::fprintf(stderr, "FIRN_DRIVE is not supported on Windows\n"); return false; }
-void Driver::before_frame(App&, SDL_Window*) {}
-void Driver::after_render(App&) {}
-void Driver::draw_cursor() {}
-void Driver::poll_socket() {}
-bool Driver::parse_line(const std::string&, App&) { return false; }
-void Driver::ack(const std::string&) {}
-std::string Driver::state_text(App&) const { return {}; }
-std::string Driver::state_json(App&) const { return "{}"; }
-ImVec2 Driver::image_to_window(const App&, float x, float y) const { return ImVec2(x, y); }
-#else
 
 namespace {
 
@@ -83,6 +73,128 @@ bool save_framebuffer(SDL_Window* window, const std::string& path, std::string* 
 }
 
 }  // namespace
+
+#ifdef _WIN32
+
+namespace fs = std::filesystem;
+
+Driver::~Driver() {
+    if (client_fd_ >= 0) closesocket(static_cast<SOCKET>(client_fd_));
+    if (listen_fd_ >= 0) closesocket(static_cast<SOCKET>(listen_fd_));
+    if (!address_path_.empty()) { std::error_code ec; fs::remove(address_path_, ec); }
+}
+
+bool Driver::start(const std::string& path) {
+    WSADATA wsa;
+    if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0) return false;
+    // The same refusals as a Unix socket: never take over a live instance's
+    // address, and never overwrite a file that is not an address at all.
+    std::error_code ec;
+    if (fs::exists(path, ec)) {
+        int port = 0;
+        std::string token;
+        if (!drive_address::read(path, port, token)) {
+            std::fprintf(stderr, "FIRN_DRIVE: refusing to replace a file that is not a driver address: %s\n", path.c_str());
+            return false;
+        }
+        const SOCKET probe = drive_address::connect(path);
+        if (probe != INVALID_SOCKET) {
+            closesocket(probe);
+            std::fprintf(stderr, "FIRN_DRIVE: socket already in use or inaccessible: %s\n", path.c_str());
+            return false;
+        }
+    }
+    const SOCKET s = ::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (s == INVALID_SOCKET) return false;
+    const BOOL exclusive = TRUE;
+    setsockopt(s, SOL_SOCKET, SO_EXCLUSIVEADDRUSE, reinterpret_cast<const char*>(&exclusive), sizeof(exclusive));
+    sockaddr_in addr{};
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    addr.sin_port = 0;   // any free port; the address file says which
+    int len = sizeof(addr);
+    if (bind(s, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) != 0 || listen(s, 32) != 0 ||
+        getsockname(s, reinterpret_cast<sockaddr*>(&addr), &len) != 0) {
+        std::fprintf(stderr, "FIRN_DRIVE: cannot listen on loopback: error %d\n", WSAGetLastError());
+        closesocket(s);
+        return false;
+    }
+    u_long nonblocking = 1;
+    ioctlsocket(s, FIONBIO, &nonblocking);
+    std::random_device random;   // RtlGenRandom on MSVC
+    char hex[33];
+    for (int i = 0; i < 4; ++i) std::snprintf(hex + i * 8, 9, "%08x", static_cast<unsigned>(random()));
+    token_ = hex;
+    // Written beside and renamed over, so a client never reads half a file.
+    const std::string tmp = path + ".tmp";
+    {
+        std::ofstream out(tmp, std::ios::trunc);
+        out << "firn-drive " << ntohs(addr.sin_port) << " " << token_ << "\n";
+        out.flush();
+        if (!out) ec = std::make_error_code(std::errc::io_error);
+    }
+    if (!ec) fs::rename(tmp, path, ec);
+    if (ec) {
+        std::fprintf(stderr, "FIRN_DRIVE: cannot write %s: %s\n", path.c_str(), ec.message().c_str());
+        fs::remove(tmp, ec);
+        closesocket(s);
+        return false;
+    }
+    listen_fd_ = static_cast<std::intptr_t>(s);
+    address_path_ = path;
+    std::fprintf(stderr, "FIRN_DRIVE: listening on %s (127.0.0.1:%d)\n", path.c_str(), ntohs(addr.sin_port));
+    return true;
+}
+
+void Driver::poll_socket() {
+    if (client_fd_ < 0) {
+        const SOCKET c = accept(static_cast<SOCKET>(listen_fd_), nullptr, nullptr);
+        if (c == INVALID_SOCKET) return;
+        u_long nonblocking = 1;
+        ioctlsocket(c, FIONBIO, &nonblocking);
+        const BOOL nodelay = TRUE;
+        setsockopt(c, IPPROTO_TCP, TCP_NODELAY, reinterpret_cast<const char*>(&nodelay), sizeof(nodelay));
+        client_fd_ = static_cast<std::intptr_t>(c);
+        authed_ = false;
+    }
+    char buf[4096];
+    while (true) {
+        const int n = recv(static_cast<SOCKET>(client_fd_), buf, sizeof(buf), 0);
+        if (n > 0) inbuf_.append(buf, static_cast<size_t>(n));
+        else if (n == 0 || WSAGetLastError() != WSAEWOULDBLOCK) { drop_client(); return; }
+        else break;
+    }
+    // The first line has to be the token from the address file.
+    if (!authed_) {
+        const size_t nl = inbuf_.find('\n');
+        if (nl == std::string::npos) { if (inbuf_.size() > 256) drop_client(); return; }
+        std::string line = inbuf_.substr(0, nl);
+        if (!line.empty() && line.back() == '\r') line.pop_back();
+        inbuf_.erase(0, nl + 1);
+        if (line != token_) { drop_client(); return; }
+        authed_ = true;
+    }
+}
+
+void Driver::drop_client() {
+    closesocket(static_cast<SOCKET>(client_fd_));
+    client_fd_ = -1;
+    inbuf_.clear();
+    steps_.clear();
+}
+
+void Driver::ack(const std::string& payload) {
+    if (client_fd_ < 0) return;
+    const std::string line = "ok " + payload + "\n";
+    size_t off = 0;
+    while (off < line.size()) {
+        const int n = send(static_cast<SOCKET>(client_fd_), line.data() + off, static_cast<int>(line.size() - off), 0);
+        if (n == SOCKET_ERROR) { if (WSAGetLastError() == WSAEWOULDBLOCK) { Sleep(1); continue; } break; }
+        off += static_cast<size_t>(n);
+    }
+}
+
+#else
 
 Driver::~Driver() {
     if (client_fd_ >= 0) close(client_fd_);
@@ -141,9 +253,16 @@ void Driver::poll_socket() {
     while (true) {
         const ssize_t n = read(client_fd_, buf, sizeof(buf));
         if (n > 0) inbuf_.append(buf, static_cast<size_t>(n));
-        else if (n == 0) { close(client_fd_); client_fd_ = -1; inbuf_.clear(); steps_.clear(); return; }
+        else if (n == 0) { drop_client(); return; }
         else break;
     }
+}
+
+void Driver::drop_client() {
+    close(client_fd_);
+    client_fd_ = -1;
+    inbuf_.clear();
+    steps_.clear();
 }
 
 void Driver::ack(const std::string& payload) {
@@ -163,6 +282,8 @@ void Driver::ack(const std::string& payload) {
     }
 }
 
+#endif  // _WIN32
+
 ImVec2 Driver::image_to_window(const App& app, float x, float y) const {
     if (!app.doc) return ImVec2(x, y);
     const float dw = app.doc->width() * app.zoom, dh = app.doc->height() * app.zoom;
@@ -173,7 +294,7 @@ std::string Driver::state_text(App& app) const {
     std::ostringstream o;
     o << "tool=\"" << app.tool().name() << "\"";
     o << " docs=" << app.docs.size() << " windows=" << (app.image_windows ? 1 : 0);
-    o << " pen=" << (app.pen.present ? 1 : 0) << " pressure=" << app.pen.pressure << " ui_scale=" << app.ui_scale << " auto_scale=" << app.auto_ui_scale << " font=\"" << (app.font_current_path.empty() ? "sans" : app.font_current_path == "builtin" ? "builtin" : app.font_current_path.substr(app.font_current_path.find_last_of('/') + 1)) << "\" font_size=" << app.font_current_size;
+    o << " pen=" << (app.pen.present ? 1 : 0) << " pressure=" << app.pen.pressure << " ui_scale=" << app.ui_scale << " auto_scale=" << app.auto_ui_scale << " font=\"" << (app.font_current_path.empty() ? "sans" : app.font_current_path == "builtin" ? "builtin" : app.font_current_path.substr(app.font_current_path.find_last_of("/\\") + 1)) << "\" font_size=" << app.font_current_size;
     if (app.doc) {
         o << " title=\"" << app.doc_title << "\" modified=" << (app.modified() ? 1 : 0);
         o << " size=" << app.doc->width() << "x" << app.doc->height() << " depth=" << app.doc->bit_depth() << " layers=" << app.doc->layer_count();
@@ -561,4 +682,3 @@ void Driver::draw_cursor() {
     dl->AddTriangle(tri[0], tri[1], tri[2], IM_COL32(0, 0, 0, 255), 1.0f);
     dl->AddLine(p, ImVec2(p.x + 16, p.y + 16), IM_COL32(0, 0, 0, 255), 2.0f);
 }
-#endif  // _WIN32

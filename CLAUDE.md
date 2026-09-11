@@ -320,12 +320,15 @@ and after any restructuring:
 
 ```sh
 xvfb-run -a python3 scripts/app_tests.py build
+python scripts\app_tests.py build          # Windows: no Xvfb, a small window appears
 ```
 
 
 Unit tests cover the core. For the app, use the in-app driver
 (`app/src/Drive.cpp`): with `FIRN_DRIVE=<socket>` set, the app listens on a
-Unix socket, moves a **virtual cursor** with synthetic ImGui events (the
+Unix socket (on Windows a token-guarded loopback port named by an address
+file at that path, `app/src/DriveAddress.h`, because Python there has no
+`AF_UNIX`; `drive.open_socket` hides the difference), moves a **virtual cursor** with synthetic ImGui events (the
 real pointer is never touched and real mouse events are ignored while
 driving), writes screenshots from its own framebuffer, and answers every
 command with a state line once its frames have run, so scripts never sleep

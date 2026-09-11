@@ -504,7 +504,7 @@ def test_discovery_v2(f):
 
 def main():
     os.environ.setdefault("FIRN_WINDOW", "1280x800")
-    firn = os.path.join(BUILD, "app", "firn")
+    firn = drive.binary(BUILD, "app", "firn")
     if not os.path.exists(firn):
         print("no app binary at " + firn)
         sys.exit(1)

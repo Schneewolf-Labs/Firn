@@ -10,7 +10,12 @@
 //   firn-cli raw 'click 10 20' ...        the driver's own wire steps
 //   firn-cli --launch [file] ...            start the app first and wait for it
 //
-// The socket is $FIRN_DRIVE, or /tmp/firn-drive.sock.
+// The socket is $FIRN_DRIVE, or /tmp/firn-drive.sock (%TEMP%\firn-drive.sock
+// on Windows, where it is the driver's address file: app/src/DriveAddress.h).
+#ifdef _WIN32
+#include "DriveAddress.h"   // winsock2.h, which has to come before windows.h
+#include <windows.h>
+#endif
 #include <cerrno>
 #include <fstream>
 #include <iterator>
@@ -25,20 +30,88 @@
 #include <string>
 #include <vector>
 
+#ifndef _WIN32
 #include <fcntl.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/un.h>
 #include <unistd.h>
+#endif
 
 namespace {
 
+#ifdef _WIN32
+using Socket = SOCKET;
+constexpr Socket kNoSocket = INVALID_SOCKET;
+void close_socket(Socket s) { closesocket(s); }
+void sleep_ms(int ms) { Sleep(static_cast<DWORD>(ms)); }
+#else
+using Socket = int;
+constexpr Socket kNoSocket = -1;
+void close_socket(Socket s) { close(s); }
+void sleep_ms(int ms) { usleep(static_cast<useconds_t>(ms) * 1000); }
+#endif
+
 std::string socket_path() {
     if (const char* env = std::getenv("FIRN_DRIVE")) return env;
+#ifdef _WIN32
+    char tmp[MAX_PATH + 1];
+    const DWORD n = GetTempPathA(sizeof(tmp), tmp);   // ends in a backslash
+    if (n > 0 && n < sizeof(tmp)) return std::string(tmp, n) + "firn-drive.sock";
+#endif
     return "/tmp/firn-drive.sock";
 }
 
-int connect_once(const std::string& path) {
+#ifdef _WIN32
+Socket connect_once(const std::string& path) { return drive_address::connect(path); }
+
+// No retries: the address file is written only once the port listens, and
+// Windows already retries a refused loopback connection for a second or two.
+Socket connect_to(const std::string& path) { return connect_once(path); }
+
+// Starts the app in the background and waits for it to answer.
+Socket launch(const std::string& path, const char* image) {
+    const char* exe = std::getenv("FIRN_APP");
+    std::string binary = exe ? exe : "firn.exe";
+    if (!exe) {
+        // Prefer a build beside this tool: ../app (single-config generators),
+        // ../../app/<Config> (Visual Studio), or the same folder (an install).
+        char self[MAX_PATH];
+        const DWORD n = GetModuleFileNameA(nullptr, self, MAX_PATH);
+        if (n > 0 && n < MAX_PATH) {
+            const std::string me(self, n);
+            const std::string dir = me.substr(0, me.find_last_of("\\/"));
+            const std::string config = dir.substr(dir.find_last_of("\\/") + 1);
+            for (const std::string& candidate : {dir + "\\..\\app\\firn.exe", dir + "\\..\\..\\app\\" + config + "\\firn.exe", dir + "\\firn.exe"}) {
+                if (GetFileAttributesA(candidate.c_str()) != INVALID_FILE_ATTRIBUTES) { binary = candidate; break; }
+            }
+        }
+    }
+    // Reuse an already running instance on this explicit socket.
+    if (const Socket existing = connect_to(path); existing != kNoSocket) return existing;
+    _putenv_s("FIRN_DRIVE", path.c_str());
+    if (!std::getenv("FIRN_WINDOW")) _putenv_s("FIRN_WINDOW", "1280x800");
+    std::string cmd = "\"" + binary + "\"";
+    if (image) cmd += std::string(" \"") + image + "\"";
+    STARTUPINFOA si{};
+    si.cb = sizeof(si);
+    PROCESS_INFORMATION pi{};
+    // No inherited handles: a caller capturing this tool's output would
+    // otherwise wait on the app, which holds its pipes open until it exits.
+    if (!CreateProcessA(nullptr, cmd.data(), nullptr, nullptr, FALSE, CREATE_NEW_PROCESS_GROUP | DETACHED_PROCESS,
+                        nullptr, nullptr, &si, &pi))
+        return kNoSocket;
+    CloseHandle(pi.hThread);
+    CloseHandle(pi.hProcess);
+    for (int i = 0; i < 400; ++i) {   // up to 20 seconds
+        const Socket fd = connect_to(path);
+        if (fd != kNoSocket) return fd;
+        sleep_ms(50);
+    }
+    return kNoSocket;
+}
+#else
+Socket connect_once(const std::string& path) {
     const int fd = socket(AF_UNIX, SOCK_STREAM, 0);
     if (fd < 0) return -1;
     sockaddr_un addr{};
@@ -55,18 +128,18 @@ int connect_once(const std::string& path) {
 
 // A one-client-per-frame server may briefly fill its accept queue during
 // back-to-back CLI calls. Cocoa can report that as ECONNREFUSED.
-int connect_to(const std::string& path) {
+Socket connect_to(const std::string& path) {
     for (int attempt = 0; attempt < 10; ++attempt) {
-        const int fd = connect_once(path);
+        const Socket fd = connect_once(path);
         if (fd >= 0) return fd;
         if (errno != ECONNREFUSED && errno != EAGAIN && errno != EINTR) break;
-        usleep(20000);
+        sleep_ms(20);
     }
     return -1;
 }
 
 // Starts the app in the background and waits for it to answer.
-int launch(const std::string& path, const char* image) {
+Socket launch(const std::string& path, const char* image) {
     const char* exe = std::getenv("FIRN_APP");
     std::string binary = exe ? exe : "firn";
     if (!exe) {
@@ -101,19 +174,23 @@ int launch(const std::string& path, const char* image) {
         _exit(127);
     }
     for (int i = 0; i < 400; ++i) {   // up to 20 seconds
-        const int fd = connect_to(path);
+        const Socket fd = connect_to(path);
         if (fd >= 0) return fd;
-        usleep(50000);
+        sleep_ms(50);
     }
     return -1;
 }
+#endif
 
 // Sends one line and returns the reply, which the app writes once the frames
 // for that command have run.
-bool exchange(int fd, const std::string& line, std::string& reply) {
+bool exchange(Socket fd, const std::string& line, std::string& reply) {
     const std::string out = line + "\n";
     size_t off = 0;
     while (off < out.size()) {
+#ifdef _WIN32
+        const int n = send(fd, out.data() + off, static_cast<int>(out.size() - off), 0);
+#else
         const ssize_t n = send(fd, out.data() + off, out.size() - off,
 #ifdef MSG_NOSIGNAL
                                MSG_NOSIGNAL
@@ -121,13 +198,18 @@ bool exchange(int fd, const std::string& line, std::string& reply) {
                                0
 #endif
         );
+#endif
         if (n <= 0) return false;
         off += static_cast<size_t>(n);
     }
     reply.clear();
     char buf[4096];
     while (reply.find('\n') == std::string::npos) {
+#ifdef _WIN32
+        const int n = recv(fd, buf, sizeof(buf), 0);
+#else
         const ssize_t n = read(fd, buf, sizeof(buf));
+#endif
         if (n <= 0) return false;
         reply.append(buf, static_cast<size_t>(n));
     }
@@ -152,6 +234,10 @@ int usage() {
 }  // namespace
 
 int main(int argc, char** argv) {
+#ifdef _WIN32
+    WSADATA wsa;
+    if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0) { std::fprintf(stderr, "firn-cli: Winsock did not start\n"); return 1; }
+#endif
     std::string path = socket_path();
     bool do_launch = false;
     const char* image = nullptr;
@@ -208,8 +294,8 @@ int main(int argc, char** argv) {
         return usage();
     }
 
-    const int fd = do_launch ? launch(path, image) : connect_to(path);
-    if (fd < 0) {
+    const Socket fd = do_launch ? launch(path, image) : connect_to(path);
+    if (fd == kNoSocket) {
         std::fprintf(stderr, "firn-cli: no program listening on %s%s\n", path.c_str(),
                      do_launch ? " (it did not start)" : " (start it with FIRN_DRIVE set, or pass --launch)");
         return 1;
@@ -228,6 +314,6 @@ int main(int argc, char** argv) {
         }
         std::printf("%s\n", payload.rfind("result ", 0) == 0 ? payload.substr(7).c_str() : payload.c_str());
     }
-    close(fd);
+    close_socket(fd);
     return status;
 }

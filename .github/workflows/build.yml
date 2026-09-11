@@ -51,6 +51,16 @@ jobs:
         run: cmake --build build --config Release
       - name: Unit tests
         run: ctest --test-dir build -C Release --output-on-failure
+      # The runner has no GPU and its stock OpenGL is 1.1, too old for the
+      # app's 3.0 context; Mesa's llvmpipe renders in software instead.
+      - name: Software OpenGL (Mesa)
+        uses: ssciwr/setup-mesa-dist-win@v3
+      - name: Smoke test (drives the app)
+        run: python scripts/smoke.py build
+      - name: App behaviour tests
+        run: python scripts/app_tests.py build
+      - name: CLI API tests
+        run: python scripts/cli_tests.py build
       - name: Package
         run: cd build; cpack -G ZIP -C Release
       - uses: actions/upload-artifact@v4

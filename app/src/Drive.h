@@ -1,4 +1,5 @@
 #pragma once
+#include <cstdint>
 #include <deque>
 #include <string>
 
@@ -13,6 +14,8 @@ struct SDL_Window;
 // real mouse events are ignored while driving so a stray pointer cannot
 // interfere. Each command is acknowledged with "ok ...\n" once its frames
 // have run, so clients never guess at timing. See scripts/drive.py.
+// On Windows FIRN_DRIVE names an address file for a loopback TCP port
+// instead (DriveAddress.h); the protocol is the same once connected.
 class Driver {
 public:
     ~Driver();
@@ -39,6 +42,7 @@ private:
         double deadline = 0;
     };
     void poll_socket();
+    void drop_client();
     bool parse_line(const std::string& line, App& app);
     void ack(const std::string& payload);
     std::string state_text(App& app) const;
@@ -47,7 +51,11 @@ private:
     ImVec2 image_to_window(const App& app, float x, float y) const;
 
     SDL_Window* window_ = nullptr;
-    int listen_fd_ = -1, client_fd_ = -1;
+    // File descriptors, or Winsock SOCKETs (whose INVALID_SOCKET is also -1 here).
+    std::intptr_t listen_fd_ = -1, client_fd_ = -1;
+    std::string address_path_;   // Windows: the address file this instance wrote
+    std::string token_;          // Windows: what a client must send first
+    bool authed_ = true;
     std::string inbuf_;
     std::deque<Step> steps_;
     bool cursor_valid_ = false;

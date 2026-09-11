@@ -2,7 +2,7 @@
 
 ## Dependencies
 
-Firn needs a C++20 compiler, CMake 3.20 or newer, SDL2 and OpenGL. Dear ImGui
+Firn needs a C++20 compiler, CMake 3.22 or newer, SDL2 and OpenGL. Dear ImGui
 (docking branch) and libwebp are fetched by CMake on the first configure; the
 stb single-header libraries are vendored in `third_party/`.
 
@@ -24,6 +24,28 @@ ctest --test-dir build --output-on-failure
 
 Warnings are errors in spirit: the build runs with `-Wall -Wextra -Wpedantic`
 and is expected to stay silent.
+
+### Windows
+
+Use Visual Studio 2022 (the CMake it bundles is new enough) and either
+vcpkg (`vcpkg install sdl2:x64-windows`, then pass its toolchain file as CI
+does) or SDL's own `SDL2-devel-<version>-VC.zip` from the SDL releases page,
+unpacked anywhere; `build-deps/` is gitignored:
+
+```powershell
+cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DSDL2_DIR=build-deps/SDL2-2.32.10/cmake
+cmake --build build --config Release
+ctest --test-dir build -C Release --output-on-failure
+build\app\Release\firn.exe samples\luca.jpg
+```
+
+The build copies `SDL2.dll` next to `firn.exe`. The test suites below run
+here too (`python scripts\app_tests.py build`); they find the programs under
+`Release\`. On Windows `FIRN_DRIVE` names a small address file rather than a
+Unix socket, because Python there cannot open one: the app listens on a
+loopback port and writes that port and a random token into the file, and
+clients present the token first (`app/src/DriveAddress.h`). `drive.py` and
+`firn-cli` handle this for you.
 
 ## Install
 
@@ -61,7 +83,8 @@ menu category driving a document model, with tools and palettes on top. See
 | `python3 scripts/app_tests.py` | the action API, one assertion per behavior |
 | `python3 scripts/gen_api_docs.py --check` | the generated API manual is current |
 
-CI runs these suites on Linux and builds and tests on Windows and macOS. Every
+CI runs these suites on Linux, Windows (under Mesa's software OpenGL) and
+macOS; the manual check runs on Linux. Every
 push to `main` leaves Linux and Windows packages as workflow artifacts.
 
 ## Checking interface changes

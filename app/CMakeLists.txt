@@ -71,6 +71,9 @@ add_dependencies(firn_app firn_version)
 # Lets a development build find the sample tubes in the (gitignored) backup.
 target_compile_definitions(firn_app PUBLIC FIRN_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 target_link_libraries(firn_app PUBLIC firncore imgui SDL2::SDL2 OpenGL::GL)
+if(WIN32)
+  target_link_libraries(firn_app PUBLIC ws2_32)   # the driver's loopback socket
+endif()
 # Pen tablets: XInput2 on X11 (optional at build time), pointer messages on
 # Windows, NSEvent tablet data on macOS.
 if(UNIX AND NOT APPLE)
@@ -105,6 +108,11 @@ if(WIN32)
   else()
     target_link_options(firn PRIVATE -mwindows -Wl,-e,mainCRTStartup)
   endif()
+  # Put SDL2.dll beside the built exe so it runs from the build tree. vcpkg's
+  # toolchain does this itself; SDL's own VC package (SDL2_DIR) does not.
+  add_custom_command(TARGET firn POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_RUNTIME_DLLS:firn> $<TARGET_FILE_DIR:firn>
+    COMMAND_EXPAND_LISTS)
 endif()
 
 # Keep the CLI-friendly executable path, and also produce a discoverable

@@ -10,7 +10,11 @@ Three ways in, one surface:
 - **`firn-cli`**, the command line client (`tools/cli.cpp`).
 - **The driver socket** directly: `$FIRN_DRIVE` (default `/tmp/firn-drive.sock`),
   one command per line, one reply per command, sent once the frames for that
-  command have run. `scripts/drive.py` is the Python client.
+  command have run. `scripts/drive.py` is the Python client. On Windows
+  (default `%TEMP%\firn-drive.sock`) the path is an address file holding
+  `firn-drive <port> <token>`: connect to that loopback port and send the
+  token as the first line, then speak the same protocol. A connection that
+  does not is dropped (`app/src/DriveAddress.h`).
 - **`.PspScript` files**, through `scripts/firn-script.py`, which also reach
   the original's own commands (`docs/COMMANDS.md`).
 
@@ -139,7 +143,7 @@ and common drawing-workflow replacements appear in `legacy_replacements`.
 
 Use `--socket PATH` to connect to a particular instance. `--launch` reuses
 an existing listener at that address, and can locate the sibling app binary
-on Linux and macOS. Starting a second app at an occupied address fails
+on Linux, macOS and Windows. Starting a second app at an occupied address fails
 without unlinking the original listener. `scripts/drive.py --kill` shuts down
 only its selected socket; it no longer kills other Firn processes. The test
 and documentation scripts use private sockets and configuration directories.

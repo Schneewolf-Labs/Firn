@@ -6,8 +6,10 @@
     python3 scripts/drive.py --kill                stop the instance on FIRN_DRIVE
 
 The app listens on the Unix socket named by FIRN_DRIVE (default
-/tmp/firn-drive.sock) and moves a virtual cursor: the real pointer is never
-touched, and real mouse events are ignored while driving. Steps
+/tmp/firn-drive.sock; on Windows %TEMP%\\firn-drive.sock, a file naming a
+loopback port, see app/src/DriveAddress.h) and moves a virtual cursor: the
+real pointer is never touched, and real mouse events are ignored while
+driving. Steps
 (window-relative pixels; *_img variants take image pixel coordinates):
 
     mv:X:Y  mv_img:X:Y            move the virtual cursor
@@ -41,25 +43,63 @@ touched, and real mouse events are ignored while driving. Steps
 Every step returns the state line; the last one is printed. Exit status is
 1 when a step is rejected. Requires nothing beyond python3.
 """
-import os, socket, subprocess, sys, time
+import os, socket, subprocess, sys, tempfile, time
 
-SOCK = os.environ.get("FIRN_DRIVE", "/tmp/firn-drive.sock")
+WINDOWS = os.name == "nt"
+TMP = tempfile.gettempdir() if WINDOWS else "/tmp"
+SOCK = os.environ.get("FIRN_DRIVE", os.path.join(TMP, "firn-drive.sock"))
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def binary(build, *parts):
+    """A built program under build, allowing for Windows' .exe and the
+    per-configuration folders of multi-config generators (Visual Studio)."""
+    base = os.path.join(build, *parts)
+    folder, name = os.path.split(base)
+    for config in ("", "Release", "RelWithDebInfo", "Debug", "MinSizeRel"):
+        for ext in ("", ".exe") if WINDOWS else ("",):
+            path = os.path.join(folder, config, name + ext)
+            if os.path.isfile(path):
+                return path
+    return base
+
+
+def open_socket(path, timeout=None):
+    """Connects to the driver at path. On Windows path is the address file the
+    app writes, "firn-drive PORT TOKEN" (app/src/DriveAddress.h): connect to
+    the loopback port and present the token before anything else."""
+    if not WINDOWS:
+        s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        s.settimeout(timeout)
+        try:
+            s.connect(path)
+        except BaseException:
+            s.close()
+            raise
+        return s
+    with open(path) as f:
+        fields = f.read().split()
+    if len(fields) != 3 or fields[0] != "firn-drive" or not fields[1].isdigit():
+        raise ConnectionRefusedError(f"{path} is not a driver address")
+    s = socket.create_connection(("127.0.0.1", int(fields[1])), timeout=timeout)
+    s.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+    s.sendall(fields[2].encode() + b"\n")
+    return s
+
 
 def kill():
     """Gracefully stop only the instance on SOCK; never match processes by name."""
-    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    s.settimeout(2.0)
     try:
-        s.connect(SOCK)
+        s = open_socket(SOCK, timeout=2.0)
+    except (FileNotFoundError, ConnectionRefusedError):
+        return
+    try:
         s.sendall(b"quit\n")
         try:
             while s.recv(4096):
                 pass
         except OSError:
             pass
-    except (FileNotFoundError, ConnectionRefusedError):
-        pass
     finally:
         s.close()
 
@@ -67,12 +107,9 @@ def kill():
 def connect(timeout=15.0):
     deadline = time.time() + timeout
     while True:
-        s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         try:
-            s.connect(SOCK)
-            return s
+            return open_socket(SOCK)
         except OSError:
-            s.close()
             if time.time() > deadline:
                 sys.exit(f"drive.py: no app listening on {SOCK} (start one with --launch)")
             time.sleep(0.1)
@@ -81,8 +118,8 @@ def launch(image=None):
     kill()
     env = dict(os.environ, FIRN_DRIVE=SOCK)
     env.setdefault("FIRN_WINDOW", "1400x900")
-    cmd = [os.path.join(ROOT, "build", "app", "firn")] + ([image] if image else [])
-    log = open(os.environ.get("FIRN_LOG", "/tmp/firn-drive.log"), "w")
+    cmd = [binary(os.path.join(ROOT, "build"), "app", "firn")] + ([image] if image else [])
+    log = open(os.environ.get("FIRN_LOG", os.path.join(TMP, "firn-drive.log")), "w")
     subprocess.Popen(cmd, env=env, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
     s = connect()
     s.sendall(b"wait 30\n")

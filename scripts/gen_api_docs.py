@@ -33,7 +33,7 @@ GROUPS = [
 def describe():
     env = dict(os.environ, FIRN_DRIVE=drive.SOCK, XDG_CONFIG_HOME=_SESSION)
     env.setdefault("FIRN_WINDOW", "900x700")
-    firn = os.path.join(BUILD, "app", "firn")
+    firn = drive.binary(BUILD, "app", "firn")
     if not os.path.exists(firn):
         sys.exit("no app binary at " + firn)
     drive.kill()
@@ -149,7 +149,7 @@ def main():
     if CHECK:
         stale = []
         for path, want in ((MD, md), (JS, js)):
-            have = open(path).read() if os.path.exists(path) else ""
+            have = open(path, encoding="utf-8").read() if os.path.exists(path) else ""
             if have != want:
                 stale.append(os.path.relpath(path, ROOT))
         if stale:
@@ -158,8 +158,9 @@ def main():
             sys.exit(1)
         print("the API manual matches the program")
         return
-    open(MD, "w").write(md)
-    open(JS, "w").write(js)
+    # UTF-8 with LF endings everywhere, or a Windows run rewrites every line.
+    open(MD, "w", encoding="utf-8", newline="\n").write(md)
+    open(JS, "w", encoding="utf-8", newline="\n").write(js)
     print("wrote {} ({} actions) and {}".format(os.path.relpath(MD, ROOT), len(api["actions"]), os.path.relpath(JS, ROOT)))
 
 

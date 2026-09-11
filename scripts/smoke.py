@@ -51,7 +51,7 @@ def run(sock, steps):
 
 def main():
     os.environ.setdefault("FIRN_WINDOW", "1280x800")
-    firn = os.path.join(BUILD, "app", "firn")
+    firn = drive.binary(BUILD, "app", "firn")
     check(os.path.exists(firn), "app binary present at " + firn)
     if failures:
         sys.exit(1)
@@ -120,7 +120,7 @@ def main():
             failures.append("app did not exit on quit")
         log.close()
 
-    conv = os.path.join(BUILD, "tools", "firn-convert")
+    conv = drive.binary(BUILD, "tools", "firn-convert")
     r = subprocess.run([conv, PSP, CONVERTED], capture_output=True, text=True)
     check(r.returncode == 0 and os.path.exists(CONVERTED), "firn-convert flattened the native file")
     if r.returncode != 0:

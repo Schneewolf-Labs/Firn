@@ -17,6 +17,12 @@ section into the next version.
   layer-mask state cannot leak into another document. Leaving an untouched
   selection edit preserves redo.
 - Headless app-state regressions run under CTest alongside the core tests.
+- Windows builds run straight from the build tree without vcpkg: point
+  `SDL2_DIR` at SDL's own VC package and the build copies `SDL2.dll` beside
+  `firn.exe` (docs/BUILDING.md, "Windows").
+- The driver, `firn-cli` and the app test suites work on Windows. There
+  `FIRN_DRIVE` names an address file for a loopback port, and clients must
+  present the random token it holds before the program listens to them.
 - Fixed a crash when flattening from a layer context menu. Menu and palette
   rendering no longer read the old layer stack after merges or deletion.
 - Searchable tools with common tools first and collapsible specialist categories.
