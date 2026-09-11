@@ -2892,6 +2892,163 @@ static void test_icc() {
     std::remove(png.c_str()); std::remove(jpg.c_str());
 }
 
+// What of a vector layer actually survives the project format: not just
+// that the objects come back, but that their geometry, paint, text and
+// grouping come back with them.
+static void test_openraster_vectors() {
+    Document doc(64, 48);
+    doc.add_layer("Background").background = true;
+    Layer& L = doc.add_layer("Shapes");
+    L.type = LayerType::Vector;
+
+    // A curved open path with real Bezier handles and a dashed, capped stroke.
+    {
+        vec::Object o;
+        o.name = "Curve";
+        vec::Path p;
+        p.closed = false;
+        vec::Node a; a.x = 4; a.y = 4; a.in_x = 2; a.in_y = 3; a.out_x = 9; a.out_y = 7;
+        vec::Node b; b.x = 20; b.y = 30; b.in_x = 15; b.in_y = 22; b.out_x = 24; b.out_y = 33;
+        p.nodes = {a, b};
+        o.paths.push_back(p);
+        o.stroke.kind = vec::PaintStyle::Kind::Solid;
+        o.stroke.color = {12, 34, 56, 255};
+        o.stroke_width = 3.5f;
+        o.line.dashes = {4.0f, 2.0f};
+        o.line.first_cap = 3;
+        o.line.last_cap = 1;
+        o.antialias = false;
+        L.objects.push_back(o);
+    }
+    // A closed shape filled with a gradient.
+    {
+        vec::Object o = vec::make_ellipse(30, 20, 10, 6);
+        o.name = "Blob";
+        o.fill.kind = vec::PaintStyle::Kind::Gradient;
+        o.fill.gradient.style = vec::GradientStyle::Sunburst;
+        o.fill.gradient.angle = 33.0f;
+        o.fill.gradient.center_x = 40;
+        o.fill.gradient.colors = {{{255, 0, 0, 255}, 0, 50}, {{0, 0, 255, 255}, 100, 50}};
+        o.stroke.kind = vec::PaintStyle::Kind::None;
+        o.visible = false;
+        L.objects.push_back(o);
+    }
+    // A group of two rectangles.
+    {
+        vec::Object g;
+        g.name = "Pair";
+        g.is_group = true;
+        g.group_count = 2;
+        L.objects.push_back(g);
+        vec::Object r1 = vec::make_rectangle(2, 2, 8, 8);
+        r1.name = "One";
+        r1.fill.kind = vec::PaintStyle::Kind::Solid;
+        r1.fill.color = {0, 255, 0, 255};
+        L.objects.push_back(r1);
+        vec::Object r2 = vec::make_rectangle(10, 2, 16, 8);
+        r2.name = "Two";
+        L.objects.push_back(r2);
+    }
+    // A text object, which must stay editable text and not become outlines.
+    {
+        vec::Object o;
+        o.name = "Label";
+        o.is_text = true;
+        o.text.text = "Firn";
+        o.text.font_family = "DejaVu Sans";
+        o.text.size = 17.5f;
+        o.text.align = 2;
+        o.text.rotation = 15.0f;
+        o.text.x = 6;
+        o.text.y = 40;
+        o.fill.kind = vec::PaintStyle::Kind::Solid;
+        o.fill.color = {9, 9, 9, 255};
+        L.objects.push_back(o);
+    }
+    L.pixels = Image(64, 48, {0, 0, 0, 0});
+    doc.rasterize_vector_layer(1);
+
+    const std::vector<uint8_t> bytes = io::save_ora_to_memory(doc);
+    std::string err;
+    std::vector<std::string> warnings;
+    auto back = io::load_ora_from_memory(bytes.data(), bytes.size(), &err, &warnings);
+    CHECK(back && err.empty() && back->layer_count() == 2);
+    const Layer& R = back->layer(1);
+    CHECK(R.is_vector() && R.objects.size() == 6);
+
+    const vec::Object& curve = R.objects[0];
+    CHECK(curve.name == "Curve");
+    CHECK(curve.paths.size() == 1 && !curve.paths[0].closed && curve.paths[0].nodes.size() == 2);
+    CHECK(std::abs(curve.paths[0].nodes[1].x - 20.0f) < 0.01f && std::abs(curve.paths[0].nodes[1].y - 30.0f) < 0.01f);
+    CHECK(std::abs(curve.paths[0].nodes[0].out_x - 9.0f) < 0.01f && std::abs(curve.paths[0].nodes[1].in_y - 22.0f) < 0.01f);
+    CHECK(curve.stroke.kind == vec::PaintStyle::Kind::Solid && curve.stroke.color.r == 12 && curve.stroke.color.b == 56);
+    CHECK(std::abs(curve.stroke_width - 3.5f) < 0.01f);
+    CHECK(curve.line.first_cap == 3 && curve.line.last_cap == 1);
+    // KNOWN GAP: a shape's dash array has nowhere to go. The attribute chunk
+    // carries the end caps and the line style block the segment caps, but
+    // neither holds the dashes, so a dashed styled line comes back solid.
+    // Both formats share the shape writer, so both lose it. If this starts
+    // passing, the gap was fixed: assert the dashes instead.
+    CHECK(curve.line.dashes.empty());
+    CHECK(!curve.antialias);
+
+    const vec::Object& blob = R.objects[1];
+    CHECK(blob.name == "Blob");
+    // KNOWN GAP: Object::visible is never written. A vector object hidden
+    // from the Layers palette or the Vector Properties dialog comes back
+    // visible. Both formats, and nothing warns.
+    CHECK(blob.visible);
+    CHECK(blob.paths.size() == 1 && blob.paths[0].closed);
+    CHECK(blob.fill.kind == vec::PaintStyle::Kind::Gradient);
+    CHECK(blob.fill.gradient.style == vec::GradientStyle::Sunburst);
+    CHECK(std::abs(blob.fill.gradient.angle - 33.0f) < 0.5f);
+    CHECK(blob.fill.gradient.colors.size() == 2 && blob.fill.gradient.colors[0].color.r == 255 && blob.fill.gradient.colors[1].color.b == 255);
+    CHECK(blob.stroke.kind == vec::PaintStyle::Kind::None);
+
+    CHECK(R.objects[2].is_group && R.objects[2].group_count == 2 && R.objects[2].name == "Pair");
+    CHECK(vec::group_end(R.objects, 2) == 5);
+    CHECK(R.objects[3].name == "One" && R.objects[3].fill.color.g == 255);
+    CHECK(R.objects[4].name == "Two");
+
+    const vec::Object& label = R.objects[5];
+    CHECK(label.is_text && label.text.text == "Firn");
+    // Point size is stored as a whole number, so a fractional size rounds.
+    CHECK(std::abs(label.text.size - 18.0f) < 0.01f);
+    CHECK(label.text.align == 2);
+    CHECK(std::abs(label.text.rotation - 15.0f) < 0.5f);
+    CHECK(label.fill.color.r == 9);
+
+    // The rendered cache comes back too, so opening a project draws without
+    // re-rasterizing every vector layer first.
+    CHECK(R.pixels.width() == 64 && R.pixels.height() == 48);
+
+    // KNOWN GAP: a pattern or texture paint style is an image, and the shape
+    // writer has no room for one. The kind survives but the image does not,
+    // so the object comes back painting its flat colour instead. Again both
+    // formats, and nothing warns.
+    {
+        Document pd(16, 16);
+        pd.add_layer("Background").background = true;
+        Layer& pl = pd.add_layer("V");
+        pl.type = LayerType::Vector;
+        vec::Object po = vec::make_rectangle(2, 2, 12, 12);
+        po.fill.kind = vec::PaintStyle::Kind::Pattern;
+        po.fill.pattern = std::make_shared<Image>(4, 4, Color{7, 8, 9, 255});
+        po.fill.pattern_scale = 2.5f;
+        pl.objects.push_back(po);
+        pl.pixels = Image(16, 16, {0, 0, 0, 0});
+        pd.rasterize_vector_layer(1);
+        const std::vector<uint8_t> pb = io::save_ora_to_memory(pd);
+        std::string perr;
+        auto pback = io::load_ora_from_memory(pb.data(), pb.size(), &perr, nullptr);
+        CHECK(pback && pback->layer(1).objects.size() == 1);
+        const vec::PaintStyle& pf = pback->layer(1).objects[0].fill;
+        CHECK(pf.kind == vec::PaintStyle::Kind::Pattern);
+        CHECK(!pf.pattern);
+        CHECK(std::abs(pf.pattern_scale - 1.0f) < 0.01f);
+    }
+}
+
 static void test_metadata() {
     meta::Metadata md;
     CHECK(md.empty());
@@ -2960,6 +3117,7 @@ static void test_metadata() {
 
 int main() {
     test_icc();
+    test_openraster_vectors();
     test_metadata();
     test_16bit();
     test_print();
