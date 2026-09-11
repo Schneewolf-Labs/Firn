@@ -601,6 +601,28 @@ float catmull_rom(float x) {
 float triangle(float x) { x = std::abs(x); return x < 1.0f ? 1.0f - x : 0.0f; }
 
 // Precomputed per-output-pixel taps for a 1-D pass.
+// sinc(x) windowed by sinc(x/3): the sharpest of the three, with a little
+// ringing either side of a hard edge.
+float lanczos3(float x) {
+    x = std::abs(x);
+    if (x < 1e-6f) return 1.0f;
+    if (x >= 3.0f) return 0.0f;
+    const float pix = 3.14159265358979f * x;
+    return 3.0f * std::sin(pix) * std::sin(pix / 3.0f) / (pix * pix);
+}
+
+// Mitchell-Netravali with B = C = 1/3: no ringing, slightly soft.
+float mitchell(float x) {
+    x = std::abs(x);
+    const float b = 1.0f / 3.0f, c = 1.0f / 3.0f;
+    const float x2 = x * x, x3 = x2 * x;
+    if (x < 1.0f)
+        return ((12 - 9 * b - 6 * c) * x3 + (-18 + 12 * b + 6 * c) * x2 + (6 - 2 * b)) / 6.0f;
+    if (x < 2.0f)
+        return ((-b - 6 * c) * x3 + (6 * b + 30 * c) * x2 + (-12 * b - 48 * c) * x + (8 * b + 24 * c)) / 6.0f;
+    return 0.0f;
+}
+
 struct Taps {
     std::vector<int> start;       // first source index per output index
     std::vector<int> count;       // number of taps
@@ -612,7 +634,9 @@ Taps make_taps(int src_n, int dst_n, Filter filter) {
     Taps t;
     const float scale = static_cast<float>(src_n) / dst_n;
     const float blur = std::max(1.0f, scale);  // widen support when shrinking
-    const float support = (filter == Filter::Bicubic ? 2.0f : filter == Filter::Bilinear ? 1.0f : 0.5f) * blur;
+    const float support = (filter == Filter::Lanczos ? 3.0f
+                           : filter == Filter::Bicubic || filter == Filter::Mitchell ? 2.0f
+                           : filter == Filter::Bilinear ? 1.0f : 0.5f) * blur;
     t.start.resize(dst_n); t.count.resize(dst_n);
     std::vector<float> w;
     for (int i = 0; i < dst_n; ++i) {
@@ -626,6 +650,8 @@ Taps make_taps(int src_n, int dst_n, Filter filter) {
             const float x = ((j + 0.5f) - center) / blur;
             float k;
             if (filter == Filter::Bicubic) k = catmull_rom(x);
+            else if (filter == Filter::Lanczos) k = lanczos3(x);
+            else if (filter == Filter::Mitchell) k = mitchell(x);
             else if (filter == Filter::Bilinear) k = triangle(x);
             else k = std::abs(x) < 0.5f ? 1.0f : 0.0f;
             w.push_back(k);
@@ -652,7 +678,7 @@ Image resample(const Image& src, int w, int h, Filter filter) {
     if (filter == Filter::Smart) {
         const bool shrinking = w < src.width() || h < src.height();
         const bool big_enlargement = w >= src.width() * 2 && h >= src.height() * 2;
-        filter = shrinking || !big_enlargement ? Filter::Bicubic : Filter::EdgeDirected;
+        filter = shrinking || !big_enlargement ? Filter::Lanczos : Filter::EdgeDirected;
     }
     if (filter == Filter::EdgeDirected) {
         // Only enlargement benefits; shrinking wants the area average.

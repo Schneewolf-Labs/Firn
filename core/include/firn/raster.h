@@ -170,10 +170,14 @@ namespace firn::raster {
 // cubic convolution), which keeps diagonals clean where Bicubic softens or
 // staircases them. It only applies when enlarging; shrinking falls back to
 // Bicubic, which is already an area average.
-// Smart picks per resize, the way the original's "Smart size" does: the
-// area average when reducing, and when enlarging either bicubic or, past a
-// doubling where staircasing starts to show, the edge-directed filter.
-enum class Filter { Nearest, Bilinear, Bicubic, EdgeDirected, Smart };
+// Smart picks per resize, the way the original's "Smart size" does:
+// Lanczos for a reduction or a modest enlargement, which keeps the most
+// detail on a photograph, and the edge-directed filter past a doubling,
+// where staircasing starts to show instead.
+// Lanczos is the sharpest of the separable filters and the usual choice for
+// photographic reduction, at the cost of slight ringing on hard edges;
+// Mitchell is the soft, ringing-free one.
+enum class Filter { Nearest, Bilinear, Bicubic, EdgeDirected, Smart, Lanczos, Mitchell };
 
 // Resamples to (w, h). Works in premultiplied alpha; when shrinking, the
 // filter support widens so every source pixel contributes (area average).

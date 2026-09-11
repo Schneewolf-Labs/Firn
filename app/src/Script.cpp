@@ -400,6 +400,8 @@ std::string App::do_command(const std::string& name, const Value& p, bool* ok) {
         // The original's own scripts all pass SmartSize, its default.
         const raster::Filter f = rt == "Pixel" ? raster::Filter::Nearest : rt == "Bilinear" ? raster::Filter::Bilinear
                                  : rt == "EdgeDirected" ? raster::Filter::EdgeDirected
+                                 : rt == "Lanczos" ? raster::Filter::Lanczos
+                                 : rt == "Mitchell" ? raster::Filter::Mitchell
                                  : rt == "Bicubic" ? raster::Filter::Bicubic : raster::Filter::Smart;
         run(std::make_unique<ResizeCommand>(std::max(1, static_cast<int>(std::lround(w))), std::max(1, static_cast<int>(std::lround(h))), f));
         fit_requested = true;

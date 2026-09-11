@@ -7,6 +7,12 @@ section into the next version.
 ## Unreleased
 
 ### Added
+- Image > Resize offers Lanczos and Mitchell alongside the existing
+  filters, and a Smart size option that chooses for you the way the
+  original's default does: Lanczos when reducing or enlarging a little
+  (33.6 dB against bicubic's 32.1 on a photo doubled), edge directed past
+  a doubling. Smart size is the new default and what the ResampleType
+  script parameter maps to.
 - Image > Resize offers Edge directed resampling, which interpolates along
   an edge instead of averaging across it. On hard-edged artwork enlarged
   several times it keeps curves and diagonals clean where bicubic

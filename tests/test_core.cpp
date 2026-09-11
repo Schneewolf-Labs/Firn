@@ -1471,12 +1471,41 @@ static void test_edge_directed_resample() {
     const Image edged = raster::resample(small, 384, 384, raster::Filter::EdgeDirected);
     CHECK(edged.width() == 384 && edged.height() == 384);
     CHECK(error(edged, truth) < error(cubic, truth));
-    // Smart picks per resize: the area average down, bicubic for a modest
-    // enlargement, edge directed once it is past a doubling.
+    // Every filter keeps a flat field exactly flat: the weights are
+    // normalized, so nothing overshoots or drifts.
+    {
+        Image flat(64, 64, {70, 130, 190, 255});
+        for (raster::Filter f : {raster::Filter::Nearest, raster::Filter::Bilinear, raster::Filter::Bicubic,
+                                 raster::Filter::Lanczos, raster::Filter::Mitchell, raster::Filter::EdgeDirected, raster::Filter::Smart}) {
+            const Image up = raster::resample(flat, 100, 100, f);
+            const Image down = raster::resample(flat, 30, 30, f);
+            CHECK(up.get(50, 50).r == 70 && up.get(50, 50).g == 130 && up.get(50, 50).b == 190);
+            CHECK(down.get(15, 15).r == 70 && down.get(15, 15).g == 130 && down.get(15, 15).b == 190);
+        }
+    }
+    // Lanczos keeps more detail than bilinear through a reduction.
+    {
+        Image detail(128, 128);
+        for (int y = 0; y < 128; ++y)
+            for (int x = 0; x < 128; ++x) {
+                const uint8_t v = static_cast<uint8_t>(128 + 90 * std::sin(x * 0.35) * std::cos(y * 0.27));
+                detail.set(x, y, {v, v, v, 255});
+            }
+        auto variance = [](const Image& im) {
+            double sum = 0, sum2 = 0;
+            size_t n = 0;
+            for (size_t i = 0; i < im.size_bytes(); i += 4) { sum += im.data()[i]; sum2 += static_cast<double>(im.data()[i]) * im.data()[i]; ++n; }
+            return sum2 / n - (sum / n) * (sum / n);
+        };
+        CHECK(variance(raster::resample(detail, 64, 64, raster::Filter::Lanczos)) >
+              variance(raster::resample(detail, 64, 64, raster::Filter::Bilinear)));
+    }
+    // Smart picks per resize: Lanczos down and for a modest enlargement,
+    // edge directed once it is past a doubling.
     CHECK(std::memcmp(raster::resample(truth, 96, 96, raster::Filter::Smart).data(),
-                      raster::resample(truth, 96, 96, raster::Filter::Bicubic).data(), 96 * 96 * 4) == 0);
+                      raster::resample(truth, 96, 96, raster::Filter::Lanczos).data(), 96 * 96 * 4) == 0);
     CHECK(std::memcmp(raster::resample(small, 140, 140, raster::Filter::Smart).data(),
-                      raster::resample(small, 140, 140, raster::Filter::Bicubic).data(), 140 * 140 * 4) == 0);
+                      raster::resample(small, 140, 140, raster::Filter::Lanczos).data(), 140 * 140 * 4) == 0);
     CHECK(std::memcmp(raster::resample(small, 384, 384, raster::Filter::Smart).data(), edged.data(), edged.size_bytes()) == 0);
     // Shrinking is left to the area average, so it matches bicubic exactly.
     const Image down_e = raster::resample(truth, 96, 96, raster::Filter::EdgeDirected);

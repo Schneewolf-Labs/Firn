@@ -806,8 +806,8 @@ void App::draw_dialogs() {
             ImGui::Checkbox("Lock aspect ratio", &resize_lock);
         }
         ImGui::SetNextItemWidth(160);
-        ImGui::Combo("Resample", &resize_filter, "Pixel resize\0Bilinear\0Bicubic\0Edge directed\0Smart size\0");
-        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Smart size picks for you: the area average when reducing, bicubic for a modest enlargement, edge directed past a doubling. Edge directed follows edges instead of averaging across them, which keeps diagonals and curves clean, and is slower.");
+        ImGui::Combo("Resample", &resize_filter, "Pixel resize\0Bilinear\0Bicubic\0Edge directed\0Smart size\0Lanczos\0Mitchell\0");
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Smart size picks for you: Lanczos when reducing or enlarging a little, edge directed past a doubling. Edge directed follows edges instead of averaging across them, which keeps diagonals and curves clean, and is slower. Lanczos is the sharpest for photographs and can ring on hard edges; Mitchell is soft and never rings.");
         ImGui::Text("%d x %d  ->  %d x %d", doc ? doc->width() : 0, doc ? doc->height() : 0, resize_w, resize_h);
         if (ImGui::Button("OK") || enter()) {
             if (doc && (resize_w != doc->width() || resize_h != doc->height())) {
