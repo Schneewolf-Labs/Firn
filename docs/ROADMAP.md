@@ -229,6 +229,18 @@ against the 115 commands its own bundled scripts use.
       regenerating it from the edited picture on save
 - [ ] Preferences switch for what leaves the machine: strip private metadata
       on every export, as a default rather than a per-image action
+- [x] The project format is lossless: every field of the document model
+      round-trips, audited field by field and pinned by three standing tests
+      (`test_openraster_lossless`, `test_openraster_vectors`,
+      `test_psp_vector_compat`). Vector layers use Firn's own encoding,
+      `core/src/io_vec.cpp`
+- [ ] Metadata does not ride in the native container yet. It would go in the
+      Firn stash, which the original shows under image information and
+      otherwise ignores
+- [ ] The native container still loses what the original's shape layout
+      cannot hold (dashes, pattern images, per-object visibility, fractional
+      point sizes). That is the original's ceiling, not a bug; the stash
+      could carry them for Firn's own re-reads if it ever matters
 
 ## 17. Restructuring (2026-09-11)
 
