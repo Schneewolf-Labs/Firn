@@ -21,6 +21,8 @@ jobs:
         run: ctest --test-dir build --output-on-failure
       - name: Smoke test (drives the app under Xvfb)
         run: xvfb-run -a --server-args="-screen 0 1400x900x24" python3 scripts/smoke.py build
+      - name: App behaviour tests (through the action API)
+        run: xvfb-run -a --server-args="-screen 0 1400x900x24" python3 scripts/app_tests.py build
       - name: Package
         run: cd build && cpack -G TGZ
       - uses: actions/upload-artifact@v4

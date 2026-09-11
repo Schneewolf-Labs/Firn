@@ -259,6 +259,19 @@ docs/    notes on the original: command inventory, module mapping, FORMAT.md
 
 ## Checking UI changes
 
+`scripts/app_tests.py` is the app's test suite: 84 checks over documents,
+the view, layers, selections, painting and materials, the edit actions,
+tools and history, image geometry and the action API itself, asserting on
+the JSON the program reports and on pixels it writes. It runs in CI beside
+`scripts/smoke.py`. Anything living in `App` is covered by this and nothing
+else, so add a case here when you change behaviour there, and run it before
+and after any restructuring:
+
+```sh
+xvfb-run -a python3 scripts/app_tests.py build
+```
+
+
 Unit tests cover the core. For the app, use the in-app driver
 (`app/src/Drive.cpp`): with `FIRN_DRIVE=<socket>` set, the app listens on a
 Unix socket, moves a **virtual cursor** with synthetic ImGui events (the
