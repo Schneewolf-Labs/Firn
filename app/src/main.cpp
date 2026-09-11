@@ -13,6 +13,8 @@
 
 #include "App.h"
 #include "Drive.h"
+#include "NativeMenu.h"
+#include "ui/ImGuiMenuBuilder.h"
 #include "Tablet.h"
 #include "Config.h"
 #include "firn/io.h"
@@ -188,6 +190,7 @@ int main(int argc, char** argv) {
     app.check_recovery();
     app.autosave_last = 0.0;
     tablet::init(window);
+    native_menu::init(app, window);
 
     while (!app.quit) {
         SDL_Event event;
@@ -244,7 +247,15 @@ int main(int argc, char** argv) {
             first_frame = false;
             build_default_layout(dockspace_id);
         }
-        app.draw_menu();
+#ifdef __APPLE__
+        native_menu::update(app);
+#else
+        if (ImGui::BeginMainMenuBar()) {
+            ImGuiMenuBuilder menu_builder;
+            app.draw_menu(menu_builder);
+            ImGui::EndMainMenuBar();
+        }
+#endif
         app.draw_canvas();
         app.draw_palettes();
         app.draw_dialogs();

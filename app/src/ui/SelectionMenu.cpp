@@ -7,13 +7,13 @@
 #include <memory>
 
 #include "App.h"
+#include "ui/MenuBuilder.h"
 #include "ui/SelectionMenuState.h"
 #include "firn/commands.h"
 #include "firn/mask.h"
 #include "firn/raster.h"
 #include "firn/vector.h"
 #include "imgui.h"
-#include "ui/Shortcut.h"
 
 using namespace firn;
 
@@ -92,70 +92,70 @@ void App::defloat() {
 
 // --- Menu ------------------------------------------------------------
 
-void App::draw_selections_menu() {
-    if (!ImGui::BeginMenu("Selections")) return;
+void App::draw_selections_menu(MenuBuilder& m) {
+    if (!m.begin_menu("Selections")) return;
     const bool has_doc = doc != nullptr;
     const bool has_sel = has_doc && doc->has_selection();
     const int layer = active_layer();
     const bool raster = has_doc && layer >= 0 && doc->layer(layer).is_raster();
-    if (ImGui::MenuItem("Select All", SC("Ctrl+A"), false, has_doc)) select_all();
-    if (ImGui::MenuItem("Select None", SC("Ctrl+D"), false, has_sel)) select_none();
-    if (ImGui::MenuItem("From Mask", nullptr, false, has_doc && layer >= 0 && (doc->layer(layer).has_mask() || raster))) select_from_mask();
-    if (ImGui::MenuItem("From Vector Object", nullptr, false, has_doc && layer >= 0 && doc->layer(layer).is_vector())) select_from_vector();
-    if (ImGui::MenuItem("Invert", SC("Ctrl+Shift+I"), false, has_doc)) select_invert();
-    ImGui::Separator();
-    if (ImGui::BeginMenu("Matting", raster)) {
+    m.item("Select All", "Ctrl+A", has_doc, [&] { select_all(); });
+    m.item("Select None", "Ctrl+D", has_sel, [&] { select_none(); });
+    m.item("From Mask", nullptr, has_doc && layer >= 0 && (doc->layer(layer).has_mask() || raster), [&] { select_from_mask(); });
+    m.item("From Vector Object", nullptr, has_doc && layer >= 0 && doc->layer(layer).is_vector(), [&] { select_from_vector(); });
+    m.item("Invert", "Ctrl+Shift+I", has_doc, [&] { select_invert(); });
+    m.separator();
+    if (m.begin_menu("Matting", raster)) {
         auto matte = [&](const char* name, Color c) {
             run(std::make_unique<AdjustCommand>(static_cast<size_t>(layer), name, [c](Image& img) { raster::remove_matte(img, c); }));
         };
-        if (ImGui::MenuItem("Remove Black Matte")) matte("Remove Black Matte", {0, 0, 0, 255});
-        if (ImGui::MenuItem("Remove White Matte")) matte("Remove White Matte", {255, 255, 255, 255});
-        if (ImGui::MenuItem("Defringe...")) show_sel_dialog = Defringe;
-        ImGui::EndMenu();
+        m.item("Remove Black Matte", nullptr, true, [&] { matte("Remove Black Matte", {0, 0, 0, 255}); });
+        m.item("Remove White Matte", nullptr, true, [&] { matte("Remove White Matte", {255, 255, 255, 255}); });
+        m.item("Defringe...", nullptr, true, [&] { show_sel_dialog = Defringe; });
+        m.end_menu();
     }
-    if (ImGui::BeginMenu("Modify", has_sel)) {
-        if (ImGui::MenuItem("Expand...")) show_sel_dialog = Expand;
-        if (ImGui::MenuItem("Contract...")) show_sel_dialog = Contract;
-        if (ImGui::MenuItem("Feather...")) show_sel_dialog = Feather;
-        if (ImGui::MenuItem("Inside/Outside Feather...")) show_sel_dialog = InsideOutsideFeather;
-        if (ImGui::MenuItem("Unfeather")) { Mask m = doc->selection(); mask::unfeather(m); set_selection("Unfeather", std::move(m)); }
-        ImGui::Separator();
-        if (ImGui::MenuItem("Remove Specks and Holes...")) show_sel_dialog = SpecksHoles;
-        if (ImGui::MenuItem("Select Color Range...", nullptr, false, raster)) show_sel_dialog = ColorRange;
-        if (ImGui::MenuItem("Select Similar...", nullptr, false, raster)) show_sel_dialog = Similar;
-        if (ImGui::MenuItem("Shape-based Anti-alias...")) show_sel_dialog = ShapeAntialias;
-        if (ImGui::MenuItem("Smooth...")) show_sel_dialog = Smooth;
-        ImGui::EndMenu();
+    if (m.begin_menu("Modify", has_sel)) {
+        m.item("Expand...", nullptr, true, [&] { show_sel_dialog = Expand; });
+        m.item("Contract...", nullptr, true, [&] { show_sel_dialog = Contract; });
+        m.item("Feather...", nullptr, true, [&] { show_sel_dialog = Feather; });
+        m.item("Inside/Outside Feather...", nullptr, true, [&] { show_sel_dialog = InsideOutsideFeather; });
+        m.item("Unfeather", nullptr, true, [&] { Mask msk = doc->selection(); mask::unfeather(msk); set_selection("Unfeather", std::move(msk)); });
+        m.separator();
+        m.item("Remove Specks and Holes...", nullptr, true, [&] { show_sel_dialog = SpecksHoles; });
+        m.item("Select Color Range...", nullptr, raster, [&] { show_sel_dialog = ColorRange; });
+        m.item("Select Similar...", nullptr, raster, [&] { show_sel_dialog = Similar; });
+        m.item("Shape-based Anti-alias...", nullptr, true, [&] { show_sel_dialog = ShapeAntialias; });
+        m.item("Smooth...", nullptr, true, [&] { show_sel_dialog = Smooth; });
+        m.end_menu();
     }
-    ImGui::Separator();
-    if (ImGui::MenuItem("Hide Marquee", SC("Ctrl+Shift+M"), !show_marquee, has_doc)) show_marquee = !show_marquee;
-    if (ImGui::MenuItem("Edit Selection", nullptr, selection_edit, has_doc)) set_selection_edit(!selection_edit);
-    ImGui::Separator();
-    if (ImGui::MenuItem("Promote Selection to Layer", nullptr, false, raster && has_sel)) promote_selection_to_layer(false);
-    if (ImGui::MenuItem("Float", SC("Ctrl+F"), false, raster && has_sel && !has_floating_layer())) promote_selection_to_layer(true);
-    if (ImGui::MenuItem("Defloat", SC("Ctrl+Shift+F"), false, has_floating_layer())) defloat();
-    ImGui::Separator();
-    if (ImGui::BeginMenu("Load/Save Selection", has_doc)) {
-        if (ImGui::BeginMenu("Load Selection From Alpha Channel", !doc->alpha_channels().empty())) {
+    m.separator();
+    m.item("Hide Marquee", "Ctrl+Shift+M", has_doc, [&] { show_marquee = !show_marquee; }, !show_marquee);
+    m.item("Edit Selection", nullptr, has_doc, [&] { set_selection_edit(!selection_edit); }, selection_edit);
+    m.separator();
+    m.item("Promote Selection to Layer", nullptr, raster && has_sel, [&] { promote_selection_to_layer(false); });
+    m.item("Float", "Ctrl+F", raster && has_sel && !has_floating_layer(), [&] { promote_selection_to_layer(true); });
+    m.item("Defloat", "Ctrl+Shift+F", has_floating_layer(), [&] { defloat(); });
+    m.separator();
+    if (m.begin_menu("Load/Save Selection", has_doc)) {
+        if (m.begin_menu("Load Selection From Alpha Channel", !doc->alpha_channels().empty())) {
             for (size_t i = 0; i < doc->alpha_channels().size(); ++i) {
-                ImGui::PushID(static_cast<int>(i));
-                if (ImGui::MenuItem(doc->alpha_channels()[i].name.c_str())) set_selection("Load Selection From Alpha Channel", doc->alpha_channels()[i].mask);
-                ImGui::PopID();
+                m.push_id(static_cast<int>(i));
+                m.item(doc->alpha_channels()[i].name.c_str(), nullptr, true, [this, i] { set_selection("Load Selection From Alpha Channel", doc->alpha_channels()[i].mask); });
+                m.pop_id();
             }
-            ImGui::Separator();
-            if (ImGui::MenuItem("Delete All Alpha Channels")) doc->alpha_channels().clear();
-            ImGui::EndMenu();
+            m.separator();
+            m.item("Delete All Alpha Channels", nullptr, true, [&] { doc->alpha_channels().clear(); });
+            m.end_menu();
         }
-        if (ImGui::MenuItem("Save Selection To Alpha Channel...", nullptr, false, doc->has_selection())) {
+        m.item("Save Selection To Alpha Channel...", nullptr, doc->has_selection(), [&] {
             std::snprintf(alpha_name_buf, sizeof(alpha_name_buf), "Selection #%zu", doc->alpha_channels().size() + 1);
             show_alpha_save_dialog = true;
-        }
-        ImGui::Separator();
-        if (ImGui::MenuItem("Load Selection From Disk...")) request_load_selection();
-        if (ImGui::MenuItem("Save Selection To Disk...", nullptr, false, has_doc && doc->has_selection())) request_save_selection();
-        ImGui::EndMenu();
+        });
+        m.separator();
+        m.item("Load Selection From Disk...", nullptr, true, [&] { request_load_selection(); });
+        m.item("Save Selection To Disk...", nullptr, has_doc && doc->has_selection(), [&] { request_save_selection(); });
+        m.end_menu();
     }
-    ImGui::EndMenu();
+    m.end_menu();
 }
 
 // --- Dialogs ------------------------------------------------------------

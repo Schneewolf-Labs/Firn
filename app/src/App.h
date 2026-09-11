@@ -26,6 +26,8 @@
 #include "ui/FileDialog.h"
 #include "ui/Theme.h"
 
+struct MenuBuilder;
+
 // Application state shared by all UI panels. The UI is immediate-mode: every
 // frame it reads this and the Document and emits Commands. Nothing in the UI
 // owns pixels.
@@ -166,9 +168,9 @@ struct App {
     void promote_selection_to_layer(bool floating);
     void defloat();
     bool has_floating_layer() const;
-    void draw_selections_menu();
+    void draw_selections_menu(MenuBuilder& m);
     void draw_selection_dialogs();
-    void draw_layer_menu_items();
+    void draw_layer_menu_items(MenuBuilder& m);
     int fgsel_size = 24;                  // Foreground Select: mark brush size
     int csmudge_rate = 30, csmudge_length = 60, csmudge_mode = 0;   // Color Smudge: color added per stamp (%), how far it is carried (%), 0 smearing / 1 dulling
     bool fgsel_merged = true;             //   classify on the merged image
@@ -643,8 +645,11 @@ struct App {
     void open_resize_dialog();
     void open_canvas_dialog();
 
-    // Per-frame UI (ui/*.cpp)
-    void draw_menu();
+    // Per-frame UI (ui/*.cpp). draw_menu is the whole menu tree (File through
+    // Help) as a single source of truth: the caller supplies a MenuBuilder,
+    // either ImGuiMenuBuilder (the in-window bar, every platform) or the
+    // native macOS one (NativeMenu_mac.mm), which decide how it is shown.
+    void draw_menu(MenuBuilder& m);
     void draw_toolbar();
     void draw_status_bar();
     static constexpr float toolbar_height = 30.0f;

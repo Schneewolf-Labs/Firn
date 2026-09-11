@@ -83,8 +83,12 @@ if(UNIX AND NOT APPLE)
 endif()
 if(APPLE)
   enable_language(OBJCXX)
-  target_sources(firn PRIVATE src/Tablet_mac.mm)
+  target_sources(firn PRIVATE src/Tablet_mac.mm src/NativeMenu_mac.mm)
   target_link_libraries(firn PRIVATE "-framework Cocoa")
+  # ARC: NativeMenu_mac.mm allocates one Objective-C object per native menu
+  # item on every frame (see FirnMenuAction in NativeMenu_mac.mm); without
+  # ARC those would need manual retain/release bookkeeping to avoid leaking.
+  set_source_files_properties(src/Tablet_mac.mm src/NativeMenu_mac.mm PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
 endif()
 if(WIN32)
   # Plain main(); SDL's own entry point is not used. A GUI subsystem keeps

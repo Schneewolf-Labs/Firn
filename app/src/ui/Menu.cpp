@@ -1,11 +1,12 @@
 #include <algorithm>
 #include <cfloat>
+#include <cstdio>
 #include <fstream>
 #include <memory>
 
 #include "App.h"
+#include "ui/MenuBuilder.h"
 #include "ui/MenuState.h"
-#include "ui/Shortcut.h"
 #include "firn/adjust.h"
 #include "firn/icc.h"
 #include "firn/io.h"
@@ -119,431 +120,437 @@ void draw_metadata_tab(App& app) {
 // Menu structure follows the original's: File, Edit, View, Image, Effects, Adjust,
 // Layers, Objects, Selections, Window, Help. Most entries are placeholders
 // until the corresponding commands exist.
-void App::draw_menu() {
+void App::draw_menu(MenuBuilder& m) {
     const bool has_doc = doc != nullptr;
     const int layer = active_layer();
     const bool has_any_layer = has_doc && layer >= 0;
     const bool has_layer = has_any_layer && doc->layer(layer).is_raster();  // pixel operations need a raster layer
 
-    if (!ImGui::BeginMainMenuBar()) return;
-
-    if (ImGui::BeginMenu("File")) {
-        if (ImGui::MenuItem("New...", SC("Ctrl+N"))) show_new_dialog = true;
-        if (ImGui::MenuItem("Open...", SC("Ctrl+O"))) request_open();
-        if (ImGui::BeginMenu("Recent Files", !config.recent_files.empty())) {
+    if (m.begin_menu("File")) {
+        m.item("New...", "Ctrl+N", true, [&] { show_new_dialog = true; });
+        m.item("Open...", "Ctrl+O", true, [&] { request_open(); });
+        if (m.begin_menu("Recent Files", !config.recent_files.empty())) {
             for (size_t i = 0; i < config.recent_files.size(); ++i) {
-                const std::string& r = config.recent_files[i];
-                if (ImGui::MenuItem(r.c_str())) { open_document(r); break; }
+                const std::string r = config.recent_files[i];
+                m.push_id(static_cast<int>(i));
+                m.item(r.c_str(), nullptr, true, [this, r] { open_document(r); });
+                m.pop_id();
             }
-            ImGui::Separator();
-        if (ImGui::MenuItem("Print...", SC("Ctrl+P"), false, has_doc)) show_print_dialog = true;
-        ImGui::EndMenu();
+            m.end_menu();
         }
-        if (ImGui::MenuItem("Close", SC("Ctrl+W"), false, has_doc)) close_document(current_doc);
-        if (ImGui::MenuItem("Close All", nullptr, false, has_doc)) { for (int i = static_cast<int>(docs.size()) - 1; i >= 0; --i) if (!document_modified(i)) close_document(i); if (!docs.empty()) close_document(0); }
-        ImGui::Separator();
-        if (ImGui::MenuItem("Save", SC("Ctrl+S"), false, has_doc)) save();
-        if (ImGui::MenuItem("Save As...", SC("Ctrl+Shift+S"), false, has_doc)) request_save_as();
-        if (ImGui::MenuItem("Revert", nullptr, false, has_doc && !doc_path.empty())) { if (modified()) show_revert_prompt = true; else revert(); }
-        ImGui::Separator();
-        if (ImGui::MenuItem("Preferences...")) { menu_state->prefs_edit = config; menu_state->prefs_scale_before = config.ui_scale; show_prefs_dialog = true; }
-        ImGui::Separator();
-        if (ImGui::MenuItem("Exit")) request_quit();
-        ImGui::EndMenu();
+        m.item("Print...", "Ctrl+P", has_doc, [&] { show_print_dialog = true; });
+        m.item("Close", "Ctrl+W", has_doc, [&] { close_document(current_doc); });
+        m.item("Close All", nullptr, has_doc, [&] { for (int i = static_cast<int>(docs.size()) - 1; i >= 0; --i) if (!document_modified(i)) close_document(i); if (!docs.empty()) close_document(0); });
+        m.separator();
+        m.item("Save", "Ctrl+S", has_doc, [&] { save(); });
+        m.item("Save As...", "Ctrl+Shift+S", has_doc, [&] { request_save_as(); });
+        m.item("Revert", nullptr, has_doc && !doc_path.empty(), [&] { if (modified()) show_revert_prompt = true; else revert(); });
+        m.separator();
+        m.item("Preferences...", nullptr, true, [&] { menu_state->prefs_edit = config; menu_state->prefs_scale_before = config.ui_scale; show_prefs_dialog = true; });
+        m.separator();
+        m.item("Exit", nullptr, true, [&] { request_quit(); });
+        m.end_menu();
     }
-    if (ImGui::BeginMenu("Edit")) {
-        if (ImGui::MenuItem("Undo", SC("Ctrl+Z"), false, has_doc && history.can_undo())) undo();
-        if (ImGui::MenuItem("Redo", SC("Ctrl+Y"), false, has_doc && history.can_redo())) redo();
-        ImGui::Separator();
-        if (ImGui::MenuItem("Cut", SC("Ctrl+X"), false, has_layer)) cut();
-        if (ImGui::MenuItem("Copy", SC("Ctrl+C"), false, has_layer)) copy();
-        if (ImGui::MenuItem("Copy Merged", SC("Ctrl+Shift+C"), false, has_doc)) copy_merged();
-        if (ImGui::MenuItem("Paste As New Image", SC("Ctrl+V"))) paste_as_new_image();
-        if (ImGui::MenuItem("Paste As New Layer", SC("Ctrl+L"), false, has_doc)) paste_as_new_layer();
-        if (ImGui::MenuItem("Paste Into Selection", SC("Ctrl+Shift+L"), false, has_layer && doc->has_selection())) paste_into_selection();
-        if (ImGui::MenuItem("Clear", "Delete", false, has_layer)) clear_selection();
-        if (ImGui::MenuItem("Content-Aware Fill", nullptr, false, has_layer && doc->has_selection())) content_aware_fill();
-        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Rebuilds the selection from the rest of the picture, to remove something from it.");
-        ImGui::Separator();
+    if (m.begin_menu("Edit")) {
+        m.item("Undo", "Ctrl+Z", has_doc && history.can_undo(), [&] { undo(); });
+        m.item("Redo", "Ctrl+Y", has_doc && history.can_redo(), [&] { redo(); });
+        m.separator();
+        m.item("Cut", "Ctrl+X", has_layer, [&] { cut(); });
+        m.item("Copy", "Ctrl+C", has_layer, [&] { copy(); });
+        m.item("Copy Merged", "Ctrl+Shift+C", has_doc, [&] { copy_merged(); });
+        m.item("Paste As New Image", "Ctrl+V", true, [&] { paste_as_new_image(); });
+        m.item("Paste As New Layer", "Ctrl+L", has_doc, [&] { paste_as_new_layer(); });
+        m.item("Paste Into Selection", "Ctrl+Shift+L", has_layer && doc->has_selection(), [&] { paste_into_selection(); });
+        m.item("Clear", "Delete", has_layer, [&] { clear_selection(); });
+        m.item("Content-Aware Fill", nullptr, has_layer && doc->has_selection(), [&] { content_aware_fill(); }, false,
+               "Rebuilds the selection from the rest of the picture, to remove something from it.");
+        m.separator();
         {
             const std::string label = last_effect.empty() ? "Repeat" : "Repeat " + last_effect;
-            if (ImGui::MenuItem(label.c_str(), SC("Ctrl+Shift+Y"), false, has_layer && !last_effect.empty())) repeat_last_effect();
+            m.item(label.c_str(), "Ctrl+Shift+Y", has_layer && !last_effect.empty(), [&] { repeat_last_effect(); });
         }
-        ImGui::EndMenu();
+        m.end_menu();
     }
-    if (ImGui::BeginMenu("View")) {
-        if (ImGui::MenuItem("Zoom In", "+", false, has_doc)) zoom_about(canvas_center, 1.25f);
-        if (ImGui::MenuItem("Zoom Out", "-", false, has_doc)) zoom_about(canvas_center, 0.8f);
-        if (ImGui::MenuItem("Fit to Window", SC("Ctrl+0"), false, has_doc)) fit_requested = true;
-        if (ImGui::MenuItem("Actual Size", SC("Ctrl+Alt+0"), false, has_doc)) { zoom = 1.0f; pan_x = pan_y = 0.0f; }
-        if (ImGui::MenuItem("Zoom to Selection", nullptr, false, has_doc && doc->has_selection())) zoom_to_selection();
-        ImGui::Separator();
-        ImGui::MenuItem("Rulers", nullptr, &show_rulers);
-        ImGui::MenuItem("Grid", nullptr, &show_grid);
-        ImGui::MenuItem("Guides", nullptr, &show_guides);
-        ImGui::MenuItem("Mask Overlay", nullptr, &show_mask_overlay);
-        ImGui::MenuItem("Snap to Guides", nullptr, &snap_to_guides);
-        ImGui::MenuItem("Snap to Grid", nullptr, &snap_to_grid);
-        if (ImGui::MenuItem("Clear Guides", nullptr, false, !guides_h().empty() || !guides_v().empty())) { guides_h().clear(); guides_v().clear(); }
-        ImGui::MenuItem("Assistants", nullptr, &show_assistants);
-        ImGui::MenuItem("Snap to Assistants", nullptr, &assistant_snap);
-        if (ImGui::MenuItem("Clear Assistants", nullptr, false, !assistants().empty())) assistants().clear();
-        ImGui::SetNextItemWidth(100);
-        ImGui::InputInt("Grid spacing", &grid_spacing);
-        grid_spacing = std::clamp(grid_spacing, 1, 1000);
-        ImGui::Separator();
-        ImGui::MenuItem("ImGui Demo", nullptr, &show_imgui_demo);
-        ImGui::EndMenu();
+    if (m.begin_menu("View")) {
+        m.item("Zoom In", "+", has_doc, [&] { zoom_about(canvas_center, 1.25f); });
+        m.item("Zoom Out", "-", has_doc, [&] { zoom_about(canvas_center, 0.8f); });
+        m.item("Fit to Window", "Ctrl+0", has_doc, [&] { fit_requested = true; });
+        m.item("Actual Size", "Ctrl+Alt+0", has_doc, [&] { zoom = 1.0f; pan_x = pan_y = 0.0f; });
+        m.item("Zoom to Selection", nullptr, has_doc && doc->has_selection(), [&] { zoom_to_selection(); });
+        m.separator();
+        m.toggle("Rulers", nullptr, &show_rulers);
+        m.toggle("Grid", nullptr, &show_grid);
+        m.toggle("Guides", nullptr, &show_guides);
+        m.toggle("Mask Overlay", nullptr, &show_mask_overlay);
+        m.toggle("Snap to Guides", nullptr, &snap_to_guides);
+        m.toggle("Snap to Grid", nullptr, &snap_to_grid);
+        m.item("Clear Guides", nullptr, !guides_h().empty() || !guides_v().empty(), [&] { guides_h().clear(); guides_v().clear(); });
+        m.toggle("Assistants", nullptr, &show_assistants);
+        m.toggle("Snap to Assistants", nullptr, &assistant_snap);
+        m.item("Clear Assistants", nullptr, !assistants().empty(), [&] { assistants().clear(); });
+        m.imgui_only([&] {
+            ImGui::SetNextItemWidth(100);
+            ImGui::InputInt("Grid spacing", &grid_spacing);
+            grid_spacing = std::clamp(grid_spacing, 1, 1000);
+        });
+        m.separator();
+        m.toggle("ImGui Demo", nullptr, &show_imgui_demo);
+        m.end_menu();
     }
-    if (ImGui::BeginMenu("Image")) {
-        if (ImGui::MenuItem("Flip", nullptr, false, has_doc)) run(std::make_unique<FlipCommand>());
-        if (ImGui::MenuItem("Mirror", nullptr, false, has_doc)) run(std::make_unique<MirrorCommand>());
-        if (ImGui::BeginMenu("Rotate", has_doc)) {
-            if (ImGui::MenuItem("Rotate Clockwise 90")) rotate(90.0f);
-            if (ImGui::MenuItem("Rotate Counter-clockwise 90")) rotate(-90.0f);
-            if (ImGui::MenuItem("Rotate 180")) rotate(180.0f);
-            if (ImGui::MenuItem("Free Rotate...")) show_rotate_dialog = true;
-            ImGui::EndMenu();
+    if (m.begin_menu("Image")) {
+        m.item("Flip", nullptr, has_doc, [&] { run(std::make_unique<FlipCommand>()); });
+        m.item("Mirror", nullptr, has_doc, [&] { run(std::make_unique<MirrorCommand>()); });
+        if (m.begin_menu("Rotate", has_doc)) {
+            m.item("Rotate Clockwise 90", nullptr, true, [&] { rotate(90.0f); });
+            m.item("Rotate Counter-clockwise 90", nullptr, true, [&] { rotate(-90.0f); });
+            m.item("Rotate 180", nullptr, true, [&] { rotate(180.0f); });
+            m.item("Free Rotate...", nullptr, true, [&] { show_rotate_dialog = true; });
+            m.end_menu();
         }
-        ImGui::Separator();
-        if (ImGui::MenuItem("Crop to Selection", SC("Ctrl+Shift+R"), false, has_doc && doc->has_selection())) crop_to_selection();
-        if (ImGui::MenuItem("Resize...", nullptr, false, has_doc)) open_resize_dialog();
-        if (ImGui::MenuItem("Canvas Size...", nullptr, false, has_doc)) open_canvas_dialog();
-        ImGui::Separator();
-        if (ImGui::MenuItem("Add Borders...", nullptr, false, has_doc)) show_borders_dialog = true;
-        if (ImGui::MenuItem("Picture Frame...", nullptr, false, has_doc)) show_frame_dialog = true;
-        ImGui::Separator();
-        if (ImGui::MenuItem("Grayscale", nullptr, false, has_layer)) run(std::make_unique<AdjustCommand>(layer, "Grayscale", raster::grayscale, raster16::grayscale));
-        if (ImGui::BeginMenu("Decrease Color Depth", has_layer)) {
-            if (ImGui::MenuItem("2 Colors...")) { depth_colors = 2; show_depth_dialog = true; }
-            if (ImGui::MenuItem("16 Colors...")) { depth_colors = 16; show_depth_dialog = true; }
-            if (ImGui::MenuItem("256 Colors...")) { depth_colors = 256; show_depth_dialog = true; }
-            if (ImGui::MenuItem("32K Colors")) image_decrease_depth(32, false);
-            if (ImGui::MenuItem("64K Colors")) image_decrease_depth(64, false);
-            if (ImGui::MenuItem("8 Bits per Channel", nullptr, false, doc->bit_depth() == 16)) run(std::make_unique<StateEditCommand>("Decrease to 8 Bits per Channel", [](Document& d) { d.set_bit_depth(8); }));
-            ImGui::EndMenu();
+        m.separator();
+        m.item("Crop to Selection", "Ctrl+Shift+R", has_doc && doc->has_selection(), [&] { crop_to_selection(); });
+        m.item("Resize...", nullptr, has_doc, [&] { open_resize_dialog(); });
+        m.item("Canvas Size...", nullptr, has_doc, [&] { open_canvas_dialog(); });
+        m.separator();
+        m.item("Add Borders...", nullptr, has_doc, [&] { show_borders_dialog = true; });
+        m.item("Picture Frame...", nullptr, has_doc, [&] { show_frame_dialog = true; });
+        m.separator();
+        m.item("Grayscale", nullptr, has_layer, [&] { run(std::make_unique<AdjustCommand>(layer, "Grayscale", raster::grayscale, raster16::grayscale)); });
+        if (m.begin_menu("Decrease Color Depth", has_layer)) {
+            m.item("2 Colors...", nullptr, true, [&] { depth_colors = 2; show_depth_dialog = true; });
+            m.item("16 Colors...", nullptr, true, [&] { depth_colors = 16; show_depth_dialog = true; });
+            m.item("256 Colors...", nullptr, true, [&] { depth_colors = 256; show_depth_dialog = true; });
+            m.item("32K Colors", nullptr, true, [&] { image_decrease_depth(32, false); });
+            m.item("64K Colors", nullptr, true, [&] { image_decrease_depth(64, false); });
+            m.item("8 Bits per Channel", nullptr, doc->bit_depth() == 16, [&] { run(std::make_unique<StateEditCommand>("Decrease to 8 Bits per Channel", [](Document& d) { d.set_bit_depth(8); })); });
+            m.end_menu();
         }
-        if (ImGui::BeginMenu("Increase Color Depth", has_doc)) {
-            ImGui::TextDisabled("Images are 16 million colors; 16 bits per channel is optional.");
-            if (ImGui::MenuItem("16 Bits per Channel", nullptr, false, doc->bit_depth() == 8)) run(std::make_unique<StateEditCommand>("Increase to 16 Bits per Channel", [](Document& d) { d.set_bit_depth(16); }));
-            ImGui::EndMenu();
+        if (m.begin_menu("Increase Color Depth", has_doc)) {
+            m.text("Images are 16 million colors; 16 bits per channel is optional.");
+            m.item("16 Bits per Channel", nullptr, doc->bit_depth() == 8, [&] { run(std::make_unique<StateEditCommand>("Increase to 16 Bits per Channel", [](Document& d) { d.set_bit_depth(16); })); });
+            m.end_menu();
         }
-        if (ImGui::BeginMenu("Palette", has_layer)) {
-            if (ImGui::MenuItem("Load Palette...")) request_load_palette();
-            if (ImGui::MenuItem("Save Palette...")) request_save_palette();
-            ImGui::EndMenu();
+        if (m.begin_menu("Palette", has_layer)) {
+            m.item("Load Palette...", nullptr, true, [&] { request_load_palette(); });
+            m.item("Save Palette...", nullptr, true, [&] { request_save_palette(); });
+            m.end_menu();
         }
-        if (ImGui::BeginMenu("Split Channel", has_doc)) {
-            if (ImGui::MenuItem("Split to RGB")) image_split_channels(0);
-            if (ImGui::MenuItem("Split to HSL")) image_split_channels(1);
-            if (ImGui::MenuItem("Split to CMYK")) image_split_channels(2);
-            ImGui::EndMenu();
+        if (m.begin_menu("Split Channel", has_doc)) {
+            m.item("Split to RGB", nullptr, true, [&] { image_split_channels(0); });
+            m.item("Split to HSL", nullptr, true, [&] { image_split_channels(1); });
+            m.item("Split to CMYK", nullptr, true, [&] { image_split_channels(2); });
+            m.end_menu();
         }
-        if (ImGui::BeginMenu("Combine Channel", docs.size() >= 3)) {
-            if (ImGui::MenuItem("Combine from RGB")) { combine_mode = 0; show_combine_dialog = true; }
-            if (ImGui::MenuItem("Combine from HSL")) { combine_mode = 1; show_combine_dialog = true; }
-            if (ImGui::MenuItem("Combine from CMYK")) { combine_mode = 2; show_combine_dialog = true; }
-            ImGui::EndMenu();
+        if (m.begin_menu("Combine Channel", docs.size() >= 3)) {
+            m.item("Combine from RGB", nullptr, true, [&] { combine_mode = 0; show_combine_dialog = true; });
+            m.item("Combine from HSL", nullptr, true, [&] { combine_mode = 1; show_combine_dialog = true; });
+            m.item("Combine from CMYK", nullptr, true, [&] { combine_mode = 2; show_combine_dialog = true; });
+            m.end_menu();
         }
-        if (ImGui::MenuItem("Arithmetic...", nullptr, false, docs.size() >= 2)) show_arith_dialog = true;
-        ImGui::Separator();
-        if (ImGui::BeginMenu("Color Management", has_doc)) {
+        m.item("Arithmetic...", nullptr, docs.size() >= 2, [&] { show_arith_dialog = true; });
+        m.separator();
+        if (m.begin_menu("Color Management", has_doc)) {
             const icc::Profile prof = document_profile();
-            ImGui::TextDisabled("Profile: %s", doc->icc().empty() ? "(untagged, treated as sRGB)" : prof.description.empty() ? "(unnamed)" : prof.description.c_str());
-            if (ImGui::MenuItem("Color Managed Display", nullptr, &color_managed_display)) { config.color_managed_display = color_managed_display; canvas_tex_revision = ~0ull; }
-            ImGui::Separator();
-            if (ImGui::BeginMenu("Assign Profile")) {
-                if (ImGui::MenuItem("sRGB")) assign_profile(icc::encode(icc::srgb(), "sRGB IEC61966-2.1"), "Assign Profile (sRGB)");
-                if (ImGui::MenuItem("Adobe RGB (1998)")) assign_profile(icc::encode(icc::adobe_rgb(), "Adobe RGB (1998)"), "Assign Profile (Adobe RGB)");
-                if (ImGui::MenuItem("ProPhoto RGB")) assign_profile(icc::encode(icc::prophoto_rgb(), "ProPhoto RGB"), "Assign Profile (ProPhoto RGB)");
-                if (ImGui::MenuItem("From File...")) request_load_profile();
-                ImGui::EndMenu();
+            const std::string profile_text = std::string("Profile: ") + (doc->icc().empty() ? "(untagged, treated as sRGB)" : prof.description.empty() ? "(unnamed)" : prof.description.c_str());
+            m.text(profile_text.c_str());
+            m.item("Color Managed Display", nullptr, true, [&] {
+                color_managed_display = !color_managed_display;
+                config.color_managed_display = color_managed_display;
+                canvas_tex_revision = ~0ull;
+            }, color_managed_display);
+            m.separator();
+            if (m.begin_menu("Assign Profile")) {
+                m.item("sRGB", nullptr, true, [&] { assign_profile(icc::encode(icc::srgb(), "sRGB IEC61966-2.1"), "Assign Profile (sRGB)"); });
+                m.item("Adobe RGB (1998)", nullptr, true, [&] { assign_profile(icc::encode(icc::adobe_rgb(), "Adobe RGB (1998)"), "Assign Profile (Adobe RGB)"); });
+                m.item("ProPhoto RGB", nullptr, true, [&] { assign_profile(icc::encode(icc::prophoto_rgb(), "ProPhoto RGB"), "Assign Profile (ProPhoto RGB)"); });
+                m.item("From File...", nullptr, true, [&] { request_load_profile(); });
+                m.end_menu();
             }
-            if (ImGui::BeginMenu("Convert to Profile")) {
-                if (ImGui::MenuItem("sRGB")) convert_to_profile(icc::srgb(), icc::encode(icc::srgb(), "sRGB IEC61966-2.1"), "Convert to sRGB");
-                if (ImGui::MenuItem("Adobe RGB (1998)")) convert_to_profile(icc::adobe_rgb(), icc::encode(icc::adobe_rgb(), "Adobe RGB (1998)"), "Convert to Adobe RGB");
-                if (ImGui::MenuItem("ProPhoto RGB")) convert_to_profile(icc::prophoto_rgb(), icc::encode(icc::prophoto_rgb(), "ProPhoto RGB"), "Convert to ProPhoto RGB");
-                ImGui::EndMenu();
+            if (m.begin_menu("Convert to Profile")) {
+                m.item("sRGB", nullptr, true, [&] { convert_to_profile(icc::srgb(), icc::encode(icc::srgb(), "sRGB IEC61966-2.1"), "Convert to sRGB"); });
+                m.item("Adobe RGB (1998)", nullptr, true, [&] { convert_to_profile(icc::adobe_rgb(), icc::encode(icc::adobe_rgb(), "Adobe RGB (1998)"), "Convert to Adobe RGB"); });
+                m.item("ProPhoto RGB", nullptr, true, [&] { convert_to_profile(icc::prophoto_rgb(), icc::encode(icc::prophoto_rgb(), "ProPhoto RGB"), "Convert to ProPhoto RGB"); });
+                m.end_menu();
             }
-            if (ImGui::MenuItem("Remove Profile", nullptr, false, !doc->icc().empty())) assign_profile({}, "Remove Profile");
-            ImGui::EndMenu();
+            m.item("Remove Profile", nullptr, !doc->icc().empty(), [&] { assign_profile({}, "Remove Profile"); });
+            m.end_menu();
         }
-        if (ImGui::MenuItem("Count Colors Used", nullptr, false, has_doc)) image_count_colors();
-        if (ImGui::MenuItem("Image Information...", "Shift+I", false, has_doc)) show_info_dialog = true;
-        ImGui::EndMenu();
+        m.item("Count Colors Used", nullptr, has_doc, [&] { image_count_colors(); });
+        m.item("Image Information...", "Shift+I", has_doc, [&] { show_info_dialog = true; });
+        m.end_menu();
     }
-    if (ImGui::BeginMenu("Adjust")) {
-        if (ImGui::MenuItem("Color to Alpha...", nullptr, false, has_layer)) open_adjust = Adj::ColorToAlpha;
-        ImGui::Separator();
-        if (ImGui::BeginMenu("Brightness and Contrast", has_layer)) {
-            if (ImGui::MenuItem("Brightness/Contrast...")) open_adjust = Adj::BrightnessContrast;
-            if (ImGui::MenuItem("Curves...")) open_adjust = Adj::Curves;
-            if (ImGui::MenuItem("Gamma Correction...")) open_adjust = Adj::Gamma;
-            if (ImGui::MenuItem("Histogram Equalize")) run(std::make_unique<AdjustCommand>(layer, "Histogram Equalize", adjust::histogram_equalize));
-            if (ImGui::MenuItem("Histogram Stretch")) run(std::make_unique<AdjustCommand>(layer, "Histogram Stretch", adjust::histogram_stretch));
-            if (ImGui::MenuItem("Levels...")) open_adjust = Adj::Levels;
-            if (ImGui::MenuItem("Threshold...")) open_adjust = Adj::Threshold;
-            ImGui::EndMenu();
+    if (m.begin_menu("Adjust")) {
+        m.item("Color to Alpha...", nullptr, has_layer, [&] { open_adjust = Adj::ColorToAlpha; });
+        m.separator();
+        if (m.begin_menu("Brightness and Contrast", has_layer)) {
+            m.item("Brightness/Contrast...", nullptr, true, [&] { open_adjust = Adj::BrightnessContrast; });
+            m.item("Curves...", nullptr, true, [&] { open_adjust = Adj::Curves; });
+            m.item("Gamma Correction...", nullptr, true, [&] { open_adjust = Adj::Gamma; });
+            m.item("Histogram Equalize", nullptr, true, [&] { run(std::make_unique<AdjustCommand>(layer, "Histogram Equalize", adjust::histogram_equalize)); });
+            m.item("Histogram Stretch", nullptr, true, [&] { run(std::make_unique<AdjustCommand>(layer, "Histogram Stretch", adjust::histogram_stretch)); });
+            m.item("Levels...", nullptr, true, [&] { open_adjust = Adj::Levels; });
+            m.item("Threshold...", nullptr, true, [&] { open_adjust = Adj::Threshold; });
+            m.end_menu();
         }
-        if (ImGui::BeginMenu("Color Balance", has_layer)) {
-            if (ImGui::MenuItem("Channel Mixer...")) open_adjust = Adj::ChannelMixer;
-            if (ImGui::MenuItem("Color Balance...")) open_adjust = Adj::ColorBalance;
-            ImGui::EndMenu();
+        if (m.begin_menu("Color Balance", has_layer)) {
+            m.item("Channel Mixer...", nullptr, true, [&] { open_adjust = Adj::ChannelMixer; });
+            m.item("Color Balance...", nullptr, true, [&] { open_adjust = Adj::ColorBalance; });
+            m.end_menu();
         }
-        if (ImGui::BeginMenu("Hue and Saturation", has_layer)) {
-            if (ImGui::MenuItem("Colorize...")) open_adjust = Adj::Colorize;
-            if (ImGui::MenuItem("Hue Map...")) open_adjust = Adj::HueMap;
-            if (ImGui::MenuItem("Hue/Saturation/Lightness...")) open_adjust = Adj::HSL;
-            ImGui::EndMenu();
+        if (m.begin_menu("Hue and Saturation", has_layer)) {
+            m.item("Colorize...", nullptr, true, [&] { open_adjust = Adj::Colorize; });
+            m.item("Hue Map...", nullptr, true, [&] { open_adjust = Adj::HueMap; });
+            m.item("Hue/Saturation/Lightness...", nullptr, true, [&] { open_adjust = Adj::HSL; });
+            m.end_menu();
         }
-        if (ImGui::BeginMenu("Add/Remove Noise", has_layer)) {
-            if (ImGui::MenuItem("Add Noise...")) open_adjust = Adj::AddNoise;
-            if (ImGui::MenuItem("Median Filter...")) open_adjust = Adj::Median;
-            if (ImGui::MenuItem("Despeckle")) run(std::make_unique<AdjustCommand>(layer, "Despeckle", [](Image& i) { effects::median(i, 1); }));
-            if (ImGui::MenuItem("Edge Preserving Smooth...")) open_adjust = Adj::EdgeSmooth;
-            if (ImGui::MenuItem("Salt and Pepper Filter...")) open_adjust = Adj::SaltPepper;
-            if (ImGui::MenuItem("JPEG Artifact Removal...")) open_adjust = Adj::JpegArtifacts;
-            if (ImGui::MenuItem("Digital Camera Noise Removal...")) open_adjust = Adj::NoiseRemoval;
-            if (ImGui::MenuItem("Erode")) run(std::make_unique<AdjustCommand>(layer, "Erode", effects::erode));
-            if (ImGui::MenuItem("Dilate")) run(std::make_unique<AdjustCommand>(layer, "Dilate", effects::dilate));
-            ImGui::EndMenu();
+        if (m.begin_menu("Add/Remove Noise", has_layer)) {
+            m.item("Add Noise...", nullptr, true, [&] { open_adjust = Adj::AddNoise; });
+            m.item("Median Filter...", nullptr, true, [&] { open_adjust = Adj::Median; });
+            m.item("Despeckle", nullptr, true, [&] { run(std::make_unique<AdjustCommand>(layer, "Despeckle", [](Image& i) { effects::median(i, 1); })); });
+            m.item("Edge Preserving Smooth...", nullptr, true, [&] { open_adjust = Adj::EdgeSmooth; });
+            m.item("Salt and Pepper Filter...", nullptr, true, [&] { open_adjust = Adj::SaltPepper; });
+            m.item("JPEG Artifact Removal...", nullptr, true, [&] { open_adjust = Adj::JpegArtifacts; });
+            m.item("Digital Camera Noise Removal...", nullptr, true, [&] { open_adjust = Adj::NoiseRemoval; });
+            m.item("Erode", nullptr, true, [&] { run(std::make_unique<AdjustCommand>(layer, "Erode", effects::erode)); });
+            m.item("Dilate", nullptr, true, [&] { run(std::make_unique<AdjustCommand>(layer, "Dilate", effects::dilate)); });
+            m.end_menu();
         }
-        if (ImGui::BeginMenu("Blur", has_layer)) {
-            if (ImGui::MenuItem("Average...")) open_adjust = Adj::Average;
-            if (ImGui::MenuItem("Blur More")) run(std::make_unique<AdjustCommand>(layer, "Blur More", effects::blur_more));
-            if (ImGui::MenuItem("Gaussian Blur...")) open_adjust = Adj::Gaussian;
-            if (ImGui::MenuItem("Motion Blur...")) open_adjust = Adj::MotionBlur;
-            ImGui::EndMenu();
+        if (m.begin_menu("Blur", has_layer)) {
+            m.item("Average...", nullptr, true, [&] { open_adjust = Adj::Average; });
+            m.item("Blur More", nullptr, true, [&] { run(std::make_unique<AdjustCommand>(layer, "Blur More", effects::blur_more)); });
+            m.item("Gaussian Blur...", nullptr, true, [&] { open_adjust = Adj::Gaussian; });
+            m.item("Motion Blur...", nullptr, true, [&] { open_adjust = Adj::MotionBlur; });
+            m.end_menu();
         }
-        if (ImGui::BeginMenu("Sharpness", has_layer)) {
-            if (ImGui::MenuItem("Sharpen")) run(std::make_unique<AdjustCommand>(layer, "Sharpen", effects::sharpen));
-            if (ImGui::MenuItem("Sharpen More")) run(std::make_unique<AdjustCommand>(layer, "Sharpen More", effects::sharpen_more));
-            if (ImGui::MenuItem("Unsharp Mask...")) open_adjust = Adj::UnsharpMask;
-            ImGui::EndMenu();
+        if (m.begin_menu("Sharpness", has_layer)) {
+            m.item("Sharpen", nullptr, true, [&] { run(std::make_unique<AdjustCommand>(layer, "Sharpen", effects::sharpen)); });
+            m.item("Sharpen More", nullptr, true, [&] { run(std::make_unique<AdjustCommand>(layer, "Sharpen More", effects::sharpen_more)); });
+            m.item("Unsharp Mask...", nullptr, true, [&] { open_adjust = Adj::UnsharpMask; });
+            m.end_menu();
         }
-        if (ImGui::BeginMenu("Softness", has_layer)) {
-            if (ImGui::MenuItem("Soften")) run(std::make_unique<AdjustCommand>(layer, "Soften", effects::soften));
-            if (ImGui::MenuItem("Soften More")) run(std::make_unique<AdjustCommand>(layer, "Soften More", effects::soften_more));
-            ImGui::EndMenu();
+        if (m.begin_menu("Softness", has_layer)) {
+            m.item("Soften", nullptr, true, [&] { run(std::make_unique<AdjustCommand>(layer, "Soften", effects::soften)); });
+            m.item("Soften More", nullptr, true, [&] { run(std::make_unique<AdjustCommand>(layer, "Soften More", effects::soften_more)); });
+            m.end_menu();
         }
-        if (ImGui::BeginMenu("Photo Fix", has_layer)) {
-            if (ImGui::MenuItem("One Step Photo Fix")) run(std::make_unique<AdjustCommand>(layer, "One Step Photo Fix", photo::one_step_photo_fix));
-            if (ImGui::MenuItem("Automatic Color Balance...")) open_adjust = Adj::AutoColor;
-            if (ImGui::MenuItem("Automatic Contrast Enhancement...")) open_adjust = Adj::AutoContrast;
-            if (ImGui::MenuItem("Automatic Saturation Enhancement...")) open_adjust = Adj::AutoSaturation;
-            if (ImGui::MenuItem("Clarify...")) open_adjust = Adj::Clarify;
-            if (ImGui::MenuItem("Fade Correction...")) open_adjust = Adj::FadeCorrection;
-            ImGui::TextDisabled("Red-eye: use the Red-eye Removal tool.");
-            ImGui::EndMenu();
+        if (m.begin_menu("Photo Fix", has_layer)) {
+            m.item("One Step Photo Fix", nullptr, true, [&] { run(std::make_unique<AdjustCommand>(layer, "One Step Photo Fix", photo::one_step_photo_fix)); });
+            m.item("Automatic Color Balance...", nullptr, true, [&] { open_adjust = Adj::AutoColor; });
+            m.item("Automatic Contrast Enhancement...", nullptr, true, [&] { open_adjust = Adj::AutoContrast; });
+            m.item("Automatic Saturation Enhancement...", nullptr, true, [&] { open_adjust = Adj::AutoSaturation; });
+            m.item("Clarify...", nullptr, true, [&] { open_adjust = Adj::Clarify; });
+            m.item("Fade Correction...", nullptr, true, [&] { open_adjust = Adj::FadeCorrection; });
+            m.text("Red-eye: use the Red-eye Removal tool.");
+            m.end_menu();
         }
-        if (ImGui::BeginMenu("Photo Fix (more)", has_layer)) {
-            if (ImGui::MenuItem("Black and White Points...")) open_adjust = Adj::BlackWhitePoints;
-            if (ImGui::MenuItem("Histogram Adjustment...")) open_adjust = Adj::HistogramAdjust;
-            if (ImGui::MenuItem("Fill Flash...")) open_adjust = Adj::FillFlash;
-            if (ImGui::MenuItem("Backlighting...")) open_adjust = Adj::Backlighting;
-            if (ImGui::MenuItem("Chromatic Aberration Removal...")) open_adjust = Adj::ChromaticAberration;
-            ImGui::EndMenu();
+        if (m.begin_menu("Photo Fix (more)", has_layer)) {
+            m.item("Black and White Points...", nullptr, true, [&] { open_adjust = Adj::BlackWhitePoints; });
+            m.item("Histogram Adjustment...", nullptr, true, [&] { open_adjust = Adj::HistogramAdjust; });
+            m.item("Fill Flash...", nullptr, true, [&] { open_adjust = Adj::FillFlash; });
+            m.item("Backlighting...", nullptr, true, [&] { open_adjust = Adj::Backlighting; });
+            m.item("Chromatic Aberration Removal...", nullptr, true, [&] { open_adjust = Adj::ChromaticAberration; });
+            m.end_menu();
         }
-        ImGui::Separator();
-        if (ImGui::MenuItem("Negative Image", SC("Ctrl+I"), false, has_layer))
-            run(std::make_unique<InvertCommand>(layer));
-        ImGui::EndMenu();
+        m.separator();
+        m.item("Negative Image", "Ctrl+I", has_layer, [&] { run(std::make_unique<InvertCommand>(layer)); });
+        m.end_menu();
     }
-    if (ImGui::BeginMenu("Effects")) {
-        if (ImGui::MenuItem("Effect Browser...", nullptr, false, has_layer)) { reset_effect_browser(); show_effect_browser = true; }
-        ImGui::Separator();
-        if (ImGui::BeginMenu("3D Effects", has_layer)) {
-            if (ImGui::MenuItem("Buttonize...")) open_adjust = Adj::Buttonize;
-            if (ImGui::MenuItem("Cutout...")) open_adjust = Adj::Cutout;
-            if (ImGui::MenuItem("Drop Shadow...")) open_adjust = Adj::DropShadow;
-            if (ImGui::MenuItem("Inner Bevel...")) open_adjust = Adj::InnerBevel;
-            if (ImGui::MenuItem("Outer Bevel...")) open_adjust = Adj::OuterBevel;
-            ImGui::EndMenu();
+    if (m.begin_menu("Effects")) {
+        m.item("Effect Browser...", nullptr, has_layer, [&] { reset_effect_browser(); show_effect_browser = true; });
+        m.separator();
+        if (m.begin_menu("3D Effects", has_layer)) {
+            m.item("Buttonize...", nullptr, true, [&] { open_adjust = Adj::Buttonize; });
+            m.item("Cutout...", nullptr, true, [&] { open_adjust = Adj::Cutout; });
+            m.item("Drop Shadow...", nullptr, true, [&] { open_adjust = Adj::DropShadow; });
+            m.item("Inner Bevel...", nullptr, true, [&] { open_adjust = Adj::InnerBevel; });
+            m.item("Outer Bevel...", nullptr, true, [&] { open_adjust = Adj::OuterBevel; });
+            m.end_menu();
         }
-        if (ImGui::BeginMenu("Distortion Effects", has_layer)) {
-            if (ImGui::MenuItem("Lens Distortion...")) open_adjust = Adj::Lens;
-            if (ImGui::MenuItem("Pinch / Punch...")) open_adjust = Adj::Pinch;
-            if (ImGui::MenuItem("Ripple...")) open_adjust = Adj::Ripple;
-            if (ImGui::MenuItem("Spherize...")) open_adjust = Adj::Spherize;
-            if (ImGui::MenuItem("Twirl...")) open_adjust = Adj::Twirl;
-            if (ImGui::MenuItem("Wave...")) open_adjust = Adj::Wave;
-            ImGui::Separator();
-            if (ImGui::MenuItem("Curlicues...")) open_adjust = Adj::Curlicues;
-            if (ImGui::MenuItem("Displacement Map...")) open_adjust = Adj::DisplacementMap;
-            if (ImGui::MenuItem("Polar Coordinates...")) open_adjust = Adj::PolarCoordinates;
-            if (ImGui::MenuItem("Spiky Halo...")) open_adjust = Adj::SpikyHalo;
-            if (ImGui::MenuItem("Warp...")) open_adjust = Adj::Warp;
-            if (ImGui::MenuItem("Wind...")) open_adjust = Adj::Wind;
-            ImGui::EndMenu();
+        if (m.begin_menu("Distortion Effects", has_layer)) {
+            m.item("Lens Distortion...", nullptr, true, [&] { open_adjust = Adj::Lens; });
+            m.item("Pinch / Punch...", nullptr, true, [&] { open_adjust = Adj::Pinch; });
+            m.item("Ripple...", nullptr, true, [&] { open_adjust = Adj::Ripple; });
+            m.item("Spherize...", nullptr, true, [&] { open_adjust = Adj::Spherize; });
+            m.item("Twirl...", nullptr, true, [&] { open_adjust = Adj::Twirl; });
+            m.item("Wave...", nullptr, true, [&] { open_adjust = Adj::Wave; });
+            m.separator();
+            m.item("Curlicues...", nullptr, true, [&] { open_adjust = Adj::Curlicues; });
+            m.item("Displacement Map...", nullptr, true, [&] { open_adjust = Adj::DisplacementMap; });
+            m.item("Polar Coordinates...", nullptr, true, [&] { open_adjust = Adj::PolarCoordinates; });
+            m.item("Spiky Halo...", nullptr, true, [&] { open_adjust = Adj::SpikyHalo; });
+            m.item("Warp...", nullptr, true, [&] { open_adjust = Adj::Warp; });
+            m.item("Wind...", nullptr, true, [&] { open_adjust = Adj::Wind; });
+            m.end_menu();
         }
-        if (ImGui::BeginMenu("Geometric Effects", has_layer)) {
-            if (ImGui::MenuItem("Circle...")) open_adjust = Adj::Circle;
-            if (ImGui::MenuItem("Cylinder...")) open_adjust = Adj::Cylinder;
-            if (ImGui::MenuItem("Pentagon...")) open_adjust = Adj::Pentagon;
-            if (ImGui::MenuItem("Perspective...")) open_adjust = Adj::Perspective;
-            if (ImGui::MenuItem("Skew...")) open_adjust = Adj::Skew;
-            if (ImGui::MenuItem("Spherize...")) open_adjust = Adj::Spherize;
-            ImGui::EndMenu();
+        if (m.begin_menu("Geometric Effects", has_layer)) {
+            m.item("Circle...", nullptr, true, [&] { open_adjust = Adj::Circle; });
+            m.item("Cylinder...", nullptr, true, [&] { open_adjust = Adj::Cylinder; });
+            m.item("Pentagon...", nullptr, true, [&] { open_adjust = Adj::Pentagon; });
+            m.item("Perspective...", nullptr, true, [&] { open_adjust = Adj::Perspective; });
+            m.item("Skew...", nullptr, true, [&] { open_adjust = Adj::Skew; });
+            m.item("Spherize...", nullptr, true, [&] { open_adjust = Adj::Spherize; });
+            m.end_menu();
         }
-        if (ImGui::BeginMenu("Image Effects", has_layer)) {
-            if (ImGui::MenuItem("Offset...")) open_adjust = Adj::Offset;
-            if (ImGui::MenuItem("Page Curl...")) open_adjust = Adj::PageCurl;
-            if (ImGui::MenuItem("Seamless Tiling...")) open_adjust = Adj::SeamlessTiling;
-            ImGui::EndMenu();
+        if (m.begin_menu("Image Effects", has_layer)) {
+            m.item("Offset...", nullptr, true, [&] { open_adjust = Adj::Offset; });
+            m.item("Page Curl...", nullptr, true, [&] { open_adjust = Adj::PageCurl; });
+            m.item("Seamless Tiling...", nullptr, true, [&] { open_adjust = Adj::SeamlessTiling; });
+            m.end_menu();
         }
-        if (ImGui::BeginMenu("Art Media Effects", has_layer)) {
-            if (ImGui::MenuItem("Black Pencil...")) open_adjust = Adj::BlackPencil;
-            if (ImGui::MenuItem("Brush Strokes...")) open_adjust = Adj::BrushStrokes;
-            if (ImGui::MenuItem("Charcoal...")) open_adjust = Adj::Charcoal;
-            if (ImGui::MenuItem("Colored Chalk...")) open_adjust = Adj::ColoredChalk;
-            if (ImGui::MenuItem("Colored Pencil...")) open_adjust = Adj::ColoredPencil;
-            if (ImGui::MenuItem("Pencil...")) open_adjust = Adj::Pencil;
-            ImGui::EndMenu();
+        if (m.begin_menu("Art Media Effects", has_layer)) {
+            m.item("Black Pencil...", nullptr, true, [&] { open_adjust = Adj::BlackPencil; });
+            m.item("Brush Strokes...", nullptr, true, [&] { open_adjust = Adj::BrushStrokes; });
+            m.item("Charcoal...", nullptr, true, [&] { open_adjust = Adj::Charcoal; });
+            m.item("Colored Chalk...", nullptr, true, [&] { open_adjust = Adj::ColoredChalk; });
+            m.item("Colored Pencil...", nullptr, true, [&] { open_adjust = Adj::ColoredPencil; });
+            m.item("Pencil...", nullptr, true, [&] { open_adjust = Adj::Pencil; });
+            m.end_menu();
         }
-        if (ImGui::BeginMenu("Artistic Effects", has_layer)) {
-            if (ImGui::MenuItem("Aged Newspaper...")) open_adjust = Adj::AgedNewspaper;
-            if (ImGui::MenuItem("Balls and Bubbles...")) open_adjust = Adj::BallsBubbles;
-            if (ImGui::MenuItem("Chrome...")) open_adjust = Adj::Chrome;
-            if (ImGui::MenuItem("Colored Edges...")) open_adjust = Adj::ColoredEdges;
-            if (ImGui::MenuItem("Colored Foil...")) open_adjust = Adj::ColoredFoil;
-            if (ImGui::MenuItem("Contours...")) open_adjust = Adj::Contours;
-            if (ImGui::MenuItem("Enamel...")) open_adjust = Adj::Enamel;
-            if (ImGui::MenuItem("Glowing Edges...")) open_adjust = Adj::GlowingEdges;
-            if (ImGui::MenuItem("Halftone...")) open_adjust = Adj::Halftone;
-            if (ImGui::MenuItem("Hot Wax Coating...")) open_adjust = Adj::HotWax;
-            if (ImGui::MenuItem("Magnifying Lens...")) open_adjust = Adj::MagnifyingLens;
-            if (ImGui::MenuItem("Neon Glow...")) open_adjust = Adj::NeonGlow;
-            if (ImGui::MenuItem("Posterize...")) open_adjust = Adj::Posterize;
-            if (ImGui::MenuItem("Sepia Toning...")) open_adjust = Adj::Sepia;
-            if (ImGui::MenuItem("Solarize...")) open_adjust = Adj::Solarize;
-            if (ImGui::MenuItem("Topography...")) open_adjust = Adj::Topography;
-            ImGui::EndMenu();
+        if (m.begin_menu("Artistic Effects", has_layer)) {
+            m.item("Aged Newspaper...", nullptr, true, [&] { open_adjust = Adj::AgedNewspaper; });
+            m.item("Balls and Bubbles...", nullptr, true, [&] { open_adjust = Adj::BallsBubbles; });
+            m.item("Chrome...", nullptr, true, [&] { open_adjust = Adj::Chrome; });
+            m.item("Colored Edges...", nullptr, true, [&] { open_adjust = Adj::ColoredEdges; });
+            m.item("Colored Foil...", nullptr, true, [&] { open_adjust = Adj::ColoredFoil; });
+            m.item("Contours...", nullptr, true, [&] { open_adjust = Adj::Contours; });
+            m.item("Enamel...", nullptr, true, [&] { open_adjust = Adj::Enamel; });
+            m.item("Glowing Edges...", nullptr, true, [&] { open_adjust = Adj::GlowingEdges; });
+            m.item("Halftone...", nullptr, true, [&] { open_adjust = Adj::Halftone; });
+            m.item("Hot Wax Coating...", nullptr, true, [&] { open_adjust = Adj::HotWax; });
+            m.item("Magnifying Lens...", nullptr, true, [&] { open_adjust = Adj::MagnifyingLens; });
+            m.item("Neon Glow...", nullptr, true, [&] { open_adjust = Adj::NeonGlow; });
+            m.item("Posterize...", nullptr, true, [&] { open_adjust = Adj::Posterize; });
+            m.item("Sepia Toning...", nullptr, true, [&] { open_adjust = Adj::Sepia; });
+            m.item("Solarize...", nullptr, true, [&] { open_adjust = Adj::Solarize; });
+            m.item("Topography...", nullptr, true, [&] { open_adjust = Adj::Topography; });
+            m.end_menu();
         }
-        if (ImGui::BeginMenu("Edge Effects", has_layer)) {
-            if (ImGui::MenuItem("Enhance")) run(std::make_unique<AdjustCommand>(layer, "Enhance Edges", effects::enhance_edges));
-            if (ImGui::MenuItem("Enhance More")) run(std::make_unique<AdjustCommand>(layer, "Enhance Edges More", effects::enhance_edges_more));
-            if (ImGui::MenuItem("Find All")) run(std::make_unique<AdjustCommand>(layer, "Find Edges", effects::find_edges));
-            ImGui::EndMenu();
+        if (m.begin_menu("Edge Effects", has_layer)) {
+            m.item("Enhance", nullptr, true, [&] { run(std::make_unique<AdjustCommand>(layer, "Enhance Edges", effects::enhance_edges)); });
+            m.item("Enhance More", nullptr, true, [&] { run(std::make_unique<AdjustCommand>(layer, "Enhance Edges More", effects::enhance_edges_more)); });
+            m.item("Find All", nullptr, true, [&] { run(std::make_unique<AdjustCommand>(layer, "Find Edges", effects::find_edges)); });
+            m.end_menu();
         }
-        if (ImGui::BeginMenu("Illumination Effects", has_layer)) {
-            if (ImGui::MenuItem("Lights...")) open_adjust = Adj::Lights;
-            if (ImGui::MenuItem("Sunburst...")) open_adjust = Adj::Sunburst;
-            ImGui::EndMenu();
+        if (m.begin_menu("Illumination Effects", has_layer)) {
+            m.item("Lights...", nullptr, true, [&] { open_adjust = Adj::Lights; });
+            m.item("Sunburst...", nullptr, true, [&] { open_adjust = Adj::Sunburst; });
+            m.end_menu();
         }
-        if (ImGui::BeginMenu("Reflection Effects", has_layer)) {
-            if (ImGui::MenuItem("Feedback...")) open_adjust = Adj::Feedback;
-            if (ImGui::MenuItem("Kaleidoscope...")) open_adjust = Adj::Kaleidoscope;
-            if (ImGui::MenuItem("Pattern...")) open_adjust = Adj::Pattern;
-            if (ImGui::MenuItem("Rotating Mirror...")) open_adjust = Adj::RotatingMirror;
-            ImGui::EndMenu();
+        if (m.begin_menu("Reflection Effects", has_layer)) {
+            m.item("Feedback...", nullptr, true, [&] { open_adjust = Adj::Feedback; });
+            m.item("Kaleidoscope...", nullptr, true, [&] { open_adjust = Adj::Kaleidoscope; });
+            m.item("Pattern...", nullptr, true, [&] { open_adjust = Adj::Pattern; });
+            m.item("Rotating Mirror...", nullptr, true, [&] { open_adjust = Adj::RotatingMirror; });
+            m.end_menu();
         }
-        if (ImGui::BeginMenu("Texture Effects", has_layer)) {
-            if (ImGui::MenuItem("Blinds...")) open_adjust = Adj::Blinds;
-            if (ImGui::MenuItem("Emboss")) run(std::make_unique<AdjustCommand>(layer, "Emboss", effects::emboss));
-            if (ImGui::MenuItem("Fine Leather...")) open_adjust = Adj::FineLeather;
-            if (ImGui::MenuItem("Fur...")) open_adjust = Adj::Fur;
-            if (ImGui::MenuItem("Mosaic - Antique...")) open_adjust = Adj::MosaicAntique;
-            if (ImGui::MenuItem("Mosaic - Glass...")) open_adjust = Adj::MosaicGlass;
-            if (ImGui::MenuItem("Pixelate (Mosaic)...")) open_adjust = Adj::Mosaic;
-            if (ImGui::MenuItem("Polished Stone...")) open_adjust = Adj::PolishedStone;
-            if (ImGui::MenuItem("Rough Leather...")) open_adjust = Adj::RoughLeather;
-            if (ImGui::MenuItem("Sandstone...")) open_adjust = Adj::Sandstone;
-            if (ImGui::MenuItem("Sculpture...")) open_adjust = Adj::Sculpture;
-            if (ImGui::MenuItem("Soft Plastic...")) open_adjust = Adj::SoftPlastic;
-            if (ImGui::MenuItem("Straw Wall...")) open_adjust = Adj::StrawWall;
-            if (ImGui::MenuItem("Texture...")) open_adjust = Adj::Texture;
-            if (ImGui::MenuItem("Tiles...")) open_adjust = Adj::Tiles;
-            if (ImGui::MenuItem("Weave...")) open_adjust = Adj::Weave;
-            ImGui::EndMenu();
+        if (m.begin_menu("Texture Effects", has_layer)) {
+            m.item("Blinds...", nullptr, true, [&] { open_adjust = Adj::Blinds; });
+            m.item("Emboss", nullptr, true, [&] { run(std::make_unique<AdjustCommand>(layer, "Emboss", effects::emboss)); });
+            m.item("Fine Leather...", nullptr, true, [&] { open_adjust = Adj::FineLeather; });
+            m.item("Fur...", nullptr, true, [&] { open_adjust = Adj::Fur; });
+            m.item("Mosaic - Antique...", nullptr, true, [&] { open_adjust = Adj::MosaicAntique; });
+            m.item("Mosaic - Glass...", nullptr, true, [&] { open_adjust = Adj::MosaicGlass; });
+            m.item("Pixelate (Mosaic)...", nullptr, true, [&] { open_adjust = Adj::Mosaic; });
+            m.item("Polished Stone...", nullptr, true, [&] { open_adjust = Adj::PolishedStone; });
+            m.item("Rough Leather...", nullptr, true, [&] { open_adjust = Adj::RoughLeather; });
+            m.item("Sandstone...", nullptr, true, [&] { open_adjust = Adj::Sandstone; });
+            m.item("Sculpture...", nullptr, true, [&] { open_adjust = Adj::Sculpture; });
+            m.item("Soft Plastic...", nullptr, true, [&] { open_adjust = Adj::SoftPlastic; });
+            m.item("Straw Wall...", nullptr, true, [&] { open_adjust = Adj::StrawWall; });
+            m.item("Texture...", nullptr, true, [&] { open_adjust = Adj::Texture; });
+            m.item("Tiles...", nullptr, true, [&] { open_adjust = Adj::Tiles; });
+            m.item("Weave...", nullptr, true, [&] { open_adjust = Adj::Weave; });
+            m.end_menu();
         }
-        if (ImGui::MenuItem("User Defined Filter...", nullptr, false, has_layer)) open_adjust = Adj::UserFilter;
-        ImGui::EndMenu();
+        m.item("User Defined Filter...", nullptr, has_layer, [&] { open_adjust = Adj::UserFilter; });
+        m.end_menu();
     }
-    draw_selections_menu();
-    if (ImGui::BeginMenu("Layers")) {
-        draw_layer_menu_items();
-        ImGui::EndMenu();
+    draw_selections_menu(m);
+    if (m.begin_menu("Layers")) {
+        draw_layer_menu_items(m);
+        m.end_menu();
     }
-    if (ImGui::BeginMenu("Objects")) {
+    if (m.begin_menu("Objects")) {
         const bool on_vector = has_any_layer && doc->layer(layer).is_vector();
         const size_t nsel = on_vector ? selected_objects().size() : 0;
         bool has_text = false;
         if (on_vector) for (const auto& o : doc->layer(layer).objects) if (o.selected && o.is_text) has_text = true;
-        if (ImGui::BeginMenu("Align", nsel > 0)) {
+        if (m.begin_menu("Align", nsel > 0)) {
             static const char* items[] = {"Top", "Bottom", "Left", "Right", "Vertical Center", "Horizontal Center", "Center in Canvas", "Horizontal Center in Canvas", "Vertical Center in Canvas"};
             for (int i = 0; i < 9; ++i) {
-                if (i == 6) ImGui::Separator();
-                if (ImGui::MenuItem(items[i], nullptr, false, i >= 6 || nsel > 1)) object_align(i);
+                if (i == 6) m.separator();
+                m.item(items[i], nullptr, i >= 6 || nsel > 1, [this, i] { object_align(i); });
             }
-            ImGui::EndMenu();
+            m.end_menu();
         }
-        if (ImGui::BeginMenu("Distribute", nsel > 2)) {
+        if (m.begin_menu("Distribute", nsel > 2)) {
             static const char* items[] = {"Vertical Top", "Vertical Center", "Vertical Bottom", "Horizontal Left", "Horizontal Center", "Horizontal Right", "Space Evenly Vertically", "Space Evenly Horizontally"};
-            for (int i = 0; i < 8; ++i) { if (i == 3 || i == 6) ImGui::Separator(); if (ImGui::MenuItem(items[i])) object_distribute(i); }
-            ImGui::EndMenu();
+            for (int i = 0; i < 8; ++i) { if (i == 3 || i == 6) m.separator(); m.item(items[i], nullptr, true, [this, i] { object_distribute(i); }); }
+            m.end_menu();
         }
-        if (ImGui::BeginMenu("Make Same Size", nsel > 1)) {
-            if (ImGui::MenuItem("Height")) object_same_size(0);
-            if (ImGui::MenuItem("Width")) object_same_size(1);
-            if (ImGui::MenuItem("Both")) object_same_size(2);
-            ImGui::EndMenu();
+        if (m.begin_menu("Make Same Size", nsel > 1)) {
+            m.item("Height", nullptr, true, [&] { object_same_size(0); });
+            m.item("Width", nullptr, true, [&] { object_same_size(1); });
+            m.item("Both", nullptr, true, [&] { object_same_size(2); });
+            m.end_menu();
         }
-        if (ImGui::BeginMenu("Arrange", nsel > 0)) {
+        if (m.begin_menu("Arrange", nsel > 0)) {
             const int n = static_cast<int>(doc->layer(layer).objects.size()) + 1;
-            if (ImGui::MenuItem("Bring to Top")) object_arrange(n);
-            if (ImGui::MenuItem("Move Up")) object_arrange(1);
-            if (ImGui::MenuItem("Move Down")) object_arrange(-1);
-            if (ImGui::MenuItem("Send to Bottom")) object_arrange(-n);
-            ImGui::EndMenu();
+            m.item("Bring to Top", nullptr, true, [this, n] { object_arrange(n); });
+            m.item("Move Up", nullptr, true, [&] { object_arrange(1); });
+            m.item("Move Down", nullptr, true, [&] { object_arrange(-1); });
+            m.item("Send to Bottom", nullptr, true, [this, n] { object_arrange(-n); });
+            m.end_menu();
         }
-        ImGui::Separator();
-        if (ImGui::MenuItem("Group", nullptr, false, nsel > 1)) object_group();
-        if (ImGui::MenuItem("Ungroup", nullptr, false, nsel > 0)) object_ungroup();
-        ImGui::Separator();
-        if (ImGui::MenuItem("Edit Text...", nullptr, false, has_text)) open_text_edit();
-        if (ImGui::BeginMenu("Convert Text to Curves", has_text)) {
-            if (ImGui::MenuItem("As Single Shape")) object_text_to_curves(false);
-            if (ImGui::MenuItem("As Character Shapes")) object_text_to_curves(true);
-            ImGui::EndMenu();
+        m.separator();
+        m.item("Group", nullptr, nsel > 1, [&] { object_group(); });
+        m.item("Ungroup", nullptr, nsel > 0, [&] { object_ungroup(); });
+        m.separator();
+        m.item("Edit Text...", nullptr, has_text, [&] { open_text_edit(); });
+        if (m.begin_menu("Convert Text to Curves", has_text)) {
+            m.item("As Single Shape", nullptr, true, [&] { object_text_to_curves(false); });
+            m.item("As Character Shapes", nullptr, true, [&] { object_text_to_curves(true); });
+            m.end_menu();
         }
-        if (ImGui::MenuItem("Properties...", nullptr, false, nsel > 0)) open_vector_properties();
-        ImGui::Separator();
-        if (ImGui::MenuItem("Select All", nullptr, false, on_vector)) object_select_all();
-        if (ImGui::MenuItem("Select None", nullptr, false, nsel > 0)) object_select_none();
-        if (ImGui::MenuItem("Delete", nullptr, false, nsel > 0)) object_delete();
-        ImGui::EndMenu();
+        m.item("Properties...", nullptr, nsel > 0, [&] { open_vector_properties(); });
+        m.separator();
+        m.item("Select All", nullptr, on_vector, [&] { object_select_all(); });
+        m.item("Select None", nullptr, nsel > 0, [&] { object_select_none(); });
+        m.item("Delete", nullptr, nsel > 0, [&] { object_delete(); });
+        m.end_menu();
     }
-    if (ImGui::BeginMenu("Window")) {
+    if (m.begin_menu("Window")) {
         for (int i = 0; i < static_cast<int>(docs.size()); ++i) {
             const std::string label = document_title(i) + (document_modified(i) ? "*" : "");
-            if (ImGui::MenuItem(label.c_str(), nullptr, i == current_doc)) activate_document(i);
+            m.push_id(i);
+            m.item(label.c_str(), nullptr, true, [this, i] { activate_document(i); }, i == current_doc);
+            m.pop_id();
         }
-        if (docs.empty()) ImGui::MenuItem("(no images open)", nullptr, false, false);
-        ImGui::Separator();
-        if (ImGui::MenuItem("Tabbed Documents", nullptr, !image_windows)) {
+        if (docs.empty()) m.item("(no images open)", nullptr, false, [] {});
+        m.separator();
+        m.item("Tabbed Documents", nullptr, true, [&] {
             image_windows = !image_windows;
             config.image_windows = image_windows;
             config.save();
             if (image_windows) arrange_request = Arrange::Cascade;
-        }
+        }, !image_windows);
         const bool can_arrange = image_windows && !docs.empty();
-        if (ImGui::MenuItem("Cascade", nullptr, false, can_arrange)) arrange_request = Arrange::Cascade;
-        if (ImGui::MenuItem("Tile Horizontally", nullptr, false, can_arrange)) arrange_request = Arrange::TileHorizontally;
-        if (ImGui::MenuItem("Tile Vertically", nullptr, false, can_arrange)) arrange_request = Arrange::TileVertically;
-        ImGui::EndMenu();
+        m.item("Cascade", nullptr, can_arrange, [&] { arrange_request = Arrange::Cascade; });
+        m.item("Tile Horizontally", nullptr, can_arrange, [&] { arrange_request = Arrange::TileHorizontally; });
+        m.item("Tile Vertically", nullptr, can_arrange, [&] { arrange_request = Arrange::TileVertically; });
+        m.end_menu();
     }
-    if (ImGui::BeginMenu("Help")) {
-        if (ImGui::MenuItem("Keyboard Shortcuts...")) show_shortcuts_dialog = true;
-        ImGui::Separator();
-        if (ImGui::MenuItem("About Firn...")) show_about_dialog = true;
-        ImGui::EndMenu();
+    if (m.begin_menu("Help")) {
+        m.item("Keyboard Shortcuts...", nullptr, true, [&] { show_shortcuts_dialog = true; });
+        m.separator();
+        m.item("About Firn...", nullptr, true, [&] { show_about_dialog = true; });
+        m.end_menu();
     }
-    ImGui::EndMainMenuBar();
 }
 
 
 // The Layers menu body, shared with the Layers palette's context menu.
-void App::draw_layer_menu_items() {
+void App::draw_layer_menu_items(MenuBuilder& m) {
     const bool has_doc = doc != nullptr;
     const int layer = active_layer();
     const bool has_any_layer = has_doc && layer >= 0;
@@ -551,69 +558,69 @@ void App::draw_layer_menu_items() {
     const bool is_group = has_any_layer && doc->layer(layer).type == LayerType::Group;
     const int n = has_doc ? static_cast<int>(doc->layer_count()) : 0;
     const bool is_bg = has_layer && doc->layer(layer).background;
-    if (ImGui::MenuItem("New Raster Layer", nullptr, false, has_doc)) layer_new();
-    if (ImGui::MenuItem("New Vector Layer", nullptr, false, has_doc)) layer_new_vector();
-    if (ImGui::BeginMenu("New Adjustment Layer", has_doc)) {
+    m.item("New Raster Layer", nullptr, has_doc, [&] { layer_new(); });
+    m.item("New Vector Layer", nullptr, has_doc, [&] { layer_new_vector(); });
+    if (m.begin_menu("New Adjustment Layer", has_doc)) {
         using K = Adjustment::Kind;
         static const K kinds[] = {K::BrightnessContrast, K::ChannelMixer, K::ColorBalance, K::Curves, K::HSL, K::Invert, K::Levels, K::Posterize, K::Threshold};
-        for (K k : kinds) if (ImGui::MenuItem(Adjustment::kind_name(k))) layer_new_adjustment(k);
-        ImGui::EndMenu();
+        for (K k : kinds) m.item(Adjustment::kind_name(k), nullptr, true, [this, k] { layer_new_adjustment(k); });
+        m.end_menu();
     }
-    if (ImGui::BeginMenu("New Filter Layer", has_doc)) {
+    if (m.begin_menu("New Filter Layer", has_doc)) {
         using K = Adjustment::Kind;
         static const K kinds[] = {K::GaussianBlur, K::Average, K::UnsharpMask};
-        for (K k : kinds) if (ImGui::MenuItem(Adjustment::kind_name(k))) layer_new_adjustment(k);
-        ImGui::EndMenu();
+        for (K k : kinds) m.item(Adjustment::kind_name(k), nullptr, true, [this, k] { layer_new_adjustment(k); });
+        m.end_menu();
     }
-    if (ImGui::MenuItem("New Layer Group", nullptr, false, has_any_layer)) layer_new_group();
-    if (ImGui::BeginMenu("New Mask Layer", has_any_layer)) {
-        if (ImGui::MenuItem("Show All")) layer_set_mask("New Mask Layer", Mask(doc->width(), doc->height(), 255));
-        if (ImGui::MenuItem("Hide All")) layer_set_mask("New Mask Layer", Mask(doc->width(), doc->height(), 0));
-        if (ImGui::MenuItem("From Selection", nullptr, false, doc->has_selection())) layer_mask_from_selection();
-        if (ImGui::MenuItem("From Image")) layer_mask_from_image();
-        ImGui::EndMenu();
+    m.item("New Layer Group", nullptr, has_any_layer, [&] { layer_new_group(); });
+    if (m.begin_menu("New Mask Layer", has_any_layer)) {
+        m.item("Show All", nullptr, true, [&] { layer_set_mask("New Mask Layer", Mask(doc->width(), doc->height(), 255)); });
+        m.item("Hide All", nullptr, true, [&] { layer_set_mask("New Mask Layer", Mask(doc->width(), doc->height(), 0)); });
+        m.item("From Selection", nullptr, doc->has_selection(), [&] { layer_mask_from_selection(); });
+        m.item("From Image", nullptr, true, [&] { layer_mask_from_image(); });
+        m.end_menu();
     }
-    if (ImGui::MenuItem("Duplicate", nullptr, false, has_any_layer)) layer_duplicate();
-    if (ImGui::MenuItem("Delete", nullptr, false, has_any_layer && n > 1)) layer_delete();
-    if (ImGui::MenuItem("Ungroup Layers", nullptr, false, is_group)) layer_ungroup();
-    if (ImGui::MenuItem("Properties...", nullptr, false, has_any_layer)) {
+    m.item("Duplicate", nullptr, has_any_layer, [&] { layer_duplicate(); });
+    m.item("Delete", nullptr, has_any_layer && n > 1, [&] { layer_delete(); });
+    m.item("Ungroup Layers", nullptr, is_group, [&] { layer_ungroup(); });
+    m.item("Properties...", nullptr, has_any_layer, [&] {
         if (doc->layer(layer).is_adjustment()) open_adjustment_dialog(layer, false);
         else open_layer_properties();
+    });
+    m.item("Layer Styles...", nullptr, has_any_layer && !doc->layer(layer).is_adjustment(), [&] { open_layer_styles(layer); });
+    m.separator();
+    if (m.begin_menu("Mask", has_any_layer && doc->layer(layer).has_mask())) {
+        const bool mask_on = doc->layer(layer).mask_enabled;
+        m.item("Enable Mask", nullptr, true, [&] { layer_set_mask(!mask_on ? "Enable Mask" : "Disable Mask", doc->layer(layer).mask, !mask_on); }, mask_on);
+        const bool editing = mask_edit && static_cast<int>(mask_proxy_layer) == layer;
+        m.item("Edit Mask", nullptr, true, [&] { set_mask_edit(!editing); }, editing);
+        m.item("Invert Mask", nullptr, true, [&] { Mask msk = doc->layer(layer).mask; mask::invert(msk); layer_set_mask("Invert Mask", std::move(msk), doc->layer(layer).mask_enabled); });
+        m.item("Delete Mask", nullptr, true, [&] { layer_set_mask("Delete Mask", Mask()); });
+        m.item("Load Selection From Mask", nullptr, true, [&] { set_selection("Load Selection From Mask", doc->layer(layer).mask); });
+        m.end_menu();
     }
-    if (ImGui::MenuItem("Layer Styles...", nullptr, false, has_any_layer && !doc->layer(layer).is_adjustment())) open_layer_styles(layer);
-    ImGui::Separator();
-    if (ImGui::BeginMenu("Mask", has_any_layer && doc->layer(layer).has_mask())) {
-        bool on = doc->layer(layer).mask_enabled;
-        if (ImGui::MenuItem("Enable Mask", nullptr, &on)) layer_set_mask(on ? "Enable Mask" : "Disable Mask", doc->layer(layer).mask, on);
-        bool editing = mask_edit && static_cast<int>(mask_proxy_layer) == layer;
-        if (ImGui::MenuItem("Edit Mask", nullptr, &editing)) set_mask_edit(editing);
-        if (ImGui::MenuItem("Invert Mask")) { Mask m = doc->layer(layer).mask; mask::invert(m); layer_set_mask("Invert Mask", std::move(m), doc->layer(layer).mask_enabled); }
-        if (ImGui::MenuItem("Delete Mask")) layer_set_mask("Delete Mask", Mask());
-        if (ImGui::MenuItem("Load Selection From Mask")) set_selection("Load Selection From Mask", doc->layer(layer).mask);
-        ImGui::EndMenu();
+    if (m.begin_menu("View", has_any_layer)) {
+        m.item("Current Only", nullptr, true, [&] { layer_view_only(true); });
+        m.item("All", nullptr, true, [&] { layer_view_only(false); });
+        m.end_menu();
     }
-    if (ImGui::BeginMenu("View", has_any_layer)) {
-        if (ImGui::MenuItem("Current Only")) layer_view_only(true);
-        if (ImGui::MenuItem("All")) layer_view_only(false);
-        ImGui::EndMenu();
+    if (m.begin_menu("Arrange", has_any_layer)) {
+        m.item("Bring to Top", nullptr, true, [this, n] { layer_arrange(n); });
+        m.item("Move Up", nullptr, true, [&] { layer_arrange(+1); });
+        m.item("Move Down", nullptr, true, [&] { layer_arrange(-1); });
+        m.item("Send to Bottom", nullptr, true, [this, n] { layer_arrange(-n); });
+        m.end_menu();
     }
-    if (ImGui::BeginMenu("Arrange", has_any_layer)) {
-        if (ImGui::MenuItem("Bring to Top")) layer_arrange(n);
-        if (ImGui::MenuItem("Move Up")) layer_arrange(+1);
-        if (ImGui::MenuItem("Move Down")) layer_arrange(-1);
-        if (ImGui::MenuItem("Send to Bottom")) layer_arrange(-n);
-        ImGui::EndMenu();
+    if (m.begin_menu("Merge", has_any_layer)) {
+        m.item("Merge Down", nullptr, has_layer && layer > 0 && doc->layer(layer - 1).is_raster() && doc->layer(layer - 1).depth == doc->layer(layer).depth, [&] { layer_merge(0); });
+        m.item("Merge Visible", nullptr, n > 1, [&] { layer_merge(1); });
+        m.item("Merge All (Flatten)", nullptr, n > 1, [&] { layer_merge(2); });
+        m.end_menu();
     }
-    if (ImGui::BeginMenu("Merge", has_any_layer)) {
-        if (ImGui::MenuItem("Merge Down", nullptr, false, has_layer && layer > 0 && doc->layer(layer - 1).is_raster() && doc->layer(layer - 1).depth == doc->layer(layer).depth)) layer_merge(0);
-        if (ImGui::MenuItem("Merge Visible", nullptr, false, n > 1)) layer_merge(1);
-        if (ImGui::MenuItem("Merge All (Flatten)", nullptr, false, n > 1)) layer_merge(2);
-        ImGui::EndMenu();
-    }
-    ImGui::Separator();
-    if (ImGui::MenuItem("Promote Background Layer", nullptr, false, is_bg)) layer_promote_background();
-    if (ImGui::MenuItem("Promote Selection to Layer", nullptr, false, has_layer && doc->has_selection())) promote_selection_to_layer(false);
-    if (ImGui::MenuItem("Convert to Raster Layer", nullptr, false, has_any_layer && doc->layer(layer).is_vector())) layer_convert_to_raster();
+    m.separator();
+    m.item("Promote Background Layer", nullptr, is_bg, [&] { layer_promote_background(); });
+    m.item("Promote Selection to Layer", nullptr, has_layer && doc->has_selection(), [&] { promote_selection_to_layer(false); });
+    m.item("Convert to Raster Layer", nullptr, has_any_layer && doc->layer(layer).is_vector(), [&] { layer_convert_to_raster(); });
 }
 
 void App::draw_dialogs() {
