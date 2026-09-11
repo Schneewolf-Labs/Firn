@@ -70,7 +70,7 @@ bool adjustment_body(App& app, Adjustment& a) {
             ImGui::SetNextItemWidth(140);
             if (ImGui::Combo("Channel", &channel, "RGB\0Red\0Green\0Blue\0")) app.curve_points = a.curves[std::clamp(channel, 0, 3)];
             if (curve_editor(app, ImVec2(256, 256))) { a.curves[std::clamp(channel, 0, 3)] = app.curve_points; changed = true; }
-            if (ImGui::SmallButton("Reset channel")) { a.curves[std::clamp(channel, 0, 3)] = {{0, 0}, {255, 255}}; app.curve_points = a.curves[std::clamp(channel, 0, 3)]; changed = true; }
+            if (ImGui::SmallButton("Reset channel")) { a.curves[std::clamp(channel, 0, 3)] = {{0.0f, 0.0f}, {255.0f, 255.0f}}; app.curve_points = a.curves[std::clamp(channel, 0, 3)]; changed = true; }
             break;
         }
         case Adjustment::Kind::ColorBalance: {

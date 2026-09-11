@@ -36,7 +36,8 @@ struct Adjustment {
     };
     std::array<Levels, 4> levels{};
     // Curves: RGB, red, green, blue as control points (x, y in 0..255).
-    std::array<std::vector<std::pair<float, float>>, 4> curves{{{{0, 0}, {255, 255}}, {{0, 0}, {255, 255}}, {{0, 0}, {255, 255}}, {{0, 0}, {255, 255}}}};
+    std::array<std::vector<std::pair<float, float>>, 4> curves{{{{0.0f, 0.0f}, {255.0f, 255.0f}}, {{0.0f, 0.0f}, {255.0f, 255.0f}},
+                                                              {{0.0f, 0.0f}, {255.0f, 255.0f}}, {{0.0f, 0.0f}, {255.0f, 255.0f}}}};
     // HSL: hue shift in degrees, saturation and lightness in -100..100.
     int hue = 0, saturation = 0, lightness = 0;
     bool colorize = false;

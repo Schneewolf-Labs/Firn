@@ -361,7 +361,7 @@ void mosaic_antique(Image& img, int columns, int rows, int symmetric, int diffus
             const float shift = u(rng) * diff;
             for (int y = y0; y < y1; ++y)
                 for (int x = x0; x < x1; ++x) {
-                    const float ex = std::min(x - x0, x1 - 1 - x), ey = std::min(y - y0, y1 - 1 - y);
+                    const float ex = static_cast<float>(std::min(x - x0, x1 - 1 - x)), ey = static_cast<float>(std::min(y - y0, y1 - 1 - y));
                     const bool grout = ex < g || ey < g;
                     uint8_t* p = d + (static_cast<size_t>(y) * w + x) * 4;
                     if (grout) set_rgb(p, p[0] * (1 - gop) + 60 * gop, p[1] * (1 - gop) + 55 * gop, p[2] * (1 - gop) + 50 * gop);
@@ -509,7 +509,7 @@ void weave(Image& img, int gap, int width, int opacity, Color gap_color, Color w
             if (in_h && in_v) shade = 1.0f;
             else if (in_h) shade = h_on_top ? 1.0f : 0.65f;
             else shade = h_on_top ? 0.65f : 1.0f;
-            const float edge = in_h ? std::min(fy, width - 1 - fy) : std::min(fx, width - 1 - fx);
+            const float edge = static_cast<float>(in_h ? std::min(fy, width - 1 - fy) : std::min(fx, width - 1 - fx));
             shade *= 0.8f + 0.2f * std::min(1.0f, edge / 2.0f);
             set_rgb(p, (p[0] + (weave_color.r - p[0]) * op) * shade, (p[1] + (weave_color.g - p[1]) * op) * shade, (p[2] + (weave_color.b - p[2]) * op) * shade);
         }

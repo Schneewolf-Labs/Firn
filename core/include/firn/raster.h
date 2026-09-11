@@ -31,6 +31,8 @@ struct BrushTip {
     static std::shared_ptr<const BrushTip> from_image(const Image& img);
     // Builds a texture: lighter pixels let more paint through.
     static std::shared_ptr<const BrushTip> texture_from_image(const Image& img);
+    // The inverse of texture_from_image: coverage as opaque gray, 0..1 to 0..255.
+    Image to_image() const;
 };
 
 struct Brush {

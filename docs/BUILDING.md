@@ -23,7 +23,9 @@ ctest --test-dir build --output-on-failure
 ```
 
 Warnings are errors in spirit: the build runs with `-Wall -Wextra -Wpedantic`
-and is expected to stay silent.
+(`/W3` on MSVC) and is expected to stay silent. The Windows CI job enforces
+it with `/WX`; pass `-DCMAKE_COMPILE_WARNING_AS_ERROR=ON` to do the same
+locally.
 
 ### Windows
 

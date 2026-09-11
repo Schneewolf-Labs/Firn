@@ -149,8 +149,8 @@ void add_noise(Image& img, int percent, bool gaussian, bool monochrome, uint32_t
 void find_edges(Image& img) {
     rgb_pass(img, [&](int x, int y, auto at, float* out) {
         for (int c = 0; c < 3; ++c) {
-            const float gx = -at(x - 1, y - 1)[c] - 2 * at(x - 1, y)[c] - at(x - 1, y + 1)[c] + at(x + 1, y - 1)[c] + 2 * at(x + 1, y)[c] + at(x + 1, y + 1)[c];
-            const float gy = -at(x - 1, y - 1)[c] - 2 * at(x, y - 1)[c] - at(x + 1, y - 1)[c] + at(x - 1, y + 1)[c] + 2 * at(x, y + 1)[c] + at(x + 1, y + 1)[c];
+            const float gx = static_cast<float>(-at(x - 1, y - 1)[c] - 2 * at(x - 1, y)[c] - at(x - 1, y + 1)[c] + at(x + 1, y - 1)[c] + 2 * at(x + 1, y)[c] + at(x + 1, y + 1)[c]);
+            const float gy = static_cast<float>(-at(x - 1, y - 1)[c] - 2 * at(x, y - 1)[c] - at(x + 1, y - 1)[c] + at(x - 1, y + 1)[c] + 2 * at(x, y + 1)[c] + at(x + 1, y + 1)[c]);
             out[c] = std::sqrt(gx * gx + gy * gy) * 0.5f;
         }
     });

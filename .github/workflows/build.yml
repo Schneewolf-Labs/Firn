@@ -45,8 +45,10 @@ jobs:
           key: vcpkg-${{ runner.os }}-sdl2-x64
       - name: Install SDL2
         run: vcpkg install sdl2:x64-windows
+      # Warnings are errors here (/WX): nobody builds with MSVC day to day, so
+      # this job is the only thing that notices a new one.
       - name: Configure
-        run: cmake -S . -B build -A x64 -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
+        run: cmake -S . -B build -A x64 -DCMAKE_COMPILE_WARNING_AS_ERROR=ON -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
       - name: Build
         run: cmake --build build --config Release
       - name: Unit tests

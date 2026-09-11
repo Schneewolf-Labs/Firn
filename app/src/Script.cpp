@@ -628,7 +628,7 @@ std::string App::do_command(const std::string& name, const Value& p, bool* ok) {
         const Value& rgb = p.get("CurveParams.RGB");
         for (size_t i = 0; i < rgb.size(); ++i)
             if (rgb[i].size() >= 2) pts.emplace_back(static_cast<float>(rgb[i][0].as_number()), static_cast<float>(rgb[i][1].as_number()));
-        if (pts.size() < 2) pts = {{0, 0}, {255, 255}};
+        if (pts.size() < 2) pts = {{0.0f, 0.0f}, {255.0f, 255.0f}};
         return adjust("Curves", [pts](Image& i) { adjust::apply_lut(i, adjust::curve_lut(pts)); });
     }
     if (name == "ColorAdjustHueMap") {

@@ -70,6 +70,17 @@ std::shared_ptr<const BrushTip> BrushTip::texture_from_image(const Image& img) {
     return t;
 }
 
+Image BrushTip::to_image() const {
+    Image img(width, height);
+    for (size_t i = 0; i < coverage.size(); ++i) {
+        const uint8_t v = static_cast<uint8_t>(std::lround(std::clamp(coverage[i], 0.0f, 1.0f) * 255.0f));
+        uint8_t* p = img.data() + i * 4;
+        p[0] = p[1] = p[2] = v;
+        p[3] = 255;
+    }
+    return img;
+}
+
 // Texture weight at an image pixel: 1 without a texture.
 static inline float texture_weight(const Brush& b, int x, int y) {
     if (!b.texture || b.texture->width <= 0 || b.texture_strength <= 0.0f) return 1.0f;

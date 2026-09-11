@@ -138,7 +138,7 @@ Lut brightness_contrast_lut(int brightness, int contrast) {
 Lut curve_lut(const std::vector<std::pair<float, float>>& in) {
     std::vector<std::pair<float, float>> pts = in;
     std::sort(pts.begin(), pts.end());
-    if (pts.empty()) pts = {{0, 0}, {255, 255}};
+    if (pts.empty()) pts = {{0.0f, 0.0f}, {255.0f, 255.0f}};
     if (pts.size() == 1) pts.push_back({pts[0].first + 1, pts[0].second});
     const size_t n = pts.size();
     std::vector<float> d(n - 1), m(n);
@@ -226,7 +226,7 @@ void sepia(Image& img, int amount) {
     const float t = std::clamp(amount, 0, 100) / 100.0f;
     uint8_t* p = img.data();
     for (size_t i = 0; i < img.size_bytes(); i += 4) {
-        const float y = luma(p + i);
+        const float y = static_cast<float>(luma(p + i));
         const float sr = std::min(255.0f, y * 1.15f), sg = y * 0.95f, sb = y * 0.72f;
         p[i] = clamp8(p[i] + (sr - p[i]) * t);
         p[i + 1] = clamp8(p[i + 1] + (sg - p[i + 1]) * t);

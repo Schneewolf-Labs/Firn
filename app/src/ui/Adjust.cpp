@@ -288,7 +288,7 @@ void App::draw_adjust_dialogs() {
         [&] {
             bool c = curve_editor(*this, ImVec2(256, 256));
             ImGui::TextDisabled("Click to add a point, drag to move, right-click to remove.");
-            if (ImGui::SmallButton("Reset")) { curve_points = {{0, 0}, {255, 255}}; c = true; }
+            if (ImGui::SmallButton("Reset")) { curve_points = {{0.0f, 0.0f}, {255.0f, 255.0f}}; c = true; }
             return c;
         },
         [&](Image& img) { adjust::apply_lut(img, adjust::curve_lut(curve_points)); },
@@ -813,11 +813,8 @@ void App::draw_adjust_dialogs() {
         },
         [&](Image& img) {
             Image bump;
-            if (texture_index >= 0 && texture_index < static_cast<int>(textures.size()) && textures[static_cast<size_t>(texture_index)].texture) {
-                const auto& t = *textures[static_cast<size_t>(texture_index)].texture;
-                bump = Image(t.width, t.height);
-                for (int i = 0; i < t.width * t.height; ++i) { uint8_t* p = bump.data() + static_cast<size_t>(i) * 4; p[0] = p[1] = p[2] = t.coverage[static_cast<size_t>(i)]; p[3] = 255; }
-            }
+            if (texture_index >= 0 && texture_index < static_cast<int>(textures.size()) && textures[static_cast<size_t>(texture_index)].texture)
+                bump = textures[static_cast<size_t>(texture_index)].texture->to_image();
             effects::texture(img, bump, adjust_state->fx_size, adjust_state->fx_smooth, adjust_state->fx_depth, adjust_state->fx_angle, float_rgb(adjust_state->fx_color));
         });
     adjust_modal(*this, "Tiles", [&] { bool c = ImGui::Combo("Shape", &adjust_state->fx_shape, "Square\0Hexagon\0Triangle\0"); c |= ImGui::SliderInt("Size", &adjust_state->fx_size, 4, 200); c |= ImGui::SliderInt("Border", &adjust_state->fx_border, 0, 100); c |= ImGui::SliderInt("Smoothness", &adjust_state->fx_smooth, 0, 100); c |= ImGui::SliderInt("Depth", &adjust_state->fx_depth, 1, 100); c |= angle_color(); return c; }, [&](Image& img) { effects::tiles(img, adjust_state->fx_shape, adjust_state->fx_size, adjust_state->fx_border, adjust_state->fx_smooth, adjust_state->fx_depth, adjust_state->fx_angle, float_rgb(adjust_state->fx_color)); });

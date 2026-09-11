@@ -1136,7 +1136,7 @@ private:
         app.sel_mode = saved;
     }
     std::vector<std::pair<float, float>> pts_, vertices_, live_;
-    std::pair<float, float> live_target_{-1, -1};
+    std::pair<float, float> live_target_{-1.0f, -1.0f};
     std::vector<float> edges_;
     bool polygon_open_ = false;
     bool dragging_ = false;

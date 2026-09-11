@@ -217,9 +217,9 @@ static void test_mask_shapes() {
     Mask e = mask::ellipse(20, 20, 10, 10, 6, 4, true);
     CHECK(e.at(10, 10) == 255 && e.at(15, 10) > 0 && e.at(17, 10) == 0 && e.at(10, 15) == 0);
 
-    Mask p = mask::polygon(10, 10, {{1, 1}, {8, 1}, {8, 8}, {1, 8}}, false);  // a square
+    Mask p = mask::polygon(10, 10, {{1.0f, 1.0f}, {8.0f, 1.0f}, {8.0f, 8.0f}, {1.0f, 8.0f}}, false);  // a square
     CHECK(p.at(1, 1) == 255 && p.at(7, 7) == 255 && p.at(8, 8) == 0 && p.at(0, 4) == 0);
-    Mask tri = mask::polygon(10, 10, {{0, 0}, {10, 0}, {0, 10}}, true);
+    Mask tri = mask::polygon(10, 10, {{0.0f, 0.0f}, {10.0f, 0.0f}, {0.0f, 10.0f}}, true);
     CHECK(tri.at(1, 1) == 255 && tri.at(8, 8) == 0);
     CHECK(tri.at(5, 4) > 0 && tri.at(5, 4) < 255);  // on the diagonal edge
 }
@@ -715,9 +715,9 @@ static void test_adjust_module() {
     CHECK(so[100] == 100 && so[200] == 55);
     adjust::Lut bc = adjust::brightness_contrast_lut(50, 0);
     CHECK(bc[100] == 150);
-    adjust::Lut id = adjust::curve_lut({{0, 0}, {255, 255}});
+    adjust::Lut id = adjust::curve_lut({{0.0f, 0.0f}, {255.0f, 255.0f}});
     CHECK(id[0] == 0 && id[100] == 100 && id[255] == 255);
-    adjust::Lut s = adjust::curve_lut({{0, 0}, {64, 32}, {192, 224}, {255, 255}});
+    adjust::Lut s = adjust::curve_lut({{0.0f, 0.0f}, {64.0f, 32.0f}, {192.0f, 224.0f}, {255.0f, 255.0f}});
     CHECK(s[64] == 32 && s[192] == 224 && s[128] > 100 && s[128] < 156);
     for (int i = 1; i < 256; ++i) CHECK(s[i] >= s[i - 1]);  // monotone
 
@@ -862,7 +862,7 @@ static void test_stroke_modes() {
 }
 
 static void test_text_and_polyline() {
-    Mask line = mask::polyline(20, 10, {{2, 5.5f}, {17, 5.5f}}, 4.0f, true);
+    Mask line = mask::polyline(20, 10, {{2.0f, 5.5f}, {17.0f, 5.5f}}, 4.0f, true);
     CHECK(line.at(10, 5) == 255 && line.at(10, 4) == 255 && line.at(10, 6) == 255);
     CHECK(line.at(10, 2) == 0 && line.at(0, 5) == 255 && line.at(19, 5) == 0);  // round cap reaches x=0
     CHECK(line.at(10, 3) > 0 && line.at(10, 3) < 255);  // antialiased edge
@@ -1237,6 +1237,14 @@ static void test_brush_texture() {
     half.add_point(4, 2);
     half.render(ho);
     CHECK(ho.get(0, 0).r >= 127 && ho.get(0, 0).r <= 128 && ho.get(1, 0).r == 255);
+
+    // Back to pixels for the Texture effect's bump map: the full 0..255 range,
+    // not coverage truncated to 0 and 1 (which left that effect flat).
+    tex.set(0, 0, {128, 128, 128, 255});
+    const Image back = raster::BrushTip::texture_from_image(tex)->to_image();
+    CHECK(back.width() == 2 && back.height() == 1);
+    CHECK(back.get(0, 0).r == 128 && back.get(0, 0).g == 128 && back.get(0, 0).a == 255);
+    CHECK(back.get(1, 0).r == 255);
 }
 
 static void test_history_limit() {
@@ -1367,7 +1375,7 @@ static void test_text_objects_survive_native_save() {
     o.translate(20, 30);   // moves the insert point along with the outlines
     CHECK(o.text.x == 20 && o.text.y == 30);
     CHECK(!o.paths.empty() && o.text.baseline > 0);
-    V.objects.push_back(vec::make_polygon({{150, 5}, {160, 5}, {160, 10}}, true));  // a plain shape first
+    V.objects.push_back(vec::make_polygon({{150.0f, 5.0f}, {160.0f, 5.0f}, {160.0f, 10.0f}}, true));  // a plain shape first
     V.objects.push_back(o);
     doc.rasterize_vector_layer(1);
     const std::string tmp = tmp_path("firn_test_text.pspimage");
@@ -2253,7 +2261,7 @@ static void test_selection_modify_ops() {
     CHECK(std::abs(snapped.first - 5.0f) < 1.5f);
     auto path = mask::edge_path(edges, 12, 12, {4.5f, 1.5f}, {4.5f, 10.5f});
     CHECK(path.size() >= 9 && std::abs(path[path.size() / 2].first - 4.5f) < 1.5f);
-    auto sp = mask::smooth_polygon({{0, 0}, {10, 0}, {10, 10}, {0, 10}}, 50, true);
+    auto sp = mask::smooth_polygon({{0.0f, 0.0f}, {10.0f, 0.0f}, {10.0f, 10.0f}, {0.0f, 10.0f}}, 50, true);
     CHECK(sp.size() == 4 && sp[0].first > 0.0f);
     // Matting.
     Image mt(2, 1, Color{0, 0, 0, 0});
@@ -2502,7 +2510,7 @@ static void test_adjustment_layers() {
         x.kind = k;
         x.brightness = -20; x.contrast = 30;
         x.levels[0].gamma = 1.5f; x.levels[0].in_low = 10; x.levels[2].out_high = 200;
-        x.curves[1] = {{0, 0}, {128, 200}, {255, 255}};
+        x.curves[1] = {{0.0f, 0.0f}, {128.0f, 200.0f}, {255.0f, 255.0f}};
         x.color_balance.midtones[0] = 40; x.color_balance.shadows[2] = -15; x.color_balance.preserve_luminosity = false;
         x.hue = 30; x.saturation = -10; x.lightness = 5; x.hsl_ranges[2][3] = 77;
         x.mixer.mix[0][1] = 50; x.mixer.constant[2] = -10; x.mixer.monochrome = true;
@@ -2940,7 +2948,7 @@ static void test_openraster_lossless() {
     a0.hue = 30; a0.saturation = -20; a0.lightness = 15;
     a0.colorize = true; a0.colorize_hue = 40; a0.colorize_saturation = 60;
     a0.threshold = 77; a0.posterize = 3;
-    a0.curves[0] = {{0, 0}, {100, 150}, {255, 255}};
+    a0.curves[0] = {{0.0f, 0.0f}, {100.0f, 150.0f}, {255.0f, 255.0f}};
     a0.hsl_ranges[2][3] = 42;
     a0.color_balance.midtones[1] = -15;
     a0.color_balance.preserve_luminosity = false;

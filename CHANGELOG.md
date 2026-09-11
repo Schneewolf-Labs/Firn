@@ -99,6 +99,10 @@ section into the next version.
   about two seconds, during which the window does not respond.
 
 ### Fixed
+- Effects > Texture shows the chosen library texture. Its coverage (0 to 1)
+  was written into the bump map as bytes, so nearly every pixel came out 0
+  and the effect rendered flat. An MSVC conversion warning gave it away; the
+  MSVC build is now warning-free too.
 - Shift with a letter no longer changes tools as well as doing what the
   shortcut asks, so Shift+I opens Image Information and leaves the tool alone.
 - `edit.content_aware_fill` refuses when nothing is selected instead of

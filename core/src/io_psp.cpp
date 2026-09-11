@@ -237,7 +237,7 @@ void read_adjustment(const Reader& r, const Block& b, Adjustment& a) {
                     for (int i = 0; i < count && q + 7 + i * 2 + 1 < q + cl; ++i)
                         a.curves[c].emplace_back(static_cast<float>(r.u8(q + 7 + i * 2)), static_cast<float>(r.u8(q + 8 + i * 2)));
                 }
-                if (a.curves[c].size() < 2) a.curves[c] = {{0, 0}, {255, 255}};
+                if (a.curves[c].size() < 2) a.curves[c] = {{0.0f, 0.0f}, {255.0f, 255.0f}};
                 q += cl;
             }
             break;

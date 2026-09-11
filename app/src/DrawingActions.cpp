@@ -127,7 +127,7 @@ std::string batch(App& app, const Value& p, bool* ok) {
     app.history = std::move(history);
     app.commit(std::move(command));
     Value r = Value::object(); r.set("ok", Value::boolean(true)); r.set("results", std::move(results));
-    r.set("count", Value::number(calls.size()));
+    r.set("count", Value::number(static_cast<double>(calls.size())));
     return firn::json::dump(r);
 }
 }
@@ -157,7 +157,7 @@ void add_drawing_actions(std::vector<Action>& actions) {
     auto polygon = style(); polygon.insert(polygon.begin(), {"points", "array", "Polygon vertices as [x,y] pairs; closure is automatic", true, nullptr, nullptr, points_schema});
     add("draw.polygon", "Draw a closed polygon", polygon, [](App& app, const Value& p, bool* ok) {
         std::vector<std::pair<float,float>> points;
-        for (const auto& point : p.get("points").arr) points.emplace_back(point[0].num,point[1].num);
+        for (const auto& point : p.get("points").arr) points.emplace_back(static_cast<float>(point[0].num),static_cast<float>(point[1].num));
         return draw_object(app,p,firn::vec::make_polygon(points,true),ok);
     }, R"([{"points":[[20,100],[50,20],[100,100]],"fill":"#EEAA75"}])");
     auto path = style();
@@ -167,8 +167,8 @@ void add_drawing_actions(std::vector<Action>& actions) {
         firn::vec::Path path; path.closed = p.get("closed").as_bool(false);
         for (const auto& v : p.get("nodes").arr) {
             firn::vec::Node n; n.x = number(v,"x"); n.y = number(v,"y");
-            n.in_x = v.find("in") ? v.get("in")[0].num : n.x; n.in_y = v.find("in") ? v.get("in")[1].num : n.y;
-            n.out_x = v.find("out") ? v.get("out")[0].num : n.x; n.out_y = v.find("out") ? v.get("out")[1].num : n.y;
+            n.in_x = v.find("in") ? static_cast<float>(v.get("in")[0].num) : n.x; n.in_y = v.find("in") ? static_cast<float>(v.get("in")[1].num) : n.y;
+            n.out_x = v.find("out") ? static_cast<float>(v.get("out")[0].num) : n.x; n.out_y = v.find("out") ? static_cast<float>(v.get("out")[1].num) : n.y;
             path.nodes.push_back(n);
         }
         if (!path.closed && p.get("fill").as_string("#000000") != "none") return fail(ok,"open paths require fill: none");
@@ -187,7 +187,7 @@ void add_drawing_actions(std::vector<Action>& actions) {
             auto points=p.get("points"); const auto c=color(p.get("color").str);
             app.run(std::make_unique<firn::AdjustCommand>(app.active_layer(),"Draw stroke",[points,brush,c](firn::Image& img) {
                 firn::raster::Stroke stroke(img,brush,c,firn::raster::StrokeMode::Paint);
-                for (const auto& pt : points.arr) stroke.add_point(pt[0].num,pt[1].num);
+                for (const auto& pt : points.arr) stroke.add_point(static_cast<float>(pt[0].num),static_cast<float>(pt[1].num));
                 stroke.render(img);
             })); return result(app,"raster");
         }, R"([{"points":[[20,20],[80,70],[120,20]],"color":"#573C39","size":5}])");

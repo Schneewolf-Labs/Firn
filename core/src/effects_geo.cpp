@@ -292,7 +292,7 @@ void page_curl(Image& img, int corner, float width_percent, float height_percent
     const float nx = 1.0f / cw, ny = 1.0f / ch, nlen = std::hypot(nx, ny);
     for (int y = 0; y < h; ++y)
         for (int x = 0; x < w; ++x) {
-            const float fx = right ? (w - 1 - x) : x, fy = bottom ? (h - 1 - y) : y;
+            const float fx = static_cast<float>(right ? (w - 1 - x) : x), fy = static_cast<float>(bottom ? (h - 1 - y) : y);
             const float g = fx * nx + fy * ny;
             if (g >= 1.0f) continue;
             const float dist = (1.0f - g) / nlen;   // distance inside the fold

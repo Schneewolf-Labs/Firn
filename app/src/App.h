@@ -326,7 +326,7 @@ struct App {
     bool show_prefs_dialog = false;
     void apply_config();                // push config values into live state
     firn::adjust::ChannelMix mixer;
-    std::vector<std::pair<float, float>> curve_points{{0, 0}, {255, 255}};
+    std::vector<std::pair<float, float>> curve_points{{0.0f, 0.0f}, {255.0f, 255.0f}};
     int mosaic_w = 8, mosaic_h = 8; bool mosaic_square = true;
     int noise_percent = 20; bool noise_gaussian = false, noise_mono = false;
     int shadow_x = 5, shadow_y = 5; float shadow_opacity = 0.5f, shadow_blur = 5.0f; float shadow_color[3] = {0, 0, 0};
