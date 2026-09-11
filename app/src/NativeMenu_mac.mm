@@ -54,7 +54,8 @@ void set_action(NSMenuItem* item, std::function<void()> action) {
 // them globally, including while a text field has focus, where the app's
 // own ImGui-level handling already correctly defers to io.WantTextInput.
 void set_shortcut(NSMenuItem* item, const char* shortcut) {
-    if (!shortcut || !std::strstr(shortcut, "Ctrl")) {
+    if (!shortcut || !std::strstr(shortcut, "Ctrl") || ImGui::GetIO().WantTextInput ||
+        ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId)) {
         item.keyEquivalent = @"";
         item.keyEquivalentModifierMask = 0;
         return;

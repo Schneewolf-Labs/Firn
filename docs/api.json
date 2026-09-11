@@ -1,6 +1,7 @@
 {
   "actions": [
     {
+      "batch_safe": false,
       "input_schema": {
         "additionalProperties": false,
         "properties": {
@@ -10,12 +11,12 @@
             "type": "string"
           },
           "height": {
-            "default": "600",
+            "default": 600,
             "description": "pixels",
             "type": "number"
           },
           "width": {
-            "default": "800",
+            "default": 800,
             "description": "pixels",
             "type": "number"
           }
@@ -27,6 +28,7 @@
       "summary": "Create an image"
     },
     {
+      "batch_safe": false,
       "input_schema": {
         "additionalProperties": false,
         "properties": {
@@ -44,6 +46,7 @@
       "summary": "Open an image file"
     },
     {
+      "batch_safe": false,
       "input_schema": {
         "additionalProperties": false,
         "properties": {},
@@ -54,6 +57,7 @@
       "summary": "Save the image where it came from"
     },
     {
+      "batch_safe": false,
       "input_schema": {
         "additionalProperties": false,
         "properties": {
@@ -62,9 +66,9 @@
             "type": "string"
           },
           "quality": {
-            "default": "the last quality used",
             "description": "JPEG and WebP quality, 1 to 100; 100 is lossless WebP",
-            "type": "number"
+            "type": "number",
+            "x-default-description": "the last quality used"
           }
         },
         "required": [
@@ -76,6 +80,7 @@
       "summary": "Save the image to a path, format taken from the extension"
     },
     {
+      "batch_safe": false,
       "input_schema": {
         "additionalProperties": false,
         "properties": {},
@@ -86,6 +91,7 @@
       "summary": "Close the current image, discarding changes"
     },
     {
+      "batch_safe": false,
       "input_schema": {
         "additionalProperties": false,
         "properties": {},
@@ -96,6 +102,7 @@
       "summary": "Load the saved file again, dropping every change"
     },
     {
+      "batch_safe": false,
       "input_schema": {
         "additionalProperties": false,
         "properties": {},
@@ -106,6 +113,7 @@
       "summary": "Undo one step"
     },
     {
+      "batch_safe": false,
       "input_schema": {
         "additionalProperties": false,
         "properties": {},
@@ -116,6 +124,7 @@
       "summary": "Redo one step"
     },
     {
+      "batch_safe": false,
       "input_schema": {
         "additionalProperties": false,
         "properties": {},
@@ -126,6 +135,7 @@
       "summary": "Cut the selection"
     },
     {
+      "batch_safe": false,
       "input_schema": {
         "additionalProperties": false,
         "properties": {},
@@ -136,6 +146,7 @@
       "summary": "Copy the active layer through the selection"
     },
     {
+      "batch_safe": false,
       "input_schema": {
         "additionalProperties": false,
         "properties": {},
@@ -146,6 +157,7 @@
       "summary": "Copy the composite through the selection"
     },
     {
+      "batch_safe": false,
       "input_schema": {
         "additionalProperties": false,
         "properties": {},
@@ -156,6 +168,7 @@
       "summary": "Paste the clipboard as a new image"
     },
     {
+      "batch_safe": false,
       "input_schema": {
         "additionalProperties": false,
         "properties": {},
@@ -166,6 +179,7 @@
       "summary": "Paste the clipboard as a new layer"
     },
     {
+      "batch_safe": false,
       "input_schema": {
         "additionalProperties": false,
         "properties": {},
@@ -176,6 +190,7 @@
       "summary": "Scale the clipboard into the selection"
     },
     {
+      "batch_safe": false,
       "input_schema": {
         "additionalProperties": false,
         "properties": {},
@@ -186,6 +201,7 @@
       "summary": "Clear the selection"
     },
     {
+      "batch_safe": false,
       "input_schema": {
         "additionalProperties": false,
         "properties": {},
@@ -196,6 +212,7 @@
       "summary": "Apply the last adjustment or effect again"
     },
     {
+      "batch_safe": false,
       "input_schema": {
         "additionalProperties": false,
         "properties": {},
@@ -206,21 +223,22 @@
       "summary": "Rebuild the selection from the rest of the picture"
     },
     {
+      "batch_safe": false,
       "input_schema": {
         "additionalProperties": false,
         "properties": {
           "mode": {
-            "default": "fit unless zoom is given",
             "description": "which way to zoom",
             "enum": [
               "fit",
               "actual",
               "set"
             ],
-            "type": "string"
+            "type": "string",
+            "x-default-description": "fit unless zoom is given"
           },
           "zoom": {
-            "default": "1",
+            "default": 1,
             "description": "1 is actual size",
             "type": "number"
           }
@@ -232,6 +250,7 @@
       "summary": "Set the zoom, or fit / actual size"
     },
     {
+      "batch_safe": false,
       "input_schema": {
         "additionalProperties": false,
         "properties": {},
@@ -242,13 +261,14 @@
       "summary": "Fill the window with the selection"
     },
     {
+      "batch_safe": false,
       "input_schema": {
         "additionalProperties": false,
         "properties": {
           "on": {
-            "default": "the opposite of now",
             "description": "leave it out to toggle",
-            "type": "boolean"
+            "type": "boolean",
+            "x-default-description": "the opposite of now"
           },
           "what": {
             "description": "the aid to switch",
@@ -274,6 +294,7 @@
       "summary": "Turn a view aid on or off"
     },
     {
+      "batch_safe": false,
       "input_schema": {
         "additionalProperties": false,
         "properties": {},
@@ -284,6 +305,7 @@
       "summary": "Flip top to bottom"
     },
     {
+      "batch_safe": false,
       "input_schema": {
         "additionalProperties": false,
         "properties": {},
@@ -294,11 +316,12 @@
       "summary": "Mirror left to right"
     },
     {
+      "batch_safe": false,
       "input_schema": {
         "additionalProperties": false,
         "properties": {
           "degrees": {
-            "default": "90",
+            "default": 90,
             "description": "clockwise",
             "type": "number"
           }
@@ -310,6 +333,7 @@
       "summary": "Rotate the image"
     },
     {
+      "batch_safe": false,
       "input_schema": {
         "additionalProperties": false,
         "properties": {
@@ -343,6 +367,7 @@
       "summary": "Resize the image"
     },
     {
+      "batch_safe": false,
       "input_schema": {
         "additionalProperties": false,
         "properties": {},
@@ -353,6 +378,7 @@
       "summary": "Crop to the selection"
     },
     {
+      "batch_safe": false,
       "input_schema": {
         "additionalProperties": false,
         "properties": {},
@@ -363,6 +389,7 @@
       "summary": "List the Exif tags and text notes the image carries"
     },
     {
+      "batch_safe": false,
       "input_schema": {
         "additionalProperties": false,
         "properties": {
@@ -394,6 +421,7 @@
       "summary": "Set one Exif tag or text note"
     },
     {
+      "batch_safe": false,
       "input_schema": {
         "additionalProperties": false,
         "properties": {
@@ -414,6 +442,7 @@
       "summary": "Remove metadata from the image"
     },
     {
+      "batch_safe": true,
       "input_schema": {
         "additionalProperties": false,
         "properties": {},
@@ -424,6 +453,7 @@
       "summary": "Select everything"
     },
     {
+      "batch_safe": true,
       "input_schema": {
         "additionalProperties": false,
         "properties": {},
@@ -434,6 +464,7 @@
       "summary": "Drop the selection"
     },
     {
+      "batch_safe": true,
       "input_schema": {
         "additionalProperties": false,
         "properties": {},
@@ -444,11 +475,12 @@
       "summary": "Invert the selection"
     },
     {
+      "batch_safe": true,
       "input_schema": {
         "additionalProperties": false,
         "properties": {
           "feather": {
-            "default": "0",
+            "default": 0,
             "description": "pixels of soft edge",
             "type": "number"
           },
@@ -476,11 +508,12 @@
       "summary": "Select a rectangle, in image pixels"
     },
     {
+      "batch_safe": true,
       "input_schema": {
         "additionalProperties": false,
         "properties": {
           "feather": {
-            "default": "0",
+            "default": 0,
             "description": "pixels of soft edge",
             "type": "number"
           },
@@ -508,6 +541,7 @@
       "summary": "Select an ellipse inside a rectangle, in image pixels"
     },
     {
+      "batch_safe": true,
       "input_schema": {
         "additionalProperties": false,
         "properties": {},
@@ -518,6 +552,7 @@
       "summary": "Add a raster layer"
     },
     {
+      "batch_safe": true,
       "input_schema": {
         "additionalProperties": false,
         "properties": {},
@@ -528,6 +563,7 @@
       "summary": "Add a vector layer"
     },
     {
+      "batch_safe": false,
       "input_schema": {
         "additionalProperties": false,
         "properties": {},
@@ -538,6 +574,7 @@
       "summary": "Group the active layer"
     },
     {
+      "batch_safe": false,
       "input_schema": {
         "additionalProperties": false,
         "properties": {},
@@ -548,6 +585,7 @@
       "summary": "Duplicate the active layer"
     },
     {
+      "batch_safe": false,
       "input_schema": {
         "additionalProperties": false,
         "properties": {},
@@ -558,6 +596,7 @@
       "summary": "Delete the active layer"
     },
     {
+      "batch_safe": true,
       "input_schema": {
         "additionalProperties": false,
         "properties": {
@@ -575,11 +614,12 @@
       "summary": "Make a layer active, by index from the bottom"
     },
     {
+      "batch_safe": false,
       "input_schema": {
         "additionalProperties": false,
         "properties": {
           "steps": {
-            "default": "1",
+            "default": 1,
             "description": "positive is up",
             "type": "number"
           }
@@ -591,6 +631,7 @@
       "summary": "Move the active layer up or down its group"
     },
     {
+      "batch_safe": false,
       "input_schema": {
         "additionalProperties": false,
         "properties": {
@@ -613,6 +654,7 @@
       "summary": "Restack a layer where another one sits"
     },
     {
+      "batch_safe": false,
       "input_schema": {
         "additionalProperties": false,
         "properties": {
@@ -634,6 +676,7 @@
       "summary": "Merge layers"
     },
     {
+      "batch_safe": true,
       "input_schema": {
         "additionalProperties": false,
         "properties": {
@@ -661,6 +704,7 @@
       "summary": "Set the active layer's name, opacity, blend mode or visibility"
     },
     {
+      "batch_safe": false,
       "input_schema": {
         "additionalProperties": false,
         "properties": {},
@@ -671,6 +715,7 @@
       "summary": "Turn the Background layer into an ordinary one"
     },
     {
+      "batch_safe": false,
       "input_schema": {
         "additionalProperties": false,
         "properties": {
@@ -688,6 +733,7 @@
       "summary": "Choose a tool by the name shown in the palette"
     },
     {
+      "batch_safe": false,
       "input_schema": {
         "additionalProperties": false,
         "properties": {
@@ -705,6 +751,7 @@
       "summary": "Set the brush size in pixels"
     },
     {
+      "batch_safe": false,
       "input_schema": {
         "additionalProperties": false,
         "properties": {
@@ -731,6 +778,7 @@
       "summary": "Set the foreground or background color"
     },
     {
+      "batch_safe": false,
       "input_schema": {
         "additionalProperties": false,
         "properties": {
@@ -748,14 +796,599 @@
       "summary": "Write what the window is showing to a PNG"
     },
     {
+      "batch_safe": false,
       "input_schema": {
         "additionalProperties": false,
-        "properties": {},
+        "properties": {
+          "name": {
+            "description": "Optional exact action name",
+            "type": "string"
+          }
+        },
         "required": [],
         "type": "object"
       },
       "name": "app.describe",
-      "summary": "List every action, tool and option this build offers"
+      "summary": "Describe all actions or one named action"
+    },
+    {
+      "batch_safe": true,
+      "examples": [
+        {
+          "fill": "#EEAA75",
+          "height": 60,
+          "stroke": "#573C39",
+          "stroke_width": 3,
+          "width": 80,
+          "x": 20,
+          "y": 20
+        }
+      ],
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "antialias": {
+            "default": true,
+            "description": "Smooth shape edges",
+            "type": "boolean"
+          },
+          "fill": {
+            "default": "#000000",
+            "description": "Fill color #RRGGBB or #RRGGBBAA, or none",
+            "pattern": "^(none|#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?)$",
+            "type": "string"
+          },
+          "height": {
+            "description": "Bounding box height",
+            "exclusiveMinimum": 0,
+            "maximum": 100000,
+            "type": "number"
+          },
+          "name": {
+            "default": "Draw shape",
+            "description": "Undo label and vector object name",
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
+          "stroke": {
+            "default": "none",
+            "description": "Outline color #RRGGBB or #RRGGBBAA, or none",
+            "pattern": "^(none|#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?)$",
+            "type": "string"
+          },
+          "stroke_width": {
+            "default": 1,
+            "description": "Outline width in image pixels",
+            "exclusiveMinimum": 0,
+            "maximum": 1000,
+            "type": "number"
+          },
+          "target": {
+            "default": "raster",
+            "description": "Draw on the active raster layer or add an editable object to the active vector layer",
+            "enum": [
+              "raster",
+              "vector"
+            ],
+            "type": "string"
+          },
+          "width": {
+            "description": "Bounding box width",
+            "exclusiveMinimum": 0,
+            "maximum": 100000,
+            "type": "number"
+          },
+          "x": {
+            "description": "Left edge in image pixels",
+            "maximum": 100000,
+            "minimum": -100000,
+            "type": "number"
+          },
+          "y": {
+            "description": "Top edge in image pixels",
+            "maximum": 100000,
+            "minimum": -100000,
+            "type": "number"
+          }
+        },
+        "required": [
+          "x",
+          "y",
+          "width",
+          "height"
+        ],
+        "type": "object"
+      },
+      "name": "draw.rectangle",
+      "summary": "Draw a rectangle"
+    },
+    {
+      "batch_safe": true,
+      "examples": [
+        {
+          "fill": "#EEAA75",
+          "height": 60,
+          "stroke": "#573C39",
+          "stroke_width": 3,
+          "width": 80,
+          "x": 20,
+          "y": 20
+        }
+      ],
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "antialias": {
+            "default": true,
+            "description": "Smooth shape edges",
+            "type": "boolean"
+          },
+          "fill": {
+            "default": "#000000",
+            "description": "Fill color #RRGGBB or #RRGGBBAA, or none",
+            "pattern": "^(none|#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?)$",
+            "type": "string"
+          },
+          "height": {
+            "description": "Bounding box height",
+            "exclusiveMinimum": 0,
+            "maximum": 100000,
+            "type": "number"
+          },
+          "name": {
+            "default": "Draw shape",
+            "description": "Undo label and vector object name",
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
+          "stroke": {
+            "default": "none",
+            "description": "Outline color #RRGGBB or #RRGGBBAA, or none",
+            "pattern": "^(none|#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?)$",
+            "type": "string"
+          },
+          "stroke_width": {
+            "default": 1,
+            "description": "Outline width in image pixels",
+            "exclusiveMinimum": 0,
+            "maximum": 1000,
+            "type": "number"
+          },
+          "target": {
+            "default": "raster",
+            "description": "Draw on the active raster layer or add an editable object to the active vector layer",
+            "enum": [
+              "raster",
+              "vector"
+            ],
+            "type": "string"
+          },
+          "width": {
+            "description": "Bounding box width",
+            "exclusiveMinimum": 0,
+            "maximum": 100000,
+            "type": "number"
+          },
+          "x": {
+            "description": "Left edge in image pixels",
+            "maximum": 100000,
+            "minimum": -100000,
+            "type": "number"
+          },
+          "y": {
+            "description": "Top edge in image pixels",
+            "maximum": 100000,
+            "minimum": -100000,
+            "type": "number"
+          }
+        },
+        "required": [
+          "x",
+          "y",
+          "width",
+          "height"
+        ],
+        "type": "object"
+      },
+      "name": "draw.ellipse",
+      "summary": "Draw an ellipse"
+    },
+    {
+      "batch_safe": true,
+      "examples": [
+        {
+          "fill": "#EEAA75",
+          "points": [
+            [
+              20,
+              100
+            ],
+            [
+              50,
+              20
+            ],
+            [
+              100,
+              100
+            ]
+          ]
+        }
+      ],
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "antialias": {
+            "default": true,
+            "description": "Smooth shape edges",
+            "type": "boolean"
+          },
+          "fill": {
+            "default": "#000000",
+            "description": "Fill color #RRGGBB or #RRGGBBAA, or none",
+            "pattern": "^(none|#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?)$",
+            "type": "string"
+          },
+          "name": {
+            "default": "Draw shape",
+            "description": "Undo label and vector object name",
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
+          "points": {
+            "description": "Polygon vertices as [x,y] pairs; closure is automatic",
+            "items": {
+              "items": {
+                "maximum": 100000,
+                "minimum": -100000,
+                "type": "number"
+              },
+              "maxItems": 2,
+              "minItems": 2,
+              "type": "array"
+            },
+            "maxItems": 4096,
+            "minItems": 3,
+            "type": "array"
+          },
+          "stroke": {
+            "default": "none",
+            "description": "Outline color #RRGGBB or #RRGGBBAA, or none",
+            "pattern": "^(none|#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?)$",
+            "type": "string"
+          },
+          "stroke_width": {
+            "default": 1,
+            "description": "Outline width in image pixels",
+            "exclusiveMinimum": 0,
+            "maximum": 1000,
+            "type": "number"
+          },
+          "target": {
+            "default": "raster",
+            "description": "Draw on the active raster layer or add an editable object to the active vector layer",
+            "enum": [
+              "raster",
+              "vector"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "points"
+        ],
+        "type": "object"
+      },
+      "name": "draw.polygon",
+      "summary": "Draw a closed polygon"
+    },
+    {
+      "batch_safe": true,
+      "examples": [
+        {
+          "fill": "none",
+          "nodes": [
+            {
+              "out": [
+                40,
+                10
+              ],
+              "x": 20,
+              "y": 80
+            },
+            {
+              "in": [
+                80,
+                10
+              ],
+              "x": 100,
+              "y": 80
+            }
+          ],
+          "stroke": "#573C39",
+          "stroke_width": 4
+        }
+      ],
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "antialias": {
+            "default": true,
+            "description": "Smooth shape edges",
+            "type": "boolean"
+          },
+          "closed": {
+            "default": false,
+            "description": "Close the final segment to the first node",
+            "type": "boolean"
+          },
+          "fill": {
+            "default": "#000000",
+            "description": "Fill color #RRGGBB or #RRGGBBAA, or none",
+            "pattern": "^(none|#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?)$",
+            "type": "string"
+          },
+          "name": {
+            "default": "Draw shape",
+            "description": "Undo label and vector object name",
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
+          "nodes": {
+            "description": "Bezier anchors with optional absolute in/out control points",
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "in": {
+                  "items": {
+                    "maximum": 100000,
+                    "minimum": -100000,
+                    "type": "number"
+                  },
+                  "maxItems": 2,
+                  "minItems": 2,
+                  "type": "array"
+                },
+                "out": {
+                  "items": {
+                    "maximum": 100000,
+                    "minimum": -100000,
+                    "type": "number"
+                  },
+                  "maxItems": 2,
+                  "minItems": 2,
+                  "type": "array"
+                },
+                "x": {
+                  "maximum": 100000,
+                  "minimum": -100000,
+                  "type": "number"
+                },
+                "y": {
+                  "maximum": 100000,
+                  "minimum": -100000,
+                  "type": "number"
+                }
+              },
+              "required": [
+                "x",
+                "y"
+              ],
+              "type": "object"
+            },
+            "maxItems": 4096,
+            "minItems": 2,
+            "type": "array"
+          },
+          "stroke": {
+            "default": "none",
+            "description": "Outline color #RRGGBB or #RRGGBBAA, or none",
+            "pattern": "^(none|#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?)$",
+            "type": "string"
+          },
+          "stroke_width": {
+            "default": 1,
+            "description": "Outline width in image pixels",
+            "exclusiveMinimum": 0,
+            "maximum": 1000,
+            "type": "number"
+          },
+          "target": {
+            "default": "raster",
+            "description": "Draw on the active raster layer or add an editable object to the active vector layer",
+            "enum": [
+              "raster",
+              "vector"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "nodes"
+        ],
+        "type": "object"
+      },
+      "name": "draw.path",
+      "summary": "Draw an editable Bezier path or rasterize it"
+    },
+    {
+      "batch_safe": true,
+      "examples": [
+        {
+          "color": "#573C39",
+          "points": [
+            [
+              20,
+              20
+            ],
+            [
+              80,
+              70
+            ],
+            [
+              120,
+              20
+            ]
+          ],
+          "size": 5
+        }
+      ],
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "color": {
+            "description": "Brush color #RRGGBB or #RRGGBBAA",
+            "pattern": "^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$",
+            "type": "string"
+          },
+          "hardness": {
+            "default": 1,
+            "description": "0 is soft, 1 is hard",
+            "maximum": 1,
+            "minimum": 0,
+            "type": "number"
+          },
+          "opacity": {
+            "default": 1,
+            "description": "Coverage for the entire stroke, 0 to 1",
+            "maximum": 1,
+            "minimum": 0,
+            "type": "number"
+          },
+          "points": {
+            "description": "Ordered [x,y] pairs; one point makes a dot",
+            "items": {
+              "items": {
+                "maximum": 100000,
+                "minimum": -100000,
+                "type": "number"
+              },
+              "maxItems": 2,
+              "minItems": 2,
+              "type": "array"
+            },
+            "maxItems": 4096,
+            "minItems": 1,
+            "type": "array"
+          },
+          "size": {
+            "default": 16,
+            "description": "Brush diameter in image pixels",
+            "maximum": 500,
+            "minimum": 1,
+            "type": "number"
+          }
+        },
+        "required": [
+          "points",
+          "color"
+        ],
+        "type": "object"
+      },
+      "name": "draw.stroke",
+      "summary": "Paint one continuous brush stroke"
+    },
+    {
+      "batch_safe": true,
+      "examples": [
+        {
+          "color": "#FFF4E9"
+        }
+      ],
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "color": {
+            "description": "Replacement color #RRGGBB or #RRGGBBAA",
+            "pattern": "^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "color"
+        ],
+        "type": "object"
+      },
+      "name": "edit.fill",
+      "summary": "Replace the active raster layer through the selection with a color"
+    },
+    {
+      "batch_safe": false,
+      "detail": "Requires an open document. Validation or execution failure restores pixels, layers, selection, active layer, and the previous undo/redo history. Files, clipboard, tools, nested batches, and inherited commands are excluded.",
+      "examples": [
+        {
+          "actions": [
+            {
+              "action": "layer.new_vector"
+            },
+            {
+              "action": "draw.polygon",
+              "params": {
+                "fill": "#EEAA75",
+                "points": [
+                  [
+                    20,
+                    100
+                  ],
+                  [
+                    50,
+                    20
+                  ],
+                  [
+                    100,
+                    100
+                  ]
+                ],
+                "target": "vector"
+              }
+            }
+          ],
+          "name": "Triangle"
+        }
+      ],
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "actions": {
+            "description": "Ordered calls; only actions marked batch_safe are accepted",
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "action": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "params": {
+                  "type": "object"
+                }
+              },
+              "required": [
+                "action"
+              ],
+              "type": "object"
+            },
+            "maxItems": 256,
+            "minItems": 1,
+            "type": "array"
+          },
+          "name": {
+            "default": "API batch",
+            "description": "Undo label",
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "actions"
+        ],
+        "type": "object"
+      },
+      "name": "app.batch",
+      "summary": "Apply document edits atomically as one undo step"
     }
   ],
   "commands": [
@@ -921,8 +1554,15 @@
     "Wave",
     "Weave"
   ],
-  "commands_note": "names from the program this grew out of, taking its parameter names; see docs/COMMANDS.md. A trailing * is a prefix.",
+  "commands_note": "Legacy compatibility commands have no validated schemas and cannot run in app.batch. Prefer the typed actions above. A trailing * is a prefix.",
+  "coordinate_system": "image pixels; origin at top left; positive x right and y down",
   "firn": "action api",
+  "legacy_replacements": {
+    "Fill": "edit.fill",
+    "NewRasterLayer": "layer.new",
+    "NewVectorLayer": "layer.new_vector",
+    "Selection": "select.rect / select.ellipse"
+  },
   "tools": [
     "Pan",
     "Zoom",
@@ -964,5 +1604,5 @@
     "Object Selector",
     "Pen"
   ],
-  "version": 1
+  "version": 2
 }

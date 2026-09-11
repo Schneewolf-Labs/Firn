@@ -40,6 +40,8 @@ add_executable(firn
   src/Vectors.cpp
   src/Drive.cpp
   src/Actions.cpp
+  src/ActionSchema.cpp
+  src/DrawingActions.cpp
   src/Script.cpp
   src/Config.cpp
   src/Clipboard.cpp
@@ -83,12 +85,12 @@ if(UNIX AND NOT APPLE)
 endif()
 if(APPLE)
   enable_language(OBJCXX)
-  target_sources(firn PRIVATE src/Tablet_mac.mm src/NativeMenu_mac.mm)
+  target_sources(firn PRIVATE src/Tablet_mac.mm src/NativeMenu_mac.mm src/NativePointer_mac.mm)
   target_link_libraries(firn PRIVATE "-framework Cocoa")
   # ARC: NativeMenu_mac.mm allocates one Objective-C object per native menu
   # item on every frame (see FirnMenuAction in NativeMenu_mac.mm); without
   # ARC those would need manual retain/release bookkeeping to avoid leaking.
-  set_source_files_properties(src/Tablet_mac.mm src/NativeMenu_mac.mm PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
+  set_source_files_properties(src/Tablet_mac.mm src/NativeMenu_mac.mm src/NativePointer_mac.mm PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
 endif()
 if(WIN32)
   # Plain main(); SDL's own entry point is not used. A GUI subsystem keeps
@@ -101,4 +103,15 @@ if(WIN32)
   else()
     target_link_options(firn PRIVATE -mwindows -Wl,-e,mainCRTStartup)
   endif()
+endif()
+
+# Keep the CLI-friendly executable path, and also produce a discoverable
+# macOS app for Finder and accessibility/computer-use clients.
+if(APPLE)
+  configure_file(${CMAKE_SOURCE_DIR}/assets/Info.plist.in ${CMAKE_CURRENT_BINARY_DIR}/Firn-Info.plist @ONLY)
+  add_custom_target(firn_bundle ALL
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/Firn.app/Contents/MacOS
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:firn> ${CMAKE_CURRENT_BINARY_DIR}/Firn.app/Contents/MacOS/firn
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_CURRENT_BINARY_DIR}/Firn-Info.plist ${CMAKE_CURRENT_BINARY_DIR}/Firn.app/Contents/Info.plist
+    DEPENDS firn VERBATIM)
 endif()

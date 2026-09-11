@@ -1,0 +1,362 @@
+{
+  "name": "Draw a kitten",
+  "actions": [
+    {
+      "action": "layer.new_vector"
+    },
+    {
+      "action": "layer.properties",
+      "params": {
+        "name": "API kitten"
+      }
+    },
+    {
+      "action": "draw.ellipse",
+      "params": {
+        "x": 75,
+        "y": 50,
+        "width": 350,
+        "height": 365,
+        "fill": "#FADBCD",
+        "name": "Peach halo",
+        "target": "vector"
+      }
+    },
+    {
+      "action": "draw.ellipse",
+      "params": {
+        "x": 140,
+        "y": 388,
+        "width": 230,
+        "height": 25,
+        "fill": "#EAB9A6",
+        "name": "Shadow",
+        "target": "vector"
+      }
+    },
+    {
+      "action": "draw.ellipse",
+      "params": {
+        "x": 305,
+        "y": 282,
+        "width": 105,
+        "height": 112,
+        "fill": "#EEAA75",
+        "stroke": "#573C39",
+        "stroke_width": 7,
+        "name": "Tail",
+        "target": "vector"
+      }
+    },
+    {
+      "action": "draw.ellipse",
+      "params": {
+        "x": 326,
+        "y": 296,
+        "width": 65,
+        "height": 72,
+        "fill": "#FADBCD",
+        "name": "Tail curl",
+        "target": "vector"
+      }
+    },
+    {
+      "action": "draw.ellipse",
+      "params": {
+        "x": 170,
+        "y": 255,
+        "width": 160,
+        "height": 145,
+        "fill": "#EEAA75",
+        "stroke": "#573C39",
+        "stroke_width": 7,
+        "name": "Body",
+        "target": "vector"
+      }
+    },
+    {
+      "action": "draw.ellipse",
+      "params": {
+        "x": 198,
+        "y": 281,
+        "width": 105,
+        "height": 103,
+        "fill": "#FFD3A1",
+        "name": "Belly",
+        "target": "vector"
+      }
+    },
+    {
+      "action": "draw.polygon",
+      "params": {
+        "points": [
+          [
+            145,
+            188
+          ],
+          [
+            146,
+            92
+          ],
+          [
+            223,
+            157
+          ]
+        ],
+        "fill": "#EEAA75",
+        "stroke": "#573C39",
+        "stroke_width": 7,
+        "name": "Ear",
+        "target": "vector"
+      }
+    },
+    {
+      "action": "draw.polygon",
+      "params": {
+        "points": [
+          [
+            277,
+            157
+          ],
+          [
+            354,
+            92
+          ],
+          [
+            355,
+            188
+          ]
+        ],
+        "fill": "#EEAA75",
+        "stroke": "#573C39",
+        "stroke_width": 7,
+        "name": "Ear",
+        "target": "vector"
+      }
+    },
+    {
+      "action": "draw.polygon",
+      "params": {
+        "points": [
+          [
+            158,
+            172
+          ],
+          [
+            158,
+            117
+          ],
+          [
+            201,
+            157
+          ]
+        ],
+        "fill": "#EF939F",
+        "name": "Inner ear",
+        "target": "vector"
+      }
+    },
+    {
+      "action": "draw.polygon",
+      "params": {
+        "points": [
+          [
+            298,
+            157
+          ],
+          [
+            342,
+            117
+          ],
+          [
+            342,
+            173
+          ]
+        ],
+        "fill": "#EF939F",
+        "name": "Inner ear",
+        "target": "vector"
+      }
+    },
+    {
+      "action": "draw.ellipse",
+      "params": {
+        "x": 132,
+        "y": 141,
+        "width": 236,
+        "height": 178,
+        "fill": "#EEAA75",
+        "stroke": "#573C39",
+        "stroke_width": 7,
+        "name": "Face",
+        "target": "vector"
+      }
+    },
+    {
+      "action": "draw.ellipse",
+      "params": {
+        "x": 191,
+        "y": 246,
+        "width": 118,
+        "height": 56,
+        "fill": "#FFD3A1",
+        "name": "Muzzle",
+        "target": "vector"
+      }
+    },
+    {
+      "action": "draw.ellipse",
+      "params": {
+        "x": 188,
+        "y": 207,
+        "width": 26,
+        "height": 36,
+        "fill": "#573C39",
+        "name": "Eye",
+        "target": "vector"
+      }
+    },
+    {
+      "action": "draw.ellipse",
+      "params": {
+        "x": 192,
+        "y": 211,
+        "width": 9,
+        "height": 12,
+        "fill": "#FFFFFF",
+        "name": "Eye sparkle",
+        "target": "vector"
+      }
+    },
+    {
+      "action": "draw.ellipse",
+      "params": {
+        "x": 286,
+        "y": 207,
+        "width": 26,
+        "height": 36,
+        "fill": "#573C39",
+        "name": "Eye",
+        "target": "vector"
+      }
+    },
+    {
+      "action": "draw.ellipse",
+      "params": {
+        "x": 290,
+        "y": 211,
+        "width": 9,
+        "height": 12,
+        "fill": "#FFFFFF",
+        "name": "Eye sparkle",
+        "target": "vector"
+      }
+    },
+    {
+      "action": "draw.ellipse",
+      "params": {
+        "x": 166,
+        "y": 249,
+        "width": 36,
+        "height": 16,
+        "fill": "#EF939F",
+        "name": "Blush",
+        "target": "vector"
+      }
+    },
+    {
+      "action": "draw.ellipse",
+      "params": {
+        "x": 300,
+        "y": 249,
+        "width": 36,
+        "height": 16,
+        "fill": "#EF939F",
+        "name": "Blush",
+        "target": "vector"
+      }
+    },
+    {
+      "action": "draw.ellipse",
+      "params": {
+        "x": 240,
+        "y": 251,
+        "width": 20,
+        "height": 13,
+        "fill": "#EF939F",
+        "stroke": "#573C39",
+        "stroke_width": 2,
+        "name": "Nose",
+        "target": "vector"
+      }
+    },
+    {
+      "action": "draw.path",
+      "params": {
+        "nodes": [
+          {
+            "x": 234,
+            "y": 271,
+            "out": [
+              234,
+              286
+            ]
+          },
+          {
+            "x": 250,
+            "y": 267,
+            "in": [
+              250,
+              286
+            ],
+            "out": [
+              250,
+              286
+            ]
+          },
+          {
+            "x": 266,
+            "y": 271,
+            "in": [
+              266,
+              286
+            ]
+          }
+        ],
+        "fill": "none",
+        "stroke": "#573C39",
+        "stroke_width": 3,
+        "name": "Smile",
+        "target": "vector"
+      }
+    },
+    {
+      "action": "draw.ellipse",
+      "params": {
+        "x": 181,
+        "y": 372,
+        "width": 55,
+        "height": 31,
+        "fill": "#EEAA75",
+        "stroke": "#573C39",
+        "stroke_width": 5,
+        "name": "Paw",
+        "target": "vector"
+      }
+    },
+    {
+      "action": "draw.ellipse",
+      "params": {
+        "x": 265,
+        "y": 372,
+        "width": 55,
+        "height": 31,
+        "fill": "#EEAA75",
+        "stroke": "#573C39",
+        "stroke_width": 5,
+        "name": "Paw",
+        "target": "vector"
+      }
+    }
+  ]
+}

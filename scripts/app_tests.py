@@ -17,6 +17,9 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import drive  # noqa: E402
 
 ROOT = drive.ROOT
+# Each test owns its socket and configuration; leave open editors alone.
+_SESSION = tempfile.mkdtemp(prefix="firn-apptest-")
+drive.SOCK = os.path.join(_SESSION, "driver.sock")
 BUILD = sys.argv[1] if len(sys.argv) > 1 else os.path.join(ROOT, "build")
 OUT = tempfile.mkdtemp(prefix="firn-apptest-")
 
@@ -289,7 +292,7 @@ def test_tools_and_history(f):
 def test_api_surface(f):
     section("the api itself")
     api = json.loads(f.send("do app.describe {}"))
-    check(api.get("version") == 1, "describe reports a version")
+    check(api.get("version") == 2, "describe reports a version")
     names = [a["name"] for a in api["actions"]]
     check(len(names) == len(set(names)), "action names are unique")
     for required in ("file.new", "file.save_as", "layer.new", "select.rect", "image.resize", "view.zoom"):
@@ -374,6 +377,131 @@ def test_metadata(f):
     f.do("file.close")
 
 
+def test_drawing_api(f):
+    section("typed drawing API")
+    out = os.path.join(OUT, "drawing.png")
+    def pixel(x,y):
+        f.do("file.save_as",path=out)
+        return png_pixel(out,x,y)[:3]
+    def cursor(): return f.image()["history_cursor"]
+    f.do("file.new",width=120,height=120,color="#ffffff")
+    f.do("draw.rectangle",x=10,y=10,width=30,height=30,fill="#ff0000")
+    check(pixel(20,20)==(255,0,0) and pixel(50,50)==(255,255,255), "rectangle paints the requested bounds")
+    f.do("draw.ellipse",x=50,y=10,width=40,height=40,fill="#00ff00")
+    check(pixel(70,30)==(0,255,0) and pixel(51,11)==(255,255,255), "ellipse has a filled center and clipped corners")
+    f.do("draw.polygon",points=[[10,100],[30,50],[50,100]],fill="#0000ff")
+    check(pixel(30,80)==(0,0,255), "polygon paints a triangle without scanline commands")
+    before=cursor()
+    f.do("draw.stroke",points=[[60,70],[100,70],[60,70]],color="#000000",size=8,opacity=0.5)
+    check(all(115<=c<=140 for c in pixel(80,70)), "stroke opacity applies once despite retracing")
+    check(cursor()==before+1,"a multi-point stroke is one undo entry")
+    f.do("edit.undo")
+    check(pixel(80,70)==(255,255,255),"undo removes the entire stroke")
+    f.do("edit.redo")
+    check(all(115<=c<=140 for c in pixel(80,70)),"redo restores the stroke")
+    f.do("draw.stroke",points=[[100,100]],color="#000000",size=8)
+    check(pixel(100,100)==(0,0,0),"a single stroke point paints a dot")
+    f.do("file.new",width=120,height=120,color="#ffffff")
+    f.do("draw.path",nodes=[{"x":10,"y":60,"out":[10,10]},{"x":100,"y":60,"in":[100,10]}],fill="none",stroke="#000000",stroke_width=8)
+    check(pixel(55,23)==(0,0,0) and pixel(55,60)==(255,255,255),"Bezier control points bend the rendered path")
+    f.do("select.rect",x0=20,y0=20,x1=40,y1=40)
+    f.do("draw.rectangle",x=0,y=0,width=120,height=120,fill="#ff0000")
+    check(pixel(25,30)==(255,0,0) and pixel(90,90)==(255,255,255),"raster drawing respects the active selection")
+    f.do("edit.fill",color="#00ff00")
+    check(pixel(25,30)==(0,255,0) and pixel(90,90)==(255,255,255),"typed fill also respects the selection")
+    f.do("select.none")
+    f.do("layer.new_vector")
+    answer=json.loads(f.do("draw.ellipse",x=65,y=65,width=40,height=40,fill="#8844ff",target="vector"))
+    check(answer["target"]=="vector" and answer["object"]==0,"vector draw returns its layer and object index")
+    check(f.layers()[-1]["type"]=="vector","vector target stays editable")
+    ora=os.path.join(OUT,"drawing.ora")
+    f.do("file.save_as",path=ora);f.do("file.close");f.do("file.open",path=ora)
+    check(f.layers()[-1]["type"]=="vector" and pixel(85,85)==(136,68,255),"vector shapes survive an OpenRaster round trip")
+    f.do("select.rect",x0=0,y0=0,x1=20,y1=20)
+    check(f.refused("draw.rectangle",x=0,y=0,width=10,height=10,target="vector"),"vector drawing refuses silently ignoring a raster selection")
+    f.do("select.none")
+    check(f.refused("draw.stroke",points=[[5,5]],color="#ffffff"),"stroke rejects a vector layer")
+    f.do("file.new",width=50,height=50,color="#ffffff")
+    for params in [dict(x=0,y=0,width=-1,height=10),dict(x=0,y=0,width=0,height=10),dict(x="0",y=0,width=10,height=10),dict(x=0,y=0,width=10,height=10,fill="#oops"),dict(x=0,y=0,width=10,height=10,colour="#ff0000"),dict(x=0,y=0,width=10),dict(x=0,y=0,width=10,height=10,fill="none",stroke="none")]:
+        before=cursor()
+        check(f.refused("draw.rectangle",**params) and cursor()==before,"invalid rectangle input leaves history unchanged: "+str(params))
+    check(f.refused("draw.polygon",points=[[0,0],[1,1]]),"polygon requires at least three vertices")
+    check(f.refused("draw.polygon",points=[[0,0],[1,1],[2,"bad"]]),"nested coordinates are validated")
+    check(f.refused("draw.path",nodes=[{"x":0,"y":0,"out":[1]},{"x":10,"y":10}],fill="none",stroke="#000000"),"Bezier handle shape is validated")
+    check(f.refused("draw.stroke",points=[],color="#000000"),"empty strokes are refused")
+    check(f.refused("draw.stroke",points=[[0,0]],color="#000000",size=501),"brush size limits are enforced")
+    check(f.refused("file.open"),"required parameters are enforced for existing typed actions")
+    check(f.refused("view.zoom",mode="typo"),"existing enums are enforced")
+    f.do("file.close")
+
+
+def test_atomic_batches(f):
+    section("atomic batches")
+    out=os.path.join(OUT,"batch.png")
+    def pixel(x,y):
+        f.do("file.save_as",path=out);return png_pixel(out,x,y)[:3]
+    def call(action,**params):return {"action":action,"params":params}
+    f.do("file.new",width=80,height=80,color="#ffffff")
+    r=json.loads(f.do("app.batch",name="A tiny face",actions=[call("layer.new"),call("layer.properties",name="Face"),call("draw.ellipse",x=10,y=10,width=60,height=60,fill="#ff8800"),call("draw.polygon",points=[[20,30],[40,15],[60,30]],fill="#000000")]))
+    check(r["count"]==4 and len(r["results"])==4,"batch returns every child result")
+    check(f.image()["history_cursor"]==1 and f.image()["last"]=="A tiny face","batch becomes one named undo step")
+    check(len(f.layers())==2 and pixel(40,50)==(255,136,0),"batch edits the intended layer")
+    f.do("edit.undo")
+    check(len(f.layers())==1 and pixel(40,50)==(255,255,255),"one undo restores the entire document")
+    # Failure after an actual mutation must preserve this redo tail too.
+    before=f.image()
+    refused=f.refused("app.batch",actions=[call("edit.fill",color="#ff0000"),call("draw.rectangle",x=0,y=0,width=20,height=20,target="vector")])
+    after=f.image()
+    check(refused and after["history"]==before["history"] and after["history_cursor"]==before["history_cursor"],"runtime failure preserves the undo and redo history")
+    check(pixel(40,50)==(255,255,255),"runtime failure rolls back earlier pixel edits")
+    f.do("edit.redo")
+    check(len(f.layers())==2 and pixel(40,50)==(255,136,0),"redo still works after a failed batch")
+    before=f.image()
+    check(f.refused("app.batch",actions=[call("layer.new"),call("select.rect",x0=0,y0=0,x1=20,y1=20),call("layer.select",index=999)]),"a late invalid layer index aborts a batch")
+    after=f.image()
+    check(len(after["layers"])==len(before["layers"]) and after["active_layer"]==before["active_layer"] and after["selection"]==before["selection"],"rollback restores layer structure, active layer and selection")
+    sentinel=os.path.join(OUT,"must-not-exist.png")
+    for action in [call("file.save_as",path=sentinel),call("edit.undo"),call("edit.copy"),call("tool.color",color="#ff0000"),call("Fill"),call("app.batch",actions=[call("layer.new")])]:
+        check(f.refused("app.batch",actions=[call("edit.fill",color="#ff0000"),action]),"batch excludes non-transactional action "+action["action"])
+    check(not os.path.exists(sentinel),"forbidden file actions never write a file")
+    check(pixel(40,50)==(255,136,0),"prevalidation failures do not partially edit the image")
+    check(f.refused("app.batch",actions=[]),"empty batch is refused")
+    check(f.refused("app.batch",actions=[call("layer.new")]*257),"oversized batch is refused")
+    check(f.refused("app.batch",actions=[{"action":"layer.new","typo":True}]),"unknown nested batch fields are refused")
+    f.do("file.new",width=30,height=30,color="#ffffff")
+    f.do("app.batch",actions=[call("edit.fill",color="#ff0000")])
+    f.do("file.save_as",path=out)
+    f.do("edit.undo")
+    f.do("app.batch",actions=[call("edit.fill",color="#00ff00")])
+    check(f.image()["modified"],"replacing a saved redo branch remains modified even at the same cursor")
+    while f.state()["documents"]:
+        f.do("file.close")
+    check(f.refused("app.batch",actions=[call("layer.new")]),"batch requires an open document")
+
+
+def test_discovery_v2(f):
+    section("API discovery v2")
+    api=json.loads(f.do("app.describe"))
+    actions={a["name"]:a for a in api["actions"]}
+    check(api["version"]==2,"discovery advertises schema version 2")
+    for name in ["draw.rectangle","draw.ellipse","draw.polygon","draw.path","draw.stroke","edit.fill","app.batch"]:
+        check(name in actions and bool(actions[name].get("examples")),name+" has a schema and runnable examples")
+    check(actions["draw.stroke"]["input_schema"]["properties"]["size"]["default"]==16,"numeric defaults are JSON numbers")
+    check(actions["draw.ellipse"]["input_schema"]["properties"]["antialias"]["default"] is True,"boolean defaults are JSON booleans")
+    check("default" not in actions["file.save_as"]["input_schema"]["properties"]["quality"],"dynamic defaults are not falsely typed as numbers")
+    check(actions["draw.path"]["input_schema"]["properties"]["nodes"]["items"]["required"]==["x","y"],"discovery includes nested path schemas")
+    check(actions["layer.new"]["batch_safe"] and not actions["file.save_as"]["batch_safe"],"transaction eligibility is discoverable")
+    single=json.loads(f.do("app.describe",name="draw.stroke"))
+    check(len(single["actions"])==1 and single["actions"][0]["name"]=="draw.stroke","clients can request a single action schema")
+    check(f.refused("app.describe",name="does.not.exist"),"unknown schema lookup is refused")
+    check(api["legacy_replacements"]["Fill"]=="edit.fill","legacy callers can discover typed replacements")
+    for name in ["draw.rectangle","draw.ellipse","draw.polygon","draw.path","draw.stroke","edit.fill","app.batch"]:
+        for example in actions[name]["examples"]:
+            f.do("file.new",width=140,height=140,color="#ffffff")
+            check(f.do(name,**example) is not None,"published example runs: "+name)
+            f.do("file.close")
+
+
 def main():
     os.environ.setdefault("FIRN_WINDOW", "1280x800")
     firn = os.path.join(BUILD, "app", "firn")
@@ -381,7 +509,7 @@ def main():
         print("no app binary at " + firn)
         sys.exit(1)
     drive.kill()
-    env = dict(os.environ, FIRN_DRIVE=drive.SOCK)
+    env = dict(os.environ, FIRN_DRIVE=drive.SOCK, XDG_CONFIG_HOME=_SESSION)
     log = open(os.path.join(OUT, "app.log"), "w")
     proc = subprocess.Popen([firn], env=env, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
     try:
@@ -390,7 +518,7 @@ def main():
         drive.recv_line(sock)
         f = Firn(sock)
         for case in (test_api_surface, test_documents, test_view, test_layers, test_selection,
-                     test_painting_and_materials, test_edit_actions, test_tools_and_history, test_image_geometry, test_metadata):
+                     test_painting_and_materials, test_edit_actions, test_tools_and_history, test_image_geometry, test_metadata, test_drawing_api, test_atomic_batches, test_discovery_v2):
             case(f)
         sock.sendall(b"quit\n")
         sock.settimeout(10.0)

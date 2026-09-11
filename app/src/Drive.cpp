@@ -13,6 +13,7 @@
 #ifndef _WIN32
 #include <fcntl.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <sys/un.h>
 #include <unistd.h>
 #endif
@@ -93,9 +94,29 @@ bool Driver::start(const std::string& path) {
     if (listen_fd_ < 0) return false;
     sockaddr_un addr{};
     addr.sun_family = AF_UNIX;
+    if (path.size() >= sizeof(addr.sun_path)) {
+        std::fprintf(stderr, "FIRN_DRIVE: socket path is too long: %s\n", path.c_str());
+        close(listen_fd_); listen_fd_ = -1; return false;
+    }
     std::snprintf(addr.sun_path, sizeof(addr.sun_path), "%s", path.c_str());
-    unlink(path.c_str());
-    if (bind(listen_fd_, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) != 0 || listen(listen_fd_, 1) != 0) {
+    const int probe = socket(AF_UNIX, SOCK_STREAM, 0);
+    if (probe < 0) { close(listen_fd_); listen_fd_ = -1; return false; }
+    const int connected = connect(probe, reinterpret_cast<sockaddr*>(&addr), sizeof(addr));
+    const int connect_error = errno;
+    close(probe);
+    if (connected == 0 || (connect_error != ENOENT && connect_error != ECONNREFUSED)) {
+        std::fprintf(stderr, "FIRN_DRIVE: socket already in use or inaccessible: %s\n", path.c_str());
+        close(listen_fd_); listen_fd_ = -1; return false;
+    }
+    if (connect_error == ECONNREFUSED) {
+        struct stat st{};
+        if (lstat(path.c_str(), &st) != 0 || !S_ISSOCK(st.st_mode)) {
+            std::fprintf(stderr, "FIRN_DRIVE: refusing to replace a non-socket: %s\n", path.c_str());
+            close(listen_fd_); listen_fd_ = -1; return false;
+        }
+        unlink(path.c_str());
+    }
+    if (bind(listen_fd_, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) != 0 || listen(listen_fd_, 32) != 0) {
         std::fprintf(stderr, "FIRN_DRIVE: cannot listen on %s: %s\n", path.c_str(), std::strerror(errno));
         close(listen_fd_);
         listen_fd_ = -1;
@@ -111,6 +132,10 @@ void Driver::poll_socket() {
         client_fd_ = accept(listen_fd_, nullptr, nullptr);
         if (client_fd_ < 0) return;
         fcntl(client_fd_, F_SETFL, O_NONBLOCK);
+#ifdef SO_NOSIGPIPE
+        const int no_sigpipe = 1;
+        setsockopt(client_fd_, SOL_SOCKET, SO_NOSIGPIPE, &no_sigpipe, sizeof(no_sigpipe));
+#endif
     }
     char buf[4096];
     while (true) {
@@ -126,7 +151,13 @@ void Driver::ack(const std::string& payload) {
     const std::string line = "ok " + payload + "\n";
     size_t off = 0;
     while (off < line.size()) {
-        const ssize_t n = write(client_fd_, line.data() + off, line.size() - off);
+        const ssize_t n = send(client_fd_, line.data() + off, line.size() - off,
+#ifdef MSG_NOSIGNAL
+                               MSG_NOSIGNAL
+#else
+                               0
+#endif
+        );
         if (n <= 0) { if (errno == EAGAIN) { usleep(1000); continue; } break; }
         off += static_cast<size_t>(n);
     }
@@ -464,7 +495,13 @@ void Driver::before_frame(App& app, SDL_Window* window) {
                 consumed_frame = true;
                 break;
             }
-            case Step::Quit: app.quit = true; consumed_frame = true; break;
+            case Step::Quit:
+                // There is no next frame to process the trailing Ack.
+                // Confirm the request before shutting the socket down.
+                app.quit = true;
+                steps_.clear();
+                ack("result {\"ok\":true}");
+                return;
             case Step::Do: {
                 const size_t sp = s.text.find(' ');
                 const std::string cmd = s.text.substr(0, sp);

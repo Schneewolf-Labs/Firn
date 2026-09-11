@@ -804,7 +804,12 @@ std::string App::do_command(const std::string& name, const Value& p, bool* ok) {
 
     // Firn's own actions share the same entry point, under dotted names that
     // cannot collide with the original's (see app/src/Actions.cpp).
-    if (const Action* action = find_action(name)) { *ok = true; return action->run(*this, p, ok); }
+    if (const Action* action = find_action(name)) {
+        std::string error;
+        if (!validate_action(*action, p, error)) { *ok = false; return error; }
+        *ok = true;
+        return action->run(*this, p, ok);
+    }
     *ok = false;
     return "unsupported command " + name;
 }

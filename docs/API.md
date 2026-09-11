@@ -79,3 +79,76 @@ Register it in `app/src/Actions.cpp` next to its neighbours, calling the same
 and a parameter for anything the dialog asks for. It then appears in
 `describe`, works from `firn-cli`, from the socket and from a script, with no
 further wiring.
+
+## Drawing without mouse gestures
+
+All geometry uses image pixels, with (0, 0) at the top left. `draw.rectangle`
+and `draw.ellipse` take `x`, `y`, `width`, and `height`. `draw.polygon` takes
+`points: [[x,y], ...]`. `draw.path` takes Bezier nodes with `x`, `y`, and
+optional absolute `in`/`out` control points. Shapes accept `fill`, `stroke`,
+`stroke_width`, `antialias`, and an undo/object `name`. Colors are `#RRGGBB`
+or `#RRGGBBAA`; shape paints also accept `none`.
+
+The default `target: "raster"` paints the active raster layer through the
+current selection. Like the brush tools, raster drawing reduces a deep
+layer to 8 bits, undoably. `target: "vector"` adds an editable object to an
+active vector layer; create one with `layer.new_vector`. Vector drawing
+rejects an active raster selection rather than silently ignoring it.
+Open paths require `fill: "none"` and a stroke. `draw.stroke` paints ordered
+points with `color`, `size`, `hardness` and per-stroke `opacity` (0 to 1).
+`edit.fill` replaces pixels through the selection without changing materials.
+API drawing rejects mask/selection edit mode; exit that mode first.
+
+## One transaction, one undo
+
+`app.batch` takes a `name` and 1–256 `actions`, each containing `action` and
+optional `params`. The request is prevalidated, executed in order, and
+recorded as one undo entry. A failure restores the document and its original
+undo/redo history; the error identifies the zero-based child index.
+Successful replies include `count` and ordered `results`.
+
+Only actions advertised with `batch_safe: true` are accepted. Currently
+these are the drawing and fill actions, raster/vector layer creation,
+layer properties/selection, and the basic selection actions. File writes,
+clipboard access, tool settings, history actions, legacy commands and nested
+batches are rejected before any edits happen. Batches require an existing
+image. Intermediate states are never rendered; file saves belong after the
+successful batch. Undo memory accounts for the boundary document snapshots.
+
+A complete editable kitten is included as `samples/api-cat.json`:
+
+```sh
+build/tools/firn-cli --launch do file.new '{"width":500,"height":460,"color":"#FFF4E9"}'
+build/tools/firn-cli do app.batch --file samples/api-cat.json
+build/tools/firn-cli do file.save_as '{"path":"kitten.ora"}'
+build/tools/firn-cli do file.save_as '{"path":"kitten.png"}'
+```
+
+`--file` accepts formatted JSON and sends one compact protocol line. Direct
+JSON arguments work as before. `firn-cli describe draw.path` (or
+`app.describe` with `name`) returns just that action. Discovery version 2
+includes nested schemas, correctly typed literal defaults, examples, and
+transaction eligibility. Computed defaults use `x-default-description`.
+Modern action calls enforce required fields, types, enums and advertised
+constraints; unknown fields are errors. This intentionally rejects inputs
+such as numeric strings that were previously coerced. Legacy commands keep
+their original permissive parsing, are explicitly marked as unschematized,
+and common drawing-workflow replacements appear in `legacy_replacements`.
+
+## Isolated instances
+
+Use `--socket PATH` to connect to a particular instance. `--launch` reuses
+an existing listener at that address, and can locate the sibling app binary
+on Linux and macOS. Starting a second app at an occupied address fails
+without unlinking the original listener. `scripts/drive.py --kill` shuts down
+only its selected socket; it no longer kills other Firn processes. The test
+and documentation scripts use private sockets and configuration directories.
+
+On macOS, a normal build also creates `build/app/Firn.app`, which Finder and
+computer-use clients can discover directly. This is a development bundle;
+SDL2 still needs to be installed as described in `BUILDING.md`.
+
+The typed action schemas do not yet cover all inherited effect commands.
+Their names remain discoverable for compatibility; do not infer schemas for
+those commands from the typed replacements. Full ImGui control accessibility
+is also separate work from the macOS pointer and keyboard fixes.

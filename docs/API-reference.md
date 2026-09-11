@@ -12,13 +12,15 @@ machine-readable JSON Schema, one schema per action.
 Replies are JSON. Success is `{"ok":true}` and whatever the action returns;
 a refusal comes back as a message and a non-zero exit from `firn-cli`.
 
-49 actions and 161 inherited command names.
+56 actions and 161 inherited command names.
 
 ## Documents
 
 ### `file.close`
 
 Close the current image, discarding changes.
+
+Batch-safe: no.
 
 Takes no parameters.
 
@@ -27,16 +29,20 @@ Takes no parameters.
 
 Create an image.
 
+Batch-safe: no.
+
 | parameter | type | required | default | meaning |
 |---|---|---|---|---|
 | `width` | number | no | `800` | pixels |
 | `height` | number | no | `600` | pixels |
-| `color` | string | no | `white` | #RRGGBB background, or transparent |
+| `color` | string | no | `"white"` | #RRGGBB background, or transparent |
 
 
 ### `file.open`
 
 Open an image file.
+
+Batch-safe: no.
 
 | parameter | type | required | default | meaning |
 |---|---|---|---|---|
@@ -47,12 +53,16 @@ Open an image file.
 
 Load the saved file again, dropping every change.
 
+Batch-safe: no.
+
 Takes no parameters.
 
 
 ### `file.save`
 
 Save the image where it came from.
+
+Batch-safe: no.
 
 Takes no parameters.
 
@@ -61,10 +71,12 @@ Takes no parameters.
 
 Save the image to a path, format taken from the extension.
 
+Batch-safe: no.
+
 | parameter | type | required | default | meaning |
 |---|---|---|---|---|
 | `path` | string | yes |  | where to write it |
-| `quality` | number | no | `the last quality used` | JPEG and WebP quality, 1 to 100; 100 is lossless WebP |
+| `quality` | number | no | the last quality used | JPEG and WebP quality, 1 to 100; 100 is lossless WebP |
 
 
 ## Editing
@@ -73,12 +85,16 @@ Save the image to a path, format taken from the extension.
 
 Clear the selection.
 
+Batch-safe: no.
+
 Takes no parameters.
 
 
 ### `edit.content_aware_fill`
 
 Rebuild the selection from the rest of the picture.
+
+Batch-safe: no.
 
 Takes no parameters.
 
@@ -87,12 +103,16 @@ Takes no parameters.
 
 Copy the active layer through the selection.
 
+Batch-safe: no.
+
 Takes no parameters.
 
 
 ### `edit.copy_merged`
 
 Copy the composite through the selection.
+
+Batch-safe: no.
 
 Takes no parameters.
 
@@ -101,12 +121,35 @@ Takes no parameters.
 
 Cut the selection.
 
+Batch-safe: no.
+
 Takes no parameters.
 
+
+### `edit.fill`
+
+Replace the active raster layer through the selection with a color.
+
+Batch-safe: yes.
+
+| parameter | type | required | default | meaning |
+|---|---|---|---|---|
+| `color` | string | yes |  | Replacement color #RRGGBB or #RRGGBBAA |
+
+
+Example parameters:
+
+```json
+{
+  "color": "#FFF4E9"
+}
+```
 
 ### `edit.paste_as_image`
 
 Paste the clipboard as a new image.
+
+Batch-safe: no.
 
 Takes no parameters.
 
@@ -115,12 +158,16 @@ Takes no parameters.
 
 Paste the clipboard as a new layer.
 
+Batch-safe: no.
+
 Takes no parameters.
 
 
 ### `edit.paste_into_selection`
 
 Scale the clipboard into the selection.
+
+Batch-safe: no.
 
 Takes no parameters.
 
@@ -129,6 +176,8 @@ Takes no parameters.
 
 Redo one step.
 
+Batch-safe: no.
+
 Takes no parameters.
 
 
@@ -136,12 +185,16 @@ Takes no parameters.
 
 Apply the last adjustment or effect again.
 
+Batch-safe: no.
+
 Takes no parameters.
 
 
 ### `edit.undo`
 
 Undo one step.
+
+Batch-safe: no.
 
 Takes no parameters.
 
@@ -152,25 +205,31 @@ Takes no parameters.
 
 Turn a view aid on or off.
 
+Batch-safe: no.
+
 | parameter | type | required | default | meaning |
 |---|---|---|---|---|
 | `what` | string (rulers, grid, guides, assistants, marquee, snap_guides, snap_grid, snap_assistants) | yes |  | the aid to switch |
-| `on` | boolean | no | `the opposite of now` | leave it out to toggle |
+| `on` | boolean | no | the opposite of now | leave it out to toggle |
 
 
 ### `view.zoom`
 
 Set the zoom, or fit / actual size.
 
+Batch-safe: no.
+
 | parameter | type | required | default | meaning |
 |---|---|---|---|---|
 | `zoom` | number | no | `1` | 1 is actual size |
-| `mode` | string (fit, actual, set) | no | `fit unless zoom is given` | which way to zoom |
+| `mode` | string (fit, actual, set) | no | fit unless zoom is given | which way to zoom |
 
 
 ### `view.zoom_to_selection`
 
 Fill the window with the selection.
+
+Batch-safe: no.
 
 Takes no parameters.
 
@@ -181,12 +240,16 @@ Takes no parameters.
 
 Crop to the selection.
 
+Batch-safe: no.
+
 Takes no parameters.
 
 
 ### `image.flip`
 
 Flip top to bottom.
+
+Batch-safe: no.
 
 Takes no parameters.
 
@@ -195,12 +258,16 @@ Takes no parameters.
 
 List the Exif tags and text notes the image carries.
 
+Batch-safe: no.
+
 Takes no parameters.
 
 
 ### `image.mirror`
 
 Mirror left to right.
+
+Batch-safe: no.
 
 Takes no parameters.
 
@@ -209,16 +276,20 @@ Takes no parameters.
 
 Resize the image.
 
+Batch-safe: no.
+
 | parameter | type | required | default | meaning |
 |---|---|---|---|---|
 | `width` | number | no |  | pixels |
 | `height` | number | no |  | pixels |
-| `filter` | string (smart, lanczos, mitchell, bicubic, bilinear, nearest, edge_directed) | no | `smart` | how to resample |
+| `filter` | string (smart, lanczos, mitchell, bicubic, bilinear, nearest, edge_directed) | no | `"smart"` | how to resample |
 
 
 ### `image.rotate`
 
 Rotate the image.
+
+Batch-safe: no.
 
 | parameter | type | required | default | meaning |
 |---|---|---|---|---|
@@ -229,20 +300,24 @@ Rotate the image.
 
 Set one Exif tag or text note.
 
+Batch-safe: no.
+
 | parameter | type | required | default | meaning |
 |---|---|---|---|---|
 | `name` | string | no |  | the Exif tag name, or the keyword of a text note |
 | `value` | string | no |  | the new value |
-| `group` | string (Image, Exif, GPS, Interop, Text) | no | `Image` | which directory the tag is in |
+| `group` | string (Image, Exif, GPS, Interop, Text) | no | `"Image"` | which directory the tag is in |
 
 
 ### `image.strip_metadata`
 
 Remove metadata from the image.
 
+Batch-safe: no.
+
 | parameter | type | required | default | meaning |
 |---|---|---|---|---|
-| `what` | string (all, private) | no | `all` | everything, or only what identifies the photographer and the place |
+| `what` | string (all, private) | no | `"all"` | everything, or only what identifies the photographer and the place |
 
 
 ## Selections
@@ -251,12 +326,16 @@ Remove metadata from the image.
 
 Select everything.
 
+Batch-safe: yes.
+
 Takes no parameters.
 
 
 ### `select.ellipse`
 
 Select an ellipse inside a rectangle, in image pixels.
+
+Batch-safe: yes.
 
 | parameter | type | required | default | meaning |
 |---|---|---|---|---|
@@ -271,6 +350,8 @@ Select an ellipse inside a rectangle, in image pixels.
 
 Invert the selection.
 
+Batch-safe: yes.
+
 Takes no parameters.
 
 
@@ -278,12 +359,16 @@ Takes no parameters.
 
 Drop the selection.
 
+Batch-safe: yes.
+
 Takes no parameters.
 
 
 ### `select.rect`
 
 Select a rectangle, in image pixels.
+
+Batch-safe: yes.
 
 | parameter | type | required | default | meaning |
 |---|---|---|---|---|
@@ -294,11 +379,438 @@ Select a rectangle, in image pixels.
 | `feather` | number | no | `0` | pixels of soft edge |
 
 
+## Drawing
+
+### `draw.ellipse`
+
+Draw an ellipse.
+
+Batch-safe: yes.
+
+| parameter | type | required | default | meaning |
+|---|---|---|---|---|
+| `x` | number | yes |  | Left edge in image pixels |
+| `y` | number | yes |  | Top edge in image pixels |
+| `width` | number | yes |  | Bounding box width |
+| `height` | number | yes |  | Bounding box height |
+| `fill` | string | no | `"#000000"` | Fill color #RRGGBB or #RRGGBBAA, or none |
+| `stroke` | string | no | `"none"` | Outline color #RRGGBB or #RRGGBBAA, or none |
+| `stroke_width` | number | no | `1` | Outline width in image pixels |
+| `target` | string (raster, vector) | no | `"raster"` | Draw on the active raster layer or add an editable object to the active vector layer |
+| `antialias` | boolean | no | `true` | Smooth shape edges |
+| `name` | string | no | `"Draw shape"` | Undo label and vector object name |
+
+
+Example parameters:
+
+```json
+{
+  "x": 20,
+  "y": 20,
+  "width": 80,
+  "height": 60,
+  "fill": "#EEAA75",
+  "stroke": "#573C39",
+  "stroke_width": 3
+}
+```
+
+### `draw.path`
+
+Draw an editable Bezier path or rasterize it.
+
+Batch-safe: yes.
+
+| parameter | type | required | default | meaning |
+|---|---|---|---|---|
+| `nodes` | array | yes |  | Bezier anchors with optional absolute in/out control points |
+| `closed` | boolean | no | `false` | Close the final segment to the first node |
+| `fill` | string | no | `"#000000"` | Fill color #RRGGBB or #RRGGBBAA, or none |
+| `stroke` | string | no | `"none"` | Outline color #RRGGBB or #RRGGBBAA, or none |
+| `stroke_width` | number | no | `1` | Outline width in image pixels |
+| `target` | string (raster, vector) | no | `"raster"` | Draw on the active raster layer or add an editable object to the active vector layer |
+| `antialias` | boolean | no | `true` | Smooth shape edges |
+| `name` | string | no | `"Draw shape"` | Undo label and vector object name |
+
+
+Example parameters:
+
+```json
+{
+  "nodes": [
+    {
+      "x": 20,
+      "y": 80,
+      "out": [
+        40,
+        10
+      ]
+    },
+    {
+      "x": 100,
+      "y": 80,
+      "in": [
+        80,
+        10
+      ]
+    }
+  ],
+  "fill": "none",
+  "stroke": "#573C39",
+  "stroke_width": 4
+}
+```
+
+Full parameter schema:
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "nodes": {
+      "type": "array",
+      "description": "Bezier anchors with optional absolute in/out control points",
+      "minItems": 2,
+      "maxItems": 4096,
+      "items": {
+        "type": "object",
+        "required": [
+          "x",
+          "y"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "x": {
+            "type": "number",
+            "minimum": -100000,
+            "maximum": 100000
+          },
+          "y": {
+            "type": "number",
+            "minimum": -100000,
+            "maximum": 100000
+          },
+          "in": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 2,
+            "items": {
+              "type": "number",
+              "minimum": -100000,
+              "maximum": 100000
+            }
+          },
+          "out": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 2,
+            "items": {
+              "type": "number",
+              "minimum": -100000,
+              "maximum": 100000
+            }
+          }
+        }
+      }
+    },
+    "closed": {
+      "type": "boolean",
+      "description": "Close the final segment to the first node",
+      "default": false
+    },
+    "fill": {
+      "type": "string",
+      "description": "Fill color #RRGGBB or #RRGGBBAA, or none",
+      "default": "#000000",
+      "pattern": "^(none|#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?)$"
+    },
+    "stroke": {
+      "type": "string",
+      "description": "Outline color #RRGGBB or #RRGGBBAA, or none",
+      "default": "none",
+      "pattern": "^(none|#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?)$"
+    },
+    "stroke_width": {
+      "type": "number",
+      "description": "Outline width in image pixels",
+      "default": 1,
+      "exclusiveMinimum": 0,
+      "maximum": 1000
+    },
+    "target": {
+      "type": "string",
+      "description": "Draw on the active raster layer or add an editable object to the active vector layer",
+      "enum": [
+        "raster",
+        "vector"
+      ],
+      "default": "raster"
+    },
+    "antialias": {
+      "type": "boolean",
+      "description": "Smooth shape edges",
+      "default": true
+    },
+    "name": {
+      "type": "string",
+      "description": "Undo label and vector object name",
+      "default": "Draw shape",
+      "minLength": 1,
+      "maxLength": 200
+    }
+  },
+  "required": [
+    "nodes"
+  ],
+  "additionalProperties": false
+}
+```
+
+### `draw.polygon`
+
+Draw a closed polygon.
+
+Batch-safe: yes.
+
+| parameter | type | required | default | meaning |
+|---|---|---|---|---|
+| `points` | array | yes |  | Polygon vertices as [x,y] pairs; closure is automatic |
+| `fill` | string | no | `"#000000"` | Fill color #RRGGBB or #RRGGBBAA, or none |
+| `stroke` | string | no | `"none"` | Outline color #RRGGBB or #RRGGBBAA, or none |
+| `stroke_width` | number | no | `1` | Outline width in image pixels |
+| `target` | string (raster, vector) | no | `"raster"` | Draw on the active raster layer or add an editable object to the active vector layer |
+| `antialias` | boolean | no | `true` | Smooth shape edges |
+| `name` | string | no | `"Draw shape"` | Undo label and vector object name |
+
+
+Example parameters:
+
+```json
+{
+  "points": [
+    [
+      20,
+      100
+    ],
+    [
+      50,
+      20
+    ],
+    [
+      100,
+      100
+    ]
+  ],
+  "fill": "#EEAA75"
+}
+```
+
+Full parameter schema:
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "points": {
+      "type": "array",
+      "description": "Polygon vertices as [x,y] pairs; closure is automatic",
+      "minItems": 3,
+      "maxItems": 4096,
+      "items": {
+        "type": "array",
+        "minItems": 2,
+        "maxItems": 2,
+        "items": {
+          "type": "number",
+          "minimum": -100000,
+          "maximum": 100000
+        }
+      }
+    },
+    "fill": {
+      "type": "string",
+      "description": "Fill color #RRGGBB or #RRGGBBAA, or none",
+      "default": "#000000",
+      "pattern": "^(none|#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?)$"
+    },
+    "stroke": {
+      "type": "string",
+      "description": "Outline color #RRGGBB or #RRGGBBAA, or none",
+      "default": "none",
+      "pattern": "^(none|#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?)$"
+    },
+    "stroke_width": {
+      "type": "number",
+      "description": "Outline width in image pixels",
+      "default": 1,
+      "exclusiveMinimum": 0,
+      "maximum": 1000
+    },
+    "target": {
+      "type": "string",
+      "description": "Draw on the active raster layer or add an editable object to the active vector layer",
+      "enum": [
+        "raster",
+        "vector"
+      ],
+      "default": "raster"
+    },
+    "antialias": {
+      "type": "boolean",
+      "description": "Smooth shape edges",
+      "default": true
+    },
+    "name": {
+      "type": "string",
+      "description": "Undo label and vector object name",
+      "default": "Draw shape",
+      "minLength": 1,
+      "maxLength": 200
+    }
+  },
+  "required": [
+    "points"
+  ],
+  "additionalProperties": false
+}
+```
+
+### `draw.rectangle`
+
+Draw a rectangle.
+
+Batch-safe: yes.
+
+| parameter | type | required | default | meaning |
+|---|---|---|---|---|
+| `x` | number | yes |  | Left edge in image pixels |
+| `y` | number | yes |  | Top edge in image pixels |
+| `width` | number | yes |  | Bounding box width |
+| `height` | number | yes |  | Bounding box height |
+| `fill` | string | no | `"#000000"` | Fill color #RRGGBB or #RRGGBBAA, or none |
+| `stroke` | string | no | `"none"` | Outline color #RRGGBB or #RRGGBBAA, or none |
+| `stroke_width` | number | no | `1` | Outline width in image pixels |
+| `target` | string (raster, vector) | no | `"raster"` | Draw on the active raster layer or add an editable object to the active vector layer |
+| `antialias` | boolean | no | `true` | Smooth shape edges |
+| `name` | string | no | `"Draw shape"` | Undo label and vector object name |
+
+
+Example parameters:
+
+```json
+{
+  "x": 20,
+  "y": 20,
+  "width": 80,
+  "height": 60,
+  "fill": "#EEAA75",
+  "stroke": "#573C39",
+  "stroke_width": 3
+}
+```
+
+### `draw.stroke`
+
+Paint one continuous brush stroke.
+
+Batch-safe: yes.
+
+| parameter | type | required | default | meaning |
+|---|---|---|---|---|
+| `points` | array | yes |  | Ordered [x,y] pairs; one point makes a dot |
+| `color` | string | yes |  | Brush color #RRGGBB or #RRGGBBAA |
+| `size` | number | no | `16` | Brush diameter in image pixels |
+| `hardness` | number | no | `1` | 0 is soft, 1 is hard |
+| `opacity` | number | no | `1` | Coverage for the entire stroke, 0 to 1 |
+
+
+Example parameters:
+
+```json
+{
+  "points": [
+    [
+      20,
+      20
+    ],
+    [
+      80,
+      70
+    ],
+    [
+      120,
+      20
+    ]
+  ],
+  "color": "#573C39",
+  "size": 5
+}
+```
+
+Full parameter schema:
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "points": {
+      "type": "array",
+      "description": "Ordered [x,y] pairs; one point makes a dot",
+      "minItems": 1,
+      "maxItems": 4096,
+      "items": {
+        "type": "array",
+        "minItems": 2,
+        "maxItems": 2,
+        "items": {
+          "type": "number",
+          "minimum": -100000,
+          "maximum": 100000
+        }
+      }
+    },
+    "color": {
+      "type": "string",
+      "description": "Brush color #RRGGBB or #RRGGBBAA",
+      "pattern": "^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$"
+    },
+    "size": {
+      "type": "number",
+      "description": "Brush diameter in image pixels",
+      "default": 16,
+      "minimum": 1,
+      "maximum": 500
+    },
+    "hardness": {
+      "type": "number",
+      "description": "0 is soft, 1 is hard",
+      "default": 1,
+      "minimum": 0,
+      "maximum": 1
+    },
+    "opacity": {
+      "type": "number",
+      "description": "Coverage for the entire stroke, 0 to 1",
+      "default": 1,
+      "minimum": 0,
+      "maximum": 1
+    }
+  },
+  "required": [
+    "points",
+    "color"
+  ],
+  "additionalProperties": false
+}
+```
+
 ## Layers
 
 ### `layer.arrange`
 
 Move the active layer up or down its group.
+
+Batch-safe: no.
 
 | parameter | type | required | default | meaning |
 |---|---|---|---|---|
@@ -309,12 +821,16 @@ Move the active layer up or down its group.
 
 Delete the active layer.
 
+Batch-safe: no.
+
 Takes no parameters.
 
 
 ### `layer.duplicate`
 
 Duplicate the active layer.
+
+Batch-safe: no.
 
 Takes no parameters.
 
@@ -323,14 +839,18 @@ Takes no parameters.
 
 Merge layers.
 
+Batch-safe: no.
+
 | parameter | type | required | default | meaning |
 |---|---|---|---|---|
-| `what` | string (down, visible, all) | no | `down` | which layers to merge |
+| `what` | string (down, visible, all) | no | `"down"` | which layers to merge |
 
 
 ### `layer.move_onto`
 
 Restack a layer where another one sits.
+
+Batch-safe: no.
 
 | parameter | type | required | default | meaning |
 |---|---|---|---|---|
@@ -342,12 +862,16 @@ Restack a layer where another one sits.
 
 Add a raster layer.
 
+Batch-safe: yes.
+
 Takes no parameters.
 
 
 ### `layer.new_group`
 
 Group the active layer.
+
+Batch-safe: no.
 
 Takes no parameters.
 
@@ -356,6 +880,8 @@ Takes no parameters.
 
 Add a vector layer.
 
+Batch-safe: yes.
+
 Takes no parameters.
 
 
@@ -363,12 +889,16 @@ Takes no parameters.
 
 Turn the Background layer into an ordinary one.
 
+Batch-safe: no.
+
 Takes no parameters.
 
 
 ### `layer.properties`
 
 Set the active layer's name, opacity, blend mode or visibility.
+
+Batch-safe: yes.
 
 | parameter | type | required | default | meaning |
 |---|---|---|---|---|
@@ -382,6 +912,8 @@ Set the active layer's name, opacity, blend mode or visibility.
 
 Make a layer active, by index from the bottom.
 
+Batch-safe: yes.
+
 | parameter | type | required | default | meaning |
 |---|---|---|---|---|
 | `index` | number | yes |  | 0 is the bottom |
@@ -393,6 +925,8 @@ Make a layer active, by index from the bottom.
 
 Set the brush size in pixels.
 
+Batch-safe: no.
+
 | parameter | type | required | default | meaning |
 |---|---|---|---|---|
 | `size` | number | yes |  | pixels, 1 to 500 |
@@ -402,15 +936,19 @@ Set the brush size in pixels.
 
 Set the foreground or background color.
 
+Batch-safe: no.
+
 | parameter | type | required | default | meaning |
 |---|---|---|---|---|
 | `color` | string | yes |  | #RRGGBB |
-| `which` | string (foreground, background) | no | `foreground` | which material |
+| `which` | string (foreground, background) | no | `"foreground"` | which material |
 
 
 ### `tool.select`
 
 Choose a tool by the name shown in the palette.
+
+Batch-safe: no.
 
 | parameter | type | required | default | meaning |
 |---|---|---|---|---|
@@ -419,16 +957,113 @@ Choose a tool by the name shown in the palette.
 
 ## The program itself
 
+### `app.batch`
+
+Apply document edits atomically as one undo step.
+
+Requires an open document. Validation or execution failure restores pixels, layers, selection, active layer, and the previous undo/redo history. Files, clipboard, tools, nested batches, and inherited commands are excluded.
+
+Batch-safe: no.
+
+| parameter | type | required | default | meaning |
+|---|---|---|---|---|
+| `name` | string | no | `"API batch"` | Undo label |
+| `actions` | array | yes |  | Ordered calls; only actions marked batch_safe are accepted |
+
+
+Example parameters:
+
+```json
+{
+  "name": "Triangle",
+  "actions": [
+    {
+      "action": "layer.new_vector"
+    },
+    {
+      "action": "draw.polygon",
+      "params": {
+        "points": [
+          [
+            20,
+            100
+          ],
+          [
+            50,
+            20
+          ],
+          [
+            100,
+            100
+          ]
+        ],
+        "fill": "#EEAA75",
+        "target": "vector"
+      }
+    }
+  ]
+}
+```
+
+Full parameter schema:
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Undo label",
+      "default": "API batch",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "actions": {
+      "type": "array",
+      "description": "Ordered calls; only actions marked batch_safe are accepted",
+      "minItems": 1,
+      "maxItems": 256,
+      "items": {
+        "type": "object",
+        "required": [
+          "action"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "type": "string",
+            "minLength": 1
+          },
+          "params": {
+            "type": "object"
+          }
+        }
+      }
+    }
+  },
+  "required": [
+    "actions"
+  ],
+  "additionalProperties": false
+}
+```
+
 ### `app.describe`
 
-List every action, tool and option this build offers.
+Describe all actions or one named action.
 
-Takes no parameters.
+Batch-safe: no.
+
+| parameter | type | required | default | meaning |
+|---|---|---|---|---|
+| `name` | string | no |  | Optional exact action name |
 
 
 ### `app.screenshot`
 
 Write what the window is showing to a PNG.
+
+Batch-safe: no.
 
 | parameter | type | required | default | meaning |
 |---|---|---|---|---|

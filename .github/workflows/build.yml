@@ -23,6 +23,8 @@ jobs:
         run: xvfb-run -a --server-args="-screen 0 1400x900x24" python3 scripts/smoke.py build
       - name: App behaviour tests (through the action API)
         run: xvfb-run -a --server-args="-screen 0 1400x900x24" python3 scripts/app_tests.py build
+      - name: CLI API tests
+        run: xvfb-run -a --server-args="-screen 0 1400x900x24" python3 scripts/cli_tests.py build
       - name: API manual is current
         run: xvfb-run -a --server-args="-screen 0 1400x900x24" python3 scripts/gen_api_docs.py build --check
       - name: Package
@@ -75,3 +77,5 @@ jobs:
         run: python3 scripts/smoke.py build
       - name: App behaviour tests
         run: python3 scripts/app_tests.py build
+      - name: CLI API tests
+        run: python3 scripts/cli_tests.py build

@@ -15,6 +15,9 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import drive  # noqa: E402
 
 ROOT = drive.ROOT
+# Each test owns its socket and configuration; leave open editors alone.
+_SESSION = tempfile.mkdtemp(prefix="firn-smoke-")
+drive.SOCK = os.path.join(_SESSION, "driver.sock")
 BUILD = sys.argv[1] if len(sys.argv) > 1 else os.path.join(ROOT, "build")
 OUT = tempfile.mkdtemp(prefix="firn-smoke-")
 PSP = os.path.join(OUT, "smoke.pspimage")
@@ -53,7 +56,7 @@ def main():
     if failures:
         sys.exit(1)
     drive.kill()
-    env = dict(os.environ, FIRN_DRIVE=drive.SOCK)
+    env = dict(os.environ, FIRN_DRIVE=drive.SOCK, XDG_CONFIG_HOME=_SESSION)
     log = open(os.path.join(OUT, "app.log"), "w")
     proc = subprocess.Popen([firn], env=env, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
     try:

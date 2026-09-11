@@ -3,7 +3,7 @@
 
     python3 scripts/drive.py --launch [IMAGE]      start the app (FIRN_DRIVE socket, small window), wait until it answers
     python3 scripts/drive.py step [step ...]       send steps; each is acknowledged when its frames have run
-    python3 scripts/drive.py --kill                stop every running instance
+    python3 scripts/drive.py --kill                stop the instance on FIRN_DRIVE
 
 The app listens on the Unix socket named by FIRN_DRIVE (default
 /tmp/firn-drive.sock) and moves a virtual cursor: the real pointer is never
@@ -47,17 +47,22 @@ SOCK = os.environ.get("FIRN_DRIVE", "/tmp/firn-drive.sock")
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 def kill():
-    subprocess.run(["pkill", "-9", "-x", "firn"])
-    # Wait for the processes to be gone so a new instance never races an old
-    # one for the socket.
-    for _ in range(50):
-        if subprocess.run(["pgrep", "-x", "firn"], capture_output=True).returncode != 0:
-            break
-        time.sleep(0.05)
+    """Gracefully stop only the instance on SOCK; never match processes by name."""
+    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    s.settimeout(2.0)
     try:
-        os.unlink(SOCK)
-    except OSError:
+        s.connect(SOCK)
+        s.sendall(b"quit\n")
+        try:
+            while s.recv(4096):
+                pass
+        except OSError:
+            pass
+    except (FileNotFoundError, ConnectionRefusedError):
         pass
+    finally:
+        s.close()
+
 
 def connect(timeout=15.0):
     deadline = time.time() + timeout

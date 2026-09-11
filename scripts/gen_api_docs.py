@@ -14,6 +14,9 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import drive  # noqa: E402
 
 ROOT = drive.ROOT
+# Each test owns its socket and configuration; leave open editors alone.
+_SESSION = tempfile.mkdtemp(prefix="firn-docs-")
+drive.SOCK = os.path.join(_SESSION, "driver.sock")
 args = [a for a in sys.argv[1:] if not a.startswith("--")]
 CHECK = "--check" in sys.argv
 BUILD = args[0] if args else os.path.join(ROOT, "build")
@@ -23,12 +26,12 @@ JS = os.path.join(ROOT, "docs", "api.json")
 GROUPS = [
     ("file", "Documents"), ("edit", "Editing"), ("view", "The view"),
     ("image", "The whole image"), ("select", "Selections"),
-    ("layer", "Layers"), ("tool", "Tools and materials"), ("app", "The program itself"),
+    ("draw", "Drawing"), ("layer", "Layers"), ("tool", "Tools and materials"), ("app", "The program itself"),
 ]
 
 
 def describe():
-    env = dict(os.environ, FIRN_DRIVE=drive.SOCK)
+    env = dict(os.environ, FIRN_DRIVE=drive.SOCK, XDG_CONFIG_HOME=_SESSION)
     env.setdefault("FIRN_WINDOW", "900x700")
     firn = os.path.join(BUILD, "app", "firn")
     if not os.path.exists(firn):
@@ -72,7 +75,7 @@ def params_table(schema):
             t += " (" + ", ".join(spec["enum"]) + ")"
         out.append("| `{}` | {} | {} | {} | {} |".format(
             name, t, "yes" if name in required else "no",
-            "`{}`".format(spec["default"]) if "default" in spec else "",
+            "`{}`".format(json.dumps(spec["default"])) if "default" in spec else spec.get("x-default-description", ""),
             spec.get("description", "")))
     return "\n".join(out) + "\n"
 
@@ -108,7 +111,12 @@ def render(api):
             lines += ["### `{}`".format(a["name"]), "", a["summary"] + ".", ""]
             if a.get("detail"):
                 lines += [a["detail"], ""]
+            lines += ["Batch-safe: " + ("yes" if a.get("batch_safe") else "no") + ".", ""]
             lines += [params_table(a["input_schema"]), ""]
+            for example in a.get("examples", []):
+                lines += ["Example parameters:", "", "```json", json.dumps(example, indent=2), "```", ""]
+            if any("items" in p for p in a["input_schema"].get("properties", {}).values()):
+                lines += ["Full parameter schema:", "", "```json", json.dumps(a["input_schema"], indent=2), "```", ""]
     rest = [a for a in actions if a["name"] not in used]
     if rest:
         lines += ["## Other", ""]

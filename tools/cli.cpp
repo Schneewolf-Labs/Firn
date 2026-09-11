@@ -12,6 +12,13 @@
 //
 // The socket is $FIRN_DRIVE, or /tmp/firn-drive.sock.
 #include <cerrno>
+#include <fstream>
+#include <iterator>
+#include <limits.h>
+#include "firn/json.h"
+#ifdef __APPLE__
+#include <mach-o/dyld.h>
+#endif
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -31,14 +38,31 @@ std::string socket_path() {
     return "/tmp/firn-drive.sock";
 }
 
-int connect_to(const std::string& path) {
+int connect_once(const std::string& path) {
     const int fd = socket(AF_UNIX, SOCK_STREAM, 0);
     if (fd < 0) return -1;
     sockaddr_un addr{};
     addr.sun_family = AF_UNIX;
+    if (path.size() >= sizeof(addr.sun_path)) { close(fd); return -1; }
     std::snprintf(addr.sun_path, sizeof(addr.sun_path), "%s", path.c_str());
     if (connect(fd, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) < 0) { close(fd); return -1; }
+#ifdef SO_NOSIGPIPE
+    const int no_sigpipe = 1;
+    setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &no_sigpipe, sizeof(no_sigpipe));
+#endif
     return fd;
+}
+
+// A one-client-per-frame server may briefly fill its accept queue during
+// back-to-back CLI calls. Cocoa can report that as ECONNREFUSED.
+int connect_to(const std::string& path) {
+    for (int attempt = 0; attempt < 10; ++attempt) {
+        const int fd = connect_once(path);
+        if (fd >= 0) return fd;
+        if (errno != ECONNREFUSED && errno != EAGAIN && errno != EINTR) break;
+        usleep(20000);
+    }
+    return -1;
 }
 
 // Starts the app in the background and waits for it to answer.
@@ -48,7 +72,12 @@ int launch(const std::string& path, const char* image) {
     if (!exe) {
         // Prefer a build sitting beside this tool.
         char self[4096];
+#ifdef __APPLE__
+        uint32_t size = sizeof(self);
+        const ssize_t n = _NSGetExecutablePath(self, &size) == 0 ? static_cast<ssize_t>(std::strlen(self)) : -1;
+#else
         const ssize_t n = readlink("/proc/self/exe", self, sizeof(self) - 1);
+#endif
         if (n > 0) {
             self[n] = 0;
             std::string dir(self);
@@ -57,6 +86,8 @@ int launch(const std::string& path, const char* image) {
             if (stat((dir + "/../app/firn").c_str(), &st) == 0) binary = dir + "/../app/firn";
         }
     }
+    // Reuse an already running instance on this explicit socket.
+    if (const int existing = connect_to(path); existing >= 0) return existing;
     const pid_t pid = fork();
     if (pid < 0) return -1;
     if (pid == 0) {
@@ -83,7 +114,13 @@ bool exchange(int fd, const std::string& line, std::string& reply) {
     const std::string out = line + "\n";
     size_t off = 0;
     while (off < out.size()) {
-        const ssize_t n = write(fd, out.data() + off, out.size() - off);
+        const ssize_t n = send(fd, out.data() + off, out.size() - off,
+#ifdef MSG_NOSIGNAL
+                               MSG_NOSIGNAL
+#else
+                               0
+#endif
+        );
         if (n <= 0) return false;
         off += static_cast<size_t>(n);
     }
@@ -101,8 +138,9 @@ bool exchange(int fd, const std::string& line, std::string& reply) {
 int usage() {
     std::fprintf(stderr,
                  "usage: firn-cli [--socket PATH] [--launch [IMAGE]] <command>\n"
-                 "  describe              every action and its parameters, as JSON\n"
+                 "  describe [NAME]       all actions, or one action schema\n"
                  "  do NAME [JSON]        run an action (describe lists them)\n"
+                 "  do NAME --file PATH   read JSON parameters from a file\n"
                  "  state                 what is open, as JSON\n"
                  "  shot PATH             write what the window shows to a PNG\n"
                  "  raw STEP [STEP ...]   the driver's own wire steps, for replaying input\n"
@@ -129,16 +167,14 @@ int main(int argc, char** argv) {
     }
     if (i >= argc) return usage();
 
-    const int fd = do_launch ? launch(path, image) : connect_to(path);
-    if (fd < 0) {
-        std::fprintf(stderr, "firn-cli: no program listening on %s%s\n", path.c_str(),
-                     do_launch ? " (it did not start)" : " (start it with FIRN_DRIVE set, or pass --launch)");
-        return 1;
-    }
-
     const std::string verb = argv[i++];
     std::vector<std::string> lines;
-    if (verb == "describe") lines.push_back("do app.describe {}");
+    if (verb == "describe") {
+        auto params = firn::json::Value::object();
+        if (i < argc) params.set("name", firn::json::Value::string(argv[i++]));
+        if (i != argc) return usage();
+        lines.push_back("do app.describe " + firn::json::dump(params));
+    }
     else if (verb == "state") lines.push_back("state_json");
     else if (verb == "quit") lines.push_back("quit");
     else if (verb == "shot") {
@@ -147,12 +183,36 @@ int main(int argc, char** argv) {
     } else if (verb == "do") {
         if (i >= argc) return usage();
         const std::string name = argv[i++];
-        const std::string params = i < argc ? argv[i] : "{}";
-        lines.push_back("do " + name + " " + params);
+        std::string input = "{}";
+        if (i < argc && std::string(argv[i]) == "--file") {
+            if (i + 2 != argc) return usage();
+            std::ifstream file(argv[i + 1], std::ios::binary);
+            if (!file) { std::fprintf(stderr, "firn-cli: cannot read %s\n", argv[i + 1]); return 1; }
+            input.assign(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>());
+        } else if (i < argc) {
+            input = argv[i++];
+            if (i != argc) return usage();
+        }
+        firn::json::Value params;
+        std::string error;
+        if (!firn::json::parse(input, params, &error) || !params.is_object()) {
+            std::fprintf(stderr, "firn-cli: parameters must be a JSON object: %s\n", error.c_str());
+            return 1;
+        }
+        if (name.find_first_of(" \r\n\t") != std::string::npos) return usage();
+        // Compact multiline files before sending them over the line protocol.
+        lines.push_back("do " + name + " " + firn::json::dump(params));
     } else if (verb == "raw") {
         for (; i < argc; ++i) lines.push_back(argv[i]);
     } else {
         return usage();
+    }
+
+    const int fd = do_launch ? launch(path, image) : connect_to(path);
+    if (fd < 0) {
+        std::fprintf(stderr, "firn-cli: no program listening on %s%s\n", path.c_str(),
+                     do_launch ? " (it did not start)" : " (start it with FIRN_DRIVE set, or pass --launch)");
+        return 1;
     }
 
     int status = 0;

@@ -57,10 +57,11 @@ menu category driving a document model, with tools and palettes on top. See
 | --- | --- |
 | `ctest --test-dir build` | core unit tests and the native-format corpus |
 | `python3 scripts/smoke.py` | the real app through its socket driver, end to end |
+| `python3 scripts/cli_tests.py` | CLI JSON files, launch/reuse, and socket isolation |
 | `python3 scripts/app_tests.py` | the action API, one assertion per behavior |
 | `python3 scripts/gen_api_docs.py --check` | the generated API manual is current |
 
-CI runs all four on Linux and builds and tests on Windows and macOS. Every
+CI runs these suites on Linux and builds and tests on Windows and macOS. Every
 push to `main` leaves Linux and Windows packages as workflow artifacts.
 
 ## Checking interface changes
@@ -84,3 +85,14 @@ scripts/release.sh 0.3.0   # bumps the version, dates CHANGELOG.md, commits, tag
 The tag triggers the release workflow, which builds the AppImage, the
 tarballs and the Windows zip, checksums them, and publishes a GitHub release
 whose notes are that version's CHANGELOG section.
+
+### macOS computer-use checks
+
+The build creates both `build/app/firn` and `build/app/Firn.app`. The bundle
+uses the same executable; open it for accessibility-driven UI testing.
+Cocoa pointer events retain their event-local coordinates and button order,
+including when an automation client posts an entire drag at once. Verify
+New/OK clicks, a continuous brush drag, undo/redo, and filename text editing.
+Native menu shortcuts defer to text fields and modal dialogs so Cmd+A/C/V
+edit the field rather than the document. Physical mouse, tablet and
+multi-monitor behavior need manual checks on the relevant hardware.

@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <cmath>
 
 #include "App.h"
 #include "InheritedCommands.h"
@@ -370,8 +371,18 @@ std::vector<Action> build() {
             if (path.empty()) return fail(ok, "app.screenshot needs a path");
             return ok_json("pending", path);   // the driver performs it after the next render
         });
-    add("app.describe", "List every action, tool and option this build offers", {},
-        [](App& app, const Value&, bool*) { return describe_json(app); });
+    add("app.describe", "Describe all actions or one named action", {{"name", "string", "Optional exact action name"}},
+        [](App& app, const Value& p, bool* ok) {
+            const auto name = str(p, "name");
+            if (!name.empty() && !find_action(name)) return fail(ok, "unknown action " + name);
+            return describe_json(app, name);
+        });
+    add_drawing_actions(a);
+    for (auto& entry : a) {
+        const std::string name(entry.name);
+        if (name == "layer.new" || name == "layer.new_vector" || name == "layer.properties" || name == "layer.select" ||
+            name == "select.all" || name == "select.none" || name == "select.invert" || name == "select.rect" || name == "select.ellipse") entry.batch_safe = true;
+    }
     return a;
 }
 
@@ -388,43 +399,21 @@ const Action* find_action(const std::string& name) {
     return nullptr;
 }
 
-std::string describe_json(App& app) {
+std::string describe_json(App& app, const std::string& name) {
     Value root = Value::object();
     root.set("firn", Value::string("action api"));
-    root.set("version", Value::number(1));
+    root.set("version", Value::number(2));
+    root.set("coordinate_system", Value::string("image pixels; origin at top left; positive x right and y down"));
     Value list = Value::array();
     for (const Action& a : actions()) {
+        if (!name.empty() && name != a.name) continue;
         Value e = Value::object();
         e.set("name", Value::string(a.name));
         e.set("summary", Value::string(a.summary));
         if (a.detail) e.set("detail", Value::string(a.detail));
-        // JSON Schema for the parameters, which is the shape a tool-calling
-        // client already knows how to read.
-        Value schema = Value::object();
-        schema.set("type", Value::string("object"));
-        Value props = Value::object();
-        Value required = Value::array();
-        for (const Action::Param& q : a.params) {
-            Value pv = Value::object();
-            pv.set("type", Value::string(q.type == std::string("bool") ? "boolean" : q.type));
-            pv.set("description", Value::string(q.summary));
-            if (q.choices) {
-                Value list = Value::array();
-                std::string acc;
-                for (const char* c = q.choices;; ++c) {
-                    if (*c == ',' || *c == '\0') { if (!acc.empty()) list.push(Value::string(acc)); acc.clear(); if (!*c) break; }
-                    else acc += *c;
-                }
-                pv.set("enum", std::move(list));
-            }
-            if (q.fallback) pv.set("default", Value::string(q.fallback));
-            props.set(q.name, std::move(pv));
-            if (q.required) required.push(Value::string(q.name));
-        }
-        schema.set("properties", std::move(props));
-        schema.set("required", std::move(required));
-        schema.set("additionalProperties", Value::boolean(false));
-        e.set("input_schema", std::move(schema));
+        e.set("input_schema", action_schema(a));
+        e.set("batch_safe", Value::boolean(a.batch_safe));
+        if (a.examples.size()) e.set("examples", a.examples);
         list.push(std::move(e));
     }
     root.set("actions", std::move(list));
@@ -436,6 +425,12 @@ std::string describe_json(App& app) {
     Value inherited = Value::array();
     for (const char* c : kInheritedCommands) inherited.push(Value::string(c));
     root.set("commands", std::move(inherited));
-    root.set("commands_note", Value::string("names from the program this grew out of, taking its parameter names; see docs/COMMANDS.md. A trailing * is a prefix."));
+    root.set("commands_note", Value::string("Legacy compatibility commands have no validated schemas and cannot run in app.batch. Prefer the typed actions above. A trailing * is a prefix."));
+    Value replacements = Value::object();
+    replacements.set("Fill", Value::string("edit.fill"));
+    replacements.set("Selection", Value::string("select.rect / select.ellipse"));
+    replacements.set("NewRasterLayer", Value::string("layer.new"));
+    replacements.set("NewVectorLayer", Value::string("layer.new_vector"));
+    root.set("legacy_replacements", std::move(replacements));
     return firn::json::dump(root);
 }

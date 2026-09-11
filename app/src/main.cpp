@@ -14,6 +14,7 @@
 #include "App.h"
 #include "Drive.h"
 #include "NativeMenu.h"
+#include "NativePointer.h"
 #include "ui/ImGuiMenuBuilder.h"
 #include "Tablet.h"
 #include "Config.h"
@@ -29,9 +30,9 @@ static const char* kAppTitle = "Firn";
 // Default workspace, applied only when no imgui.ini layout exists:
 //   Tools strip | Tool Options across the top, Image center | Materials/Overview
 //   over Layers/History on the right.
-static void build_default_layout(ImGuiID dockspace_id) {
+static bool build_default_layout(ImGuiID dockspace_id) {
     ImGuiDockNode* node = ImGui::DockBuilderGetNode(dockspace_id);
-    if (node && !node->IsLeafNode()) return;  // layout restored from imgui.ini
+    if (node && !node->IsLeafNode()) return false;  // preserve the saved layout and selected tab
 
     const ImGuiViewport* vp = ImGui::GetMainViewport();
     ImGui::DockBuilderRemoveNode(dockspace_id);
@@ -53,6 +54,7 @@ static void build_default_layout(ImGuiID dockspace_id) {
     ImGui::DockBuilderDockWindow("Layers", right_bottom);
     ImGui::DockBuilderDockWindow("History", right_bottom);
     ImGui::DockBuilderFinish(dockspace_id);
+    return true;
 }
 
 // The icon is embedded at build time from assets/icon-128.png (see
@@ -182,7 +184,7 @@ int main(int argc, char** argv) {
         if (scale > 1.01f) app.set_auto_ui_scale(scale);
     }
     Driver driver;
-    if (const char* sock = std::getenv("FIRN_DRIVE")) driver.start(sock);
+    if (const char* sock = std::getenv("FIRN_DRIVE")) { if (!driver.start(sock)) return 1; }
     bool first_frame = true;
     if (argc > 1) {
         if (!app.open_document(argv[1])) std::fprintf(stderr, "%s\n", app.status.c_str());
@@ -190,6 +192,7 @@ int main(int argc, char** argv) {
     app.check_recovery();
     app.autosave_last = 0.0;
     tablet::init(window);
+    native_pointer::init(window);
     native_menu::init(app, window);
 
     while (!app.quit) {
@@ -197,7 +200,7 @@ int main(int argc, char** argv) {
         while (SDL_PollEvent(&event)) {
             // While scripted, the real pointer must not reach the UI.
             if (driver.active() && (event.type == SDL_MOUSEMOTION || event.type == SDL_MOUSEBUTTONDOWN || event.type == SDL_MOUSEBUTTONUP || event.type == SDL_MOUSEWHEEL)) continue;
-            ImGui_ImplSDL2_ProcessEvent(&event);
+            if (!native_pointer::handles(event)) ImGui_ImplSDL2_ProcessEvent(&event);
             if (event.type == SDL_SYSWMEVENT) tablet::syswm(event, app.pen);
             if (event.type == SDL_QUIT) app.request_quit();
             // Files dropped onto the window open as documents (one per file).
@@ -216,7 +219,9 @@ int main(int argc, char** argv) {
 
         app.apply_pending_font();
         ImGui_ImplOpenGL3_NewFrame();
+        native_pointer::before_backend();
         ImGui_ImplSDL2_NewFrame();
+        native_pointer::before_frame(driver.active());
         if (driver.active()) driver.before_frame(app, window);
         ImGui::NewFrame();
 
@@ -243,10 +248,8 @@ int main(int argc, char** argv) {
         const ImGuiID dockspace_id = ImGui::GetID("MainDockSpace");
         ImGui::DockSpace(dockspace_id, ImVec2(0, 0), ImGuiDockNodeFlags_PassthruCentralNode);
         ImGui::End();
-        if (first_frame) {
-            first_frame = false;
-            build_default_layout(dockspace_id);
-        }
+        const bool default_layout_created = first_frame && build_default_layout(dockspace_id);
+        first_frame = false;
 #ifdef __APPLE__
         native_menu::update(app);
 #else
@@ -258,6 +261,9 @@ int main(int argc, char** argv) {
 #endif
         app.draw_canvas();
         app.draw_palettes();
+        // Select Materials after both tabs exist; otherwise ImGui selects
+        // the newly added Overview tab. Saved workspace choices stay intact.
+        if (default_layout_created) ImGui::SetWindowFocus("Materials");
         app.draw_dialogs();
         if (app.show_imgui_demo) ImGui::ShowDemoWindow(&app.show_imgui_demo);
         if (driver.active()) driver.draw_cursor();
@@ -284,6 +290,7 @@ int main(int argc, char** argv) {
     app.config.save();
     if (app.canvas_tex) glDeleteTextures(1, &app.canvas_tex);
     if (app.overlay_tex) glDeleteTextures(1, &app.overlay_tex);
+    native_pointer::shutdown();
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplSDL2_Shutdown();
     ImGui::DestroyContext();

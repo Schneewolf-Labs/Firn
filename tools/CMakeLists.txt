@@ -5,5 +5,6 @@ target_link_libraries(firn-convert PRIVATE firncore)
 # it builds where that does.
 if(NOT WIN32)
   add_executable(firn-cli cli.cpp)
+  target_link_libraries(firn-cli PRIVATE firncore)
   install(TARGETS firn-cli RUNTIME DESTINATION bin)
 endif()
