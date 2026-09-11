@@ -387,7 +387,7 @@ struct App {
     float resize_pct = 100.0f;
     bool resize_lock = true;
     int resize_by_percent = 0;
-    int resize_filter = 2;              // raster::Filter
+    int resize_filter = 4;              // raster::Filter; Smart by default, as in the original
     // Canvas size dialog
     int canvas_w = 0, canvas_h = 0, canvas_anchor = 4;  // 3x3 anchor, 4 = center
     // Rotate dialog

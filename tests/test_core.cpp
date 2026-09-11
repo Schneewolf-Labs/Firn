@@ -1471,6 +1471,13 @@ static void test_edge_directed_resample() {
     const Image edged = raster::resample(small, 384, 384, raster::Filter::EdgeDirected);
     CHECK(edged.width() == 384 && edged.height() == 384);
     CHECK(error(edged, truth) < error(cubic, truth));
+    // Smart picks per resize: the area average down, bicubic for a modest
+    // enlargement, edge directed once it is past a doubling.
+    CHECK(std::memcmp(raster::resample(truth, 96, 96, raster::Filter::Smart).data(),
+                      raster::resample(truth, 96, 96, raster::Filter::Bicubic).data(), 96 * 96 * 4) == 0);
+    CHECK(std::memcmp(raster::resample(small, 140, 140, raster::Filter::Smart).data(),
+                      raster::resample(small, 140, 140, raster::Filter::Bicubic).data(), 140 * 140 * 4) == 0);
+    CHECK(std::memcmp(raster::resample(small, 384, 384, raster::Filter::Smart).data(), edged.data(), edged.size_bytes()) == 0);
     // Shrinking is left to the area average, so it matches bicubic exactly.
     const Image down_e = raster::resample(truth, 96, 96, raster::Filter::EdgeDirected);
     const Image down_c = raster::resample(truth, 96, 96, raster::Filter::Bicubic);

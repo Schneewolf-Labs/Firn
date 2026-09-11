@@ -649,6 +649,11 @@ Taps make_taps(int src_n, int dst_n, Filter filter) {
 Image resample_edge_directed(const Image& src, int w, int h);
 
 Image resample(const Image& src, int w, int h, Filter filter) {
+    if (filter == Filter::Smart) {
+        const bool shrinking = w < src.width() || h < src.height();
+        const bool big_enlargement = w >= src.width() * 2 && h >= src.height() * 2;
+        filter = shrinking || !big_enlargement ? Filter::Bicubic : Filter::EdgeDirected;
+    }
     if (filter == Filter::EdgeDirected) {
         // Only enlargement benefits; shrinking wants the area average.
         if (w > src.width() && h > src.height()) return resample_edge_directed(src, w, h);
