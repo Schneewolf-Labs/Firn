@@ -321,6 +321,52 @@ handler, which stay written as Ctrl because that's what they actually are.
 And settings now land in `~/Library/Application Support/Firn`, not
 `~/.config/firn` (`Config::directory()`).
 
+**A fifth bug, found after a user report on real hardware and fixed the
+same day**: the UI and text were far too big on Retina. `main.cpp`'s HiDPI
+detection fed the drawable/window pixel ratio (2.0 on Retina) straight into
+`auto_ui_scale`, which multiplies both the ImGui style sizes and the
+requested font point size — so a 13 px font came out as 26, and panels wide
+enough for a non-Retina display ate most of the window. That ratio is pixel
+*density* (present on any high-DPI display, there purely so the OS can
+render more sharply at the same logical size), not a "make text and
+widgets bigger" preference — those are two different things that happened
+to share one number. Split them: `App::font_density` (new field) feeds
+`ImFontConfig::RasterizerDensity` so the font atlas rasterizes sharp
+without changing the logical (point) size; `auto_ui_scale` now comes only
+from genuine DPI/toolkit-scale signals (X11 `Xft.dpi`, `GDK_SCALE`,
+`QT_SCALE_FACTOR`), which don't exist on macOS and are a density signal on
+Wayland too — so both leave it at 1.0 there unless `FIRN_UI_SCALE` or
+Preferences > UI Scale asks for more. Verified: `ui_scale`/`font_size`
+read back as 1/13 again, a screenshot shows the full tool list and
+normal-proportioned panels instead of a cropped quarter of the UI, and all
+106 app_tests.py + 19 smoke.py checks plus ctest still pass. This likely
+means Wayland had the same "too big" bug even though nobody had reported
+it there.
+
+**A native macOS menu bar**, requested the same day once the app was
+usable enough to look wrong for not having one. `App::draw_menu` and its
+Layers/Selections helpers now take a `MenuBuilder&` (see CLAUDE.md, "the
+menu bar is one shared body, two renderers") instead of calling `ImGui::`
+directly, so the ~200-item tree (mostly the Effects/Adjust long tail) has
+exactly one source of truth for both the in-window ImGui bar (every
+platform) and a real `NSMenu` tree (`NativeMenu_mac.mm`, reconciled by
+position every frame) that macOS now shows instead. Two real bugs surfaced
+building this on hardware, both fixed: `NativeMenuBuilder::begin_menu` has
+to return `false` (and not be entered) for a disabled menu, exactly like
+`ImGui::BeginMenu` — the menu bodies rely on that to dereference
+`doc`/`layer` unconditionally once past their own enabled check, and
+returning `true` unconditionally crashed immediately on Image > Color
+Management with no document open; and the per-frame Objective-C objects
+need an explicit `@autoreleasepool` since SDL's main loop is a plain
+`while()`, not `[NSApp run]` — nothing else was draining one, so heap RSS
+grew unbounded over a few hundred frames until that was added (`leaks`
+confirmed it was never a true leak — 0 attributable bytes throughout —
+just an ever-growing pool). Verified on hardware with the real
+`NativeMenuBuilder` path (106 + 19 + ctest, RSS flat over 500+ frames) and,
+forcing the `#else` branch locally since there is only one Mac here, with
+`ImGuiMenuBuilder` too (untestable any other way here; CI covers it for
+real on Linux/Windows).
+
 Still not verified on hardware, no tablet or Developer Mode available to
 check it:
 

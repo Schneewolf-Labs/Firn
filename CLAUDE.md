@@ -210,6 +210,20 @@ docs/    notes on the original: command inventory, module mapping, FORMAT.md
   dispatch through it, and `App::do_command` falls through to it after the
   original's command names. Add new UI here as well as in the menu, or the
   API falls behind. See `docs/API.md`.
+- **The menu bar is one shared body, two renderers.** `App::draw_menu`
+  (`app/src/ui/Menu.cpp`, plus `draw_selections_menu` and
+  `draw_layer_menu_items`) describes the whole tree — File through Help —
+  by calling a `MenuBuilder&` (`app/src/ui/MenuBuilder.h`) instead of
+  `ImGui::` directly, so it never has two copies to keep in sync.
+  `ImGuiMenuBuilder` draws it as the in-window bar (every platform, and
+  every context menu — the Layers palette's right-click menu always uses
+  this one). `NativeMenuBuilder` (`app/src/NativeMenu_mac.mm`, macOS only)
+  reconciles a real `NSMenu` tree by position against what the same call
+  sequence describes each frame; `main.cpp` skips the in-window bar there
+  entirely. A disabled `begin_menu` must return `false` and not be entered,
+  exactly like `ImGui::BeginMenu` — bodies dereference `doc`/`layer`
+  unconditionally past their enabled check. New menu items go through `m.`,
+  never `ImGui::`, in these three functions.
 - **Scripting** (`app/src/Script.cpp`): `App::do_command(name, json)`
   implements the original's `App.Do` commands with its parameter names
   (the command API reference is linked from `docs/FORMAT.md`). The driver
