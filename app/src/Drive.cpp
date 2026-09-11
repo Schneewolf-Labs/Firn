@@ -63,11 +63,13 @@ std::vector<std::string> split(const std::string& s, char sep) {
     return out;
 }
 
-bool save_framebuffer(const std::string& path, std::string* err) {
-    GLint vp[4];
-    glGetIntegerv(GL_VIEWPORT, vp);
-    const int w = vp[2], h = vp[3];
-    if (w <= 0 || h <= 0) { if (err) *err = "empty viewport"; return false; }
+bool save_framebuffer(SDL_Window* window, const std::string& path, std::string* err) {
+    // The real drawable size, not GL_VIEWPORT: ImGui_ImplOpenGL3_RenderDrawData
+    // restores the viewport to whatever it was before the call, which main.cpp
+    // sets from the logical window size, not the (larger, on Retina) framebuffer.
+    int w = 0, h = 0;
+    SDL_GL_GetDrawableSize(window, &w, &h);
+    if (w <= 0 || h <= 0) { if (err) *err = "empty drawable"; return false; }
     std::vector<uint8_t> px(static_cast<size_t>(w) * h * 4);
     glPixelStorei(GL_PACK_ALIGNMENT, 1);
     glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, px.data());
@@ -344,7 +346,7 @@ bool Driver::parse_line(const std::string& line, App& app) {
 }
 
 void Driver::before_frame(App& app, SDL_Window* window) {
-    (void)window;
+    window_ = window;
     poll_socket();
     ImGuiIO& io = ImGui::GetIO();
     // Keep the virtual cursor authoritative: the SDL backend may have queued
@@ -509,7 +511,7 @@ void Driver::after_render(App& app) {
     if (!shot_after_render_) return;
     shot_after_render_ = false;
     std::string err;
-    if (!save_framebuffer(pending_shot_, &err)) { steps_.clear(); ack("error screenshot: " + err); return; }
+    if (!save_framebuffer(window_, pending_shot_, &err)) { steps_.clear(); ack("error screenshot: " + err); return; }
     (void)app;
 }
 

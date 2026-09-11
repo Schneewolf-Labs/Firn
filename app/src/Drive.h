@@ -46,6 +46,7 @@ private:
     bool state_json_ = false;
     ImVec2 image_to_window(const App& app, float x, float y) const;
 
+    SDL_Window* window_ = nullptr;
     int listen_fd_ = -1, client_fd_ = -1;
     std::string inbuf_;
     std::deque<Step> steps_;

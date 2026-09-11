@@ -1179,7 +1179,10 @@ void App::handle_shortcuts() {
     ImGuiIO& io = ImGui::GetIO();
     if (io.WantTextInput) return;
     if (ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId)) return;  // dialogs own the keyboard
-    const bool ctrl = io.KeyCtrl;
+    // ImGui does not swap Cmd and Ctrl itself: io.ConfigMacOSXBehaviors only
+    // changes widget-internal editing keys. A physical Cmd press only sets
+    // io.KeySuper, so on macOS the app's own Ctrl+ shortcuts must accept it too.
+    const bool ctrl = io.KeyCtrl || (io.ConfigMacOSXBehaviors && io.KeySuper);
     if (ctrl && ImGui::IsKeyPressed(ImGuiKey_Z, false)) { io.KeyShift ? redo() : undo(); }
     if (ctrl && ImGui::IsKeyPressed(ImGuiKey_Y, false)) redo();
     if (ctrl && ImGui::IsKeyPressed(ImGuiKey_N, false)) show_new_dialog = true;

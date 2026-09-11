@@ -69,13 +69,9 @@ jobs:
       - name: Unit tests
         run: ctest --test-dir build --output-on-failure
       # The runner has a window server, so the app can actually be started
-      # here: building on macOS says nothing about whether it runs. These do
-      # not fail the build yet, because one scripted-shortcut check is known
-      # to fail there and nobody has had a Mac to debug it on. See
-      # docs/ROADMAP.md, "macOS". Make them blocking once that is fixed.
+      # here: building on macOS says nothing about whether it runs. See
+      # docs/ROADMAP.md, "macOS", for the bugs this caught and fixed.
       - name: Smoke test (drives the app)
         run: python3 scripts/smoke.py build
-        continue-on-error: true
       - name: App behaviour tests
         run: python3 scripts/app_tests.py build
-        continue-on-error: true

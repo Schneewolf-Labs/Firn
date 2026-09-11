@@ -81,11 +81,22 @@ int main(int argc, char** argv) {
         return 1;
     }
 
+    // macOS never grants a 3.0 core context: it silently promotes the request
+    // to its highest core profile (3.2+), which only accepts GLSL 150, so
+    // asking for 130 there fails shader compilation at startup.
+#ifdef __APPLE__
+    const char* glsl_version = "#version 150";
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_FORWARD_COMPATIBLE_FLAG);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 2);
+#else
     const char* glsl_version = "#version 130";
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, 0);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
+#endif
     SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
     SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
     SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
@@ -225,7 +236,12 @@ int main(int argc, char** argv) {
         if (driver.active()) driver.draw_cursor();
 
         ImGui::Render();
-        glViewport(0, 0, (int)io.DisplaySize.x, (int)io.DisplaySize.y);
+        // The drawable's pixel size, not io.DisplaySize (logical points): on a
+        // Retina/HiDPI display they differ, and ImGui_ImplOpenGL3_RenderDrawData
+        // restores GL_VIEWPORT to whatever this was set to before it runs.
+        int fb_w = 1, fb_h = 1;
+        SDL_GL_GetDrawableSize(window, &fb_w, &fb_h);
+        glViewport(0, 0, fb_w, fb_h);
         glClearColor(0.16f, 0.16f, 0.16f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());

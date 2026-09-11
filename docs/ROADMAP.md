@@ -254,40 +254,71 @@ Parsing App.h costs 0.59 s per translation unit: about 0.38 s of core
 headers it genuinely needs and 0.2 s of its own declarations. That is the
 budget any future attempt is working against.
 
-## 18. macOS (2026-09-11)
+## 18. macOS (2026-09-11, verified on hardware 2026-09-11)
 
-What is known, so nobody repeats the search:
+Four real bugs were found and fixed by building and driving the app on
+actual Apple Silicon hardware (not just CI). The previous note below was
+wrong on the key point — worth recording why, so nobody re-derives it and
+trusts it again:
 
-- The program **builds and runs** on macOS. The CI job starts it and 20 of
-  the 21 smoke checks pass, so this is not a "does it work there" problem.
-- The one failure is `undo removed the selection`: a shortcut sent by the
-  driver does nothing. **Real users are not affected.** ImGui sets
-  `ConfigMacOSXBehaviors` from `__APPLE__` and swaps Cmd and Ctrl inside
-  `AddKeyAnalogEvent`, so a Mac user pressing Cmd+Z already produces
-  `io.KeyCtrl` and the app's own shortcut handling is correct.
-- Only synthetic input is wrong. The driver sent `ImGuiKey_LeftCtrl` plus
-  `ImGuiMod_Ctrl`, which that swap turns into Super, matching nothing.
-- Tried, and still failing: sending `ImGuiKey_LeftSuper` plus
-  `ImGuiMod_Super` so the swap turns them back into Ctrl
-  (`app/src/Drive.cpp`). Two CI round trips, no Mac to debug on.
-- Worth checking next, on a machine with one: whether
-  `ConfigMacOSXBehaviors` is actually true in this build (print it at
-  startup); whether feeding `ImGuiMod_*` events is doing anything at all,
-  since recent ImGui derives `io.KeyMods` from the physical key states in
-  `UpdateKeyboardInputs`; and whether the app should accept
-  `io.KeyCtrl || io.KeySuper` regardless.
-- The macOS CI steps are `continue-on-error` until this is fixed, so the
-  branch stays green. Make them blocking again in
-  `.github/workflows/build.yml` once it passes.
+- **The window never rendered.** `main.cpp` requested a 3.0 core GL context
+  and compiled ImGui's shaders as `#version 130`. macOS never grants a 3.0
+  core context: it silently promotes the request to its highest core
+  profile (3.2+), which only accepts GLSL 150, so shader compilation failed
+  at startup and the window stayed blank. Fixed with an `__APPLE__` branch
+  requesting 3.2 core + `SDL_GL_CONTEXT_FORWARD_COMPATIBLE_FLAG` and
+  `#version 150`, matching upstream ImGui's own SDL2+GL3 example.
+- **Cmd shortcuts did nothing, for real users too.** The previous note
+  claimed ImGui swaps Cmd and Ctrl itself via `ConfigMacOSXBehaviors`. It
+  doesn't: that flag only changes widget-internal editing keys (word-jump,
+  the Shortcut() helper, nav windowing). A physical Cmd press only ever
+  sets `io.KeySuper`; `io.KeyCtrl` stays false. `App::handle_shortcuts`
+  checked `io.KeyCtrl` directly, so Cmd+Z/Cmd+S/etc. were silently inert
+  for every Mac user, not just the driver. Fixed in `App.cpp`:
+  `ctrl = io.KeyCtrl || (io.ConfigMacOSXBehaviors && io.KeySuper)`. This is
+  also what made the driver's one failing shortcut fail — the driver's
+  Ctrl→Super translation (`app/src/Drive.cpp`) was already correct, it was
+  faithfully reproducing the real bug.
+- **Copying to the clipboard crashed (SIGSEGV).** `clipboard::write_image`
+  called the shared `run()` helper with `nullptr` for both stdin and
+  stdout, which fell into the stdout-capturing branch and dereferenced a
+  null `output` vector. `~/Library/Logs/DiagnosticReports/*.ips` had the
+  full backtrace once `DevToolsSecurity -enable` wasn't an option (no
+  Developer Mode on the box) — a real macOS crash always leaves one there.
+  Fixed with a genuine fire-and-forget branch in `run()`
+  (`app/src/Clipboard.cpp`); verified the PNG actually lands on the real
+  pasteboard afterward (`osascript -e 'clipboard info'`).
+- **Retina screenshots (and the GL viewport generally) were wrong.**
+  `main.cpp` set `glViewport` from `io.DisplaySize`, which is logical
+  *points*, not the physical pixel size of the drawable — on a Retina
+  display those differ by the HiDPI factor.
+  `ImGui_ImplOpenGL3_RenderDrawData` uses the correct physical size
+  internally for its own draw calls (so on-screen rendering was fine), but
+  it saves/restores `GL_VIEWPORT` around itself, so after every frame the
+  viewport was left at the wrong, too-small logical size. The driver's
+  screenshot code trusted that leftover state (`glGetIntegerv(GL_VIEWPORT,
+  ...)`) to size `glReadPixels`, so `shot:` only ever captured a
+  logical-size crop of the real framebuffer — enlarged and cut off, not a
+  clean downscale. Fixed both: `main.cpp` now sets the viewport from
+  `SDL_GL_GetDrawableSize` every frame, and `Drive.cpp`'s
+  `save_framebuffer` takes the `SDL_Window*` and reads the drawable size
+  directly instead of trusting `GL_VIEWPORT`. Verified with a real
+  screenshot at full 2x resolution and a click/drag selection landing on
+  the exact image coordinates the ruler shows.
 
-Also worth a look on that machine, none of it verified by anyone:
+All four were confirmed with the project's own suites on hardware: `ctest`,
+`scripts/smoke.py` (all 19 checks, including the previously-failing `undo
+removed the selection`), and `scripts/app_tests.py` (all 94 checks,
+including content-aware fill, which is what surfaced the clipboard crash).
+The macOS CI steps went back to blocking in `.github/workflows/build.yml`
+once this was verified.
 
-- [ ] Retina: the HiDPI path uses the drawable ratio, which is where a Mac
-      will exercise it first
-- [ ] The clipboard's `osascript` path (`app/src/Clipboard.cpp`)
-- [ ] The tablet backend `app/src/Tablet_mac.mm`, never run on hardware
-- [ ] Settings land in `~/.config/firn`, not `~/Library/Application Support`;
-      it works, it is just not where a Mac user would look
+Still not verified on hardware, no tablet or Developer Mode available to
+check them:
+
+- [ ] The tablet backend `app/src/Tablet_mac.mm`
+- [ ] Settings land in `~/.config/firn`, not `~/Library/Application
+      Support`; it works, it is just not where a Mac user would look
 
 ## Dropped (not worth the effort for this port)
 

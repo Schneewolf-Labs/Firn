@@ -29,6 +29,8 @@ std::vector<uint8_t> encode_png(const firn::Image& img) {
         const size_t n = fwrite(input->data(), 1, input->size(), f);
         return pclose(f) == 0 && n == input->size();
     }
+    // Fire-and-forget: no stdin to feed, no stdout the caller wants back.
+    if (!output) return std::system((cmd + " >/dev/null 2>&1").c_str()) == 0;
     FILE* f = popen((cmd + " 2>/dev/null").c_str(), "r");
     if (!f) return false;
     uint8_t buf[65536];
