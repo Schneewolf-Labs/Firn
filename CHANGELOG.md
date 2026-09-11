@@ -6,6 +6,8 @@ section into the next version.
 
 ## Unreleased
 
+## 0.3.0 (2026-09-11)
+
 ### Added
 - A drawing API, so a script or a model can put marks on the canvas rather
   than only open, adjust and save. `draw.rectangle`, `draw.ellipse`,
