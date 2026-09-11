@@ -1,5 +1,8 @@
 #include "App.h"
 #include "ui/AdjustState.h"
+#include "ui/AdjustLayerState.h"
+#include "ui/PaletteState.h"
+#include "ui/VectorDialogState.h"
 #include "ui/EffectBrowserState.h"
 #include "ui/SelectionMenuState.h"
 #include "ui/MenuState.h"
@@ -29,6 +32,9 @@ static Image mask_to_image(const Mask& m);
 App::~App() = default;
 
 App::App() : tools(make_default_tools()) {
+    adjust_layer_state = std::make_unique<AdjustLayerState>();
+    palette_state = std::make_unique<PaletteState>();
+    vector_dialog_state = std::make_unique<VectorDialogState>();
     fx_browser = std::make_unique<EffectBrowserState>();
     selection_menu_state = std::make_unique<SelectionMenuState>();
     menu_state = std::make_unique<MenuState>();

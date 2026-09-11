@@ -8,6 +8,7 @@
 #include <memory>
 
 #include "App.h"
+#include "ui/VectorDialogState.h"
 #include "firn/commands.h"
 #include "firn/io.h"
 #include "firn/io_psp.h"
@@ -216,12 +217,12 @@ void App::open_vector_properties() {
     const int layer = vector_layer_for_edit(false);
     if (layer < 0) return;
     const auto& objs = doc->layer(layer).objects;
-    vector_props_index = -1;
-    for (size_t i = 0; i < objs.size(); ++i) if (objs[i].selected && !objs[i].is_group) { vector_props_index = static_cast<int>(i); break; }
-    if (vector_props_index < 0) return;
-    vector_props_layer = layer;
+    vector_dialog_state->vector_props_index = -1;
+    for (size_t i = 0; i < objs.size(); ++i) if (objs[i].selected && !objs[i].is_group) { vector_dialog_state->vector_props_index = static_cast<int>(i); break; }
+    if (vector_dialog_state->vector_props_index < 0) return;
+    vector_dialog_state->vector_props_layer = layer;
     vector_props_before = objs;
-    vector_props_edit = objs[vector_props_index];
+    vector_dialog_state->vector_props_edit = objs[vector_dialog_state->vector_props_index];
     show_vector_props_dialog = true;
 }
 
@@ -240,10 +241,10 @@ void App::open_text_edit() {
 void App::draw_vector_dialogs() {
     if (show_vector_props_dialog) { ImGui::OpenPopup("Vector Properties"); show_vector_props_dialog = false; }
     if (!ImGui::BeginPopupModal("Vector Properties", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) return;
-    if (!doc || vector_props_layer < 0 || vector_props_layer >= static_cast<int>(doc->layer_count()) || !doc->layer(vector_props_layer).is_vector()) {
+    if (!doc || vector_dialog_state->vector_props_layer < 0 || vector_dialog_state->vector_props_layer >= static_cast<int>(doc->layer_count()) || !doc->layer(vector_dialog_state->vector_props_layer).is_vector()) {
         ImGui::CloseCurrentPopup(); ImGui::EndPopup(); return;
     }
-    vec::Object& e = vector_props_edit;
+    vec::Object& e = vector_dialog_state->vector_props_edit;
     static int stroke_grad = -1, fill_grad = -1, stroke_pat = -1, fill_pat = -1;
     bool changed = false;
     char name[256];
@@ -302,25 +303,25 @@ void App::draw_vector_dialogs() {
         text_changed |= ImGui::SliderFloat("Rotation", &e.text.rotation, -180.0f, 180.0f, "%.0f deg");
     }
     if (changed || text_changed) {
-        auto& objs = doc->layer(vector_props_layer).objects;
+        auto& objs = doc->layer(vector_dialog_state->vector_props_layer).objects;
         for (size_t i = 0; i < objs.size() && i < vector_props_before.size(); ++i) {
             if (!vector_props_before[i].selected || vector_props_before[i].is_group) continue;
             vec::Object& o = objs[i];
             o.visible = e.visible; o.antialias = e.antialias;
             o.stroke = e.stroke; o.fill = e.fill; o.stroke_width = e.stroke_width; o.miter = e.miter; o.line = e.line;
-            if (static_cast<int>(i) == vector_props_index) o.name = e.name;
+            if (static_cast<int>(i) == vector_dialog_state->vector_props_index) o.name = e.name;
             if (text_changed && o.is_text) {
                 float bx0, by0, bx1, by1;
                 vec::outline_bounds(vector_props_before[i], &bx0, &by0, &bx1, &by1);
                 vec::TextInfo t = e.text;
-                if (static_cast<int>(i) != vector_props_index) { t = o.text; t.text = e.text.text; t.size = e.text.size; t.align = e.text.align; t.rotation = e.text.rotation; t.font_path = e.text.font_path; t.font_family = e.text.font_family; }
+                if (static_cast<int>(i) != vector_dialog_state->vector_props_index) { t = o.text; t.text = e.text.text; t.size = e.text.size; t.align = e.text.align; t.rotation = e.text.rotation; t.font_path = e.text.font_path; t.font_family = e.text.font_family; }
                 place_text_object(o, t, 0, 0);
                 float nx0, ny0, nx1, ny1;
                 if (vec::outline_bounds(o, &nx0, &ny0, &nx1, &ny1)) o.translate(bx0 - nx0, by0 - ny0);
                 o.selected = true;
             }
         }
-        doc->rasterize_vector_layer(vector_props_layer);
+        doc->rasterize_vector_layer(vector_dialog_state->vector_props_layer);
     }
     ImGui::Separator();
     const bool ok = ImGui::Button("OK", ImVec2(80, 0));
@@ -330,8 +331,8 @@ void App::draw_vector_dialogs() {
         objects_changed("Vector Properties", vector_props_before);
         ImGui::CloseCurrentPopup();
     } else if (cancel) {
-        doc->layer(vector_props_layer).objects = vector_props_before;
-        doc->rasterize_vector_layer(vector_props_layer);
+        doc->layer(vector_dialog_state->vector_props_layer).objects = vector_props_before;
+        doc->rasterize_vector_layer(vector_dialog_state->vector_props_layer);
         ImGui::CloseCurrentPopup();
     }
     ImGui::EndPopup();

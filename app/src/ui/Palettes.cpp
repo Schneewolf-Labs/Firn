@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "App.h"
+#include "ui/PaletteState.h"
 #include "Icons.h"
 #include "MaterialDialog.h"
 #include "firn/vector.h"
@@ -166,8 +167,8 @@ static void draw_layers(App& app) {
             L.opacity = op / 100.0f;
             doc.touch();
         }
-        if (ImGui::IsItemActivated()) app.layer_props_before = doc.props(active);
-        if (ImGui::IsItemDeactivatedAfterEdit()) app.layer_set_props(app.layer_props_before, doc.props(active));
+        if (ImGui::IsItemActivated()) app.palette_state->layer_props_before = doc.props(active);
+        if (ImGui::IsItemDeactivatedAfterEdit()) app.layer_set_props(app.palette_state->layer_props_before, doc.props(active));
     }
     ImGui::Separator();
 
@@ -204,24 +205,24 @@ static void draw_layers(App& app) {
         if (L.blend != BlendMode::Normal) std::strncat(label, "]", sizeof(label) - std::strlen(label) - 1);
         // Double-clicking the name renames it in place; the rest of the
         // layer's settings are behind Properties in the context menu.
-        if (app.rename_layer == i) {
+        if (app.palette_state->rename_layer == i) {
             ImGui::SetNextItemWidth(std::max(120.0f, ImGui::CalcTextSize(label).x + 20.0f));
             if (ImGui::IsWindowAppearing() || !ImGui::IsAnyItemActive()) ImGui::SetKeyboardFocusHere();
-            const bool done = ImGui::InputText("##rename", app.rename_buf, sizeof(app.rename_buf), ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll);
+            const bool done = ImGui::InputText("##rename", app.palette_state->rename_buf, sizeof(app.palette_state->rename_buf), ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll);
             if (done || ImGui::IsItemDeactivated()) {
-                if (done && app.rename_buf[0] && L.name != app.rename_buf) {
+                if (done && app.palette_state->rename_buf[0] && L.name != app.palette_state->rename_buf) {
                     LayerProps before = doc.props(i), after = before;
-                    after.name = app.rename_buf;
+                    after.name = app.palette_state->rename_buf;
                     doc.set_active_layer(i);
                     app.layer_set_props(before, after);
                 }
-                app.rename_layer = -1;
+                app.palette_state->rename_layer = -1;
             }
         } else if (ImGui::Selectable(label, active == i, ImGuiSelectableFlags_AllowDoubleClick, ImVec2(ImGui::CalcTextSize(label).x + 8.0f, 0))) {
             doc.set_active_layer(i);
             if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
-                app.rename_layer = i;
-                std::snprintf(app.rename_buf, sizeof(app.rename_buf), "%s", L.name.c_str());
+                app.palette_state->rename_layer = i;
+                std::snprintf(app.palette_state->rename_buf, sizeof(app.palette_state->rename_buf), "%s", L.name.c_str());
             }
         }
         // Drag a row onto another to restack it (into and out of groups).

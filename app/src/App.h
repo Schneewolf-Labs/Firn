@@ -100,6 +100,9 @@ struct App {
     std::unique_ptr<struct MenuState> menu_state;   // app/src/ui/MenuState.h
     std::unique_ptr<struct SelectionMenuState> selection_menu_state;   // app/src/ui/SelectionMenuState.h
     std::unique_ptr<struct EffectBrowserState> fx_browser;   // app/src/ui/EffectBrowserState.h
+    std::unique_ptr<struct VectorDialogState> vector_dialog_state;   // app/src/ui/VectorDialogState.h
+    std::unique_ptr<struct PaletteState> palette_state;   // app/src/ui/PaletteState.h
+    std::unique_ptr<struct AdjustLayerState> adjust_layer_state;   // app/src/ui/AdjustLayerState.h
     Config config;
     bool show_rulers = true, show_grid = false, show_guides = true;
     bool snap_to_guides = true, snap_to_grid = false;
@@ -485,10 +488,7 @@ struct App {
     void open_vector_properties();
     void open_text_edit();               // re-opens the text dialog on a selected text object
     bool show_vector_props_dialog = false;
-    firn::vec::Object vector_props_edit; // dialog working copy (first selected object)
     std::vector<firn::vec::Object> vector_props_before;
-    int vector_props_layer = -1;
-    int vector_props_index = -1;
     int text_edit_object = -1;           // object the text dialog is editing, or -1 for a new one
     void draw_vector_dialogs();
     void layer_new_vector();
@@ -504,10 +504,7 @@ struct App {
     int style_layer_index = -1;
     firn::LayerStyle style_before;
     bool show_adjust_layer_dialog = false;
-    int adj_layer_index = -1;
     bool adj_layer_created = false;
-    firn::Adjustment adj_before;
-    std::string adj_name_before;
     void layer_convert_to_raster();
     std::vector<firn::vec::Path> text_paths(const firn::vec::TextInfo& t, std::vector<int>* glyph_ids = nullptr) const;  // outlines, block top-left at (0, 0)
     void place_text_object(firn::vec::Object& o, const firn::vec::TextInfo& t, float x, float y) const;   // rebuilds o's paths at (x, y) with rotation
@@ -550,7 +547,6 @@ struct App {
     void ensure_fonts();
     void draw_text_dialog();
     firn::LayerProps layer_props_edit;  // dialog working copy
-    firn::LayerProps layer_props_before; // props at the start of a live slider drag
     bool show_imgui_demo = false;
     int new_w = 800, new_h = 600;
     float blur_radius = 3.0f;
@@ -592,8 +588,6 @@ struct App {
     void zoom_to_rect(firn::raster::Rect r);   // fills the view with an image rect
     void zoom_to_selection();
     // Layers palette: the layer whose name is being edited in place (-1 none).
-    int rename_layer = -1;
-    char rename_buf[128] = {};
     void cut();
     void clear_selection();
     void paste_as_new_layer();

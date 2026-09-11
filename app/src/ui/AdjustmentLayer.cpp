@@ -6,6 +6,7 @@
 #include <memory>
 
 #include "App.h"
+#include "ui/AdjustLayerState.h"
 #include "firn/commands.h"
 #include "imgui.h"
 
@@ -28,10 +29,10 @@ void App::layer_new_adjustment(Adjustment::Kind kind) {
 
 void App::open_adjustment_dialog(int layer, bool created) {
     if (!doc || layer < 0 || layer >= static_cast<int>(doc->layer_count()) || !doc->layer(layer).is_adjustment()) return;
-    adj_layer_index = layer;
+    adjust_layer_state->adj_layer_index = layer;
     adj_layer_created = created;
-    adj_before = doc->layer(layer).adjustment;
-    adj_name_before = doc->layer(layer).name;
+    adjust_layer_state->adj_before = doc->layer(layer).adjustment;
+    adjust_layer_state->adj_name_before = doc->layer(layer).name;
     curve_points = doc->layer(layer).adjustment.curves[0];
     show_adjust_layer_dialog = true;
 }
@@ -132,10 +133,10 @@ bool adjustment_body(App& app, Adjustment& a) {
 void App::draw_adjustment_layer_dialog() {
     if (show_adjust_layer_dialog) { ImGui::OpenPopup("Adjustment Layer"); show_adjust_layer_dialog = false; }
     if (!ImGui::BeginPopupModal("Adjustment Layer", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) return;
-    if (!doc || adj_layer_index < 0 || adj_layer_index >= static_cast<int>(doc->layer_count()) || !doc->layer(adj_layer_index).is_adjustment()) {
+    if (!doc || adjust_layer_state->adj_layer_index < 0 || adjust_layer_state->adj_layer_index >= static_cast<int>(doc->layer_count()) || !doc->layer(adjust_layer_state->adj_layer_index).is_adjustment()) {
         ImGui::CloseCurrentPopup(); ImGui::EndPopup(); return;
     }
-    Layer& L = doc->layer(adj_layer_index);
+    Layer& L = doc->layer(adjust_layer_state->adj_layer_index);
     ImGui::TextUnformatted(Adjustment::kind_name(L.adjustment.kind));
     char name[256];
     std::snprintf(name, sizeof(name), "%s", L.name.c_str());
@@ -153,20 +154,20 @@ void App::draw_adjustment_layer_dialog() {
     if (ok) {
         const Adjustment after = L.adjustment;
         const std::string new_name = L.name;
-        if (new_name != adj_name_before) {
-            LayerProps before = doc->props(adj_layer_index), props = before;
-            L.name = adj_name_before;
-            before.name = adj_name_before; props.name = new_name;
-            run(std::make_unique<LayerPropertiesCommand>(adj_layer_index, before, props));
+        if (new_name != adjust_layer_state->adj_name_before) {
+            LayerProps before = doc->props(adjust_layer_state->adj_layer_index), props = before;
+            L.name = adjust_layer_state->adj_name_before;
+            before.name = adjust_layer_state->adj_name_before; props.name = new_name;
+            run(std::make_unique<LayerPropertiesCommand>(adjust_layer_state->adj_layer_index, before, props));
         }
-        if (!(after == adj_before)) {
-            L.adjustment = adj_before;
-            run(std::make_unique<SetAdjustmentCommand>(adj_layer_index, adj_before, after));
+        if (!(after == adjust_layer_state->adj_before)) {
+            L.adjustment = adjust_layer_state->adj_before;
+            run(std::make_unique<SetAdjustmentCommand>(adjust_layer_state->adj_layer_index, adjust_layer_state->adj_before, after));
         }
         ImGui::CloseCurrentPopup();
     } else if (cancel) {
-        L.adjustment = adj_before;
-        L.name = adj_name_before;
+        L.adjustment = adjust_layer_state->adj_before;
+        L.name = adjust_layer_state->adj_name_before;
         doc->touch();
         if (adj_layer_created) undo();
         ImGui::CloseCurrentPopup();
