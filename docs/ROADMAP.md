@@ -313,12 +313,26 @@ including content-aware fill, which is what surfaced the clipboard crash).
 The macOS CI steps went back to blocking in `.github/workflows/build.yml`
 once this was verified.
 
+Also done on the same pass: menu shortcut labels now show Cmd instead of
+Ctrl on macOS (`app/src/ui/Shortcut.h`, `SC()`) — except drag modifiers
+like "Ctrl while selecting" that are checked as the literal physical key in
+`Tools.cpp` and were never routed through the Cmd-accepting shortcut
+handler, which stay written as Ctrl because that's what they actually are.
+And settings now land in `~/Library/Application Support/Firn`, not
+`~/.config/firn` (`Config::directory()`).
+
 Still not verified on hardware, no tablet or Developer Mode available to
-check them:
+check it:
 
 - [ ] The tablet backend `app/src/Tablet_mac.mm`
-- [ ] Settings land in `~/.config/firn`, not `~/Library/Application
-      Support`; it works, it is just not where a Mac user would look
+
+Not attempted, and a real project of its own if picked up: there is no
+`.app` bundle on macOS at all (`app/src/main.cpp` builds a plain
+executable; `CMakeLists.txt` has no `MACOSX_BUNDLE`, no `Info.plist`, no
+`.icns`, and `CPack` has no macOS generator configured). That means no dock
+icon unless launched from a terminal, no double-click-a-file association,
+and no notarization story. Worth scoping separately; it needs an icon set
+in addition to the CMake/CPack work.
 
 ## Dropped (not worth the effort for this port)
 
