@@ -69,9 +69,13 @@ std::vector<FontInfo> list_fonts() {
     if (const char* home = std::getenv("HOME")) {
         dirs.emplace_back(fs::path(home) / ".fonts");
         dirs.emplace_back(fs::path(home) / ".local/share/fonts");
+        dirs.emplace_back(fs::path(home) / "Library/Fonts");        // macOS
     }
     dirs.emplace_back("/usr/share/fonts");
     dirs.emplace_back("/usr/local/share/fonts");
+    dirs.emplace_back("/System/Library/Fonts");                     // macOS
+    dirs.emplace_back("/System/Library/Fonts/Supplemental");
+    dirs.emplace_back("/Library/Fonts");
     dirs.emplace_back("C:/Windows/Fonts");
 
     std::vector<FontInfo> out;

@@ -68,3 +68,9 @@ jobs:
         run: cmake --build build
       - name: Unit tests
         run: ctest --test-dir build --output-on-failure
+      # The runner has a window server, so the app can actually be started
+      # here: building on macOS says nothing about whether it runs.
+      - name: Smoke test (drives the app)
+        run: python3 scripts/smoke.py build
+      - name: App behaviour tests
+        run: python3 scripts/app_tests.py build
