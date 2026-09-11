@@ -338,6 +338,7 @@ void Driver::before_frame(App& app, SDL_Window* window) {
                     }
                 }
                 else if (n == "assistant_kind") app.assistant_kind = static_cast<int>(v);
+                else if (n == "assistant_choice") app.assistant_choice = static_cast<int>(v);
                 else if (n == "filter_layer") app.layer_new_adjustment(static_cast<firn::Adjustment::Kind>(static_cast<int>(v)));
                 else if (n == "assistant_snap") app.assistant_snap = v != 0;
                 else if (n == "csmudge_rate") app.csmudge_rate = static_cast<int>(v);

@@ -182,12 +182,11 @@ Ideas taken from studying GIMP and Krita (reimplemented, not copied):
       hand-built foreign one
 - [ ] Foreground Select: a real matting pass so hair and soft edges come
       out feathered rather than hard
-- [ ] Let a stroke choose which assistant it follows (a Tool Options
-      picker), which is what two-point perspective needs
+- [x] Let a stroke choose which assistant it follows (Tool Options: Follow)
 - [ ] Layer style presets, and styles that scale when the image is resized
 - [ ] Lighter PNG compression for large .ora saves (about a second for a
       3 MP project today, most of it the layer and merged PNGs)
-- [ ] Filter layer masks in the classic format (only .ora keeps them)
+- [x] Filter layer masks in the classic format
 
 ## 15. Conveniences and compatibility (2026-09-10)
 

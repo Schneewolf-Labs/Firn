@@ -13,6 +13,9 @@ section into the next version.
   staircases them; on a photograph it is close to bicubic and about ten
   times slower, so bicubic stays the default. Shrinking always uses the
   area average.
+- Assistants: a stroke can follow a chosen assistant instead of the nearest
+  one, which is what two-point perspective needs, since "nearest" means
+  nothing once two vanishing points both cover the picture.
 - Edit > Content-Aware Fill rebuilds the selection from the rest of the
   picture, so an unwanted object can be selected and removed. Exemplar
   synthesis over a resolution pyramid (the PatchMatch approach): patches
@@ -134,6 +137,8 @@ section into the next version.
   a lighter compression level.
 
 ### Fixed
+- A filter layer's mask is kept by the classic format as well, wrapped the
+  way a masked raster layer is; only .ora had it before.
 - One Step Photo Fix blocked up the shadows and drained color instead of
   improving the photo. Three causes: the automatic contrast stretch mapped
   everything below its clip point onto pure black (and its luma multiplier

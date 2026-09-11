@@ -1838,12 +1838,27 @@ std::vector<uint8_t> save_psp_to_memory(const Document& doc) {
                 continue;
             }
             if (L.is_adjustment() && L.adjustment.is_filter()) {
-                // Our filter layer: an empty raster placeholder the original opens; the parameters go in the stash.
+                // Our filter layer: an empty raster placeholder the original
+                // opens, with the parameters in the stash. A mask rides along
+                // the same way a masked raster layer's does, wrapped in a
+                // group, so it survives the round trip here too.
                 Layer ph;
                 ph.name = L.name; ph.visible = L.visible; ph.opacity = L.opacity; ph.blend = L.blend;
                 ph.pixels = Image(doc.width(), doc.height(), {0, 0, 0, 0});
-                { const int dw = doc.width(), dh = doc.height(); emit([ph, dw, dh, deep_file] { return layer_block(ph, dw, dh, deep_file); }); }
-                ++block_count;
+                const int dw = doc.width(), dh = doc.height();
+                if (L.has_mask()) {
+                    Layer g = ph;
+                    g.type = LayerType::Group;
+                    { const Layer gc = g; emit([gc] { return group_block(gc, 2); }); }
+                    Layer plain = ph;
+                    plain.opacity = 1.0f; plain.blend = BlendMode::Normal; plain.visible = true;
+                    { const Layer pc = plain; emit([pc, dw, dh, deep_file] { return layer_block(pc, dw, dh, deep_file); }); }
+                    { const Layer* Lp = &L; emit([Lp, dw, dh] { return mask_block(Lp->name, Lp->mask, Lp->mask_enabled, dw, dh); }); }
+                    block_count += 3; has_groups = true; has_masks = true;
+                } else {
+                    emit([ph, dw, dh, deep_file] { return layer_block(ph, dw, dh, deep_file); });
+                    ++block_count;
+                }
                 ++i;
                 continue;
             }

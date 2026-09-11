@@ -112,6 +112,7 @@ struct App {
     mutable std::vector<float> no_guides_;              // returned when there is no document
     mutable std::vector<firn::Assistant> no_assistants_;
     int assistant_kind = 0;                 // Assistant tool: what a click or drag creates
+    int assistant_choice = -1;              // which assistant strokes follow; -1 = the nearest
     // The assistant a stroke starting at (sx, sy) should follow (-1 = none).
     int nearest_assistant(float sx, float sy) const;
     // Moves (x, y) onto assistant `i`'s line for a stroke that started at (sx, sy).

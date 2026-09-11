@@ -1903,6 +1903,24 @@ static void test_filter_layers() {
     const Image again = doc.composite();
     CHECK(std::memcmp(part.data(), again.data(), again.size_bytes()) == 0);
     CHECK(again.get(10, 10).r < 200);   // the black square shows through the blur
+    // A filter layer's mask rides through the classic format too, wrapped
+    // the way a masked raster layer is.
+    {
+        Document md(40, 40);
+        md.add_layer("Background").pixels.fill({90, 90, 90, 255});
+        Layer& mf = md.add_layer("Masked Blur");
+        mf.type = LayerType::Adjustment;
+        mf.adjustment.kind = Adjustment::Kind::GaussianBlur;
+        mf.adjustment.blur_radius = 3.0f;
+        mf.mask = mask::rectangle(40, 40, 0, 0, 20, 40, false);
+        const std::vector<uint8_t> mb = io::save_psp_to_memory(md);
+        std::string merr;
+        auto mback = io::load_psp_from_memory(mb.data(), mb.size(), &merr, nullptr);
+        CHECK(mback && mback->layer_count() == 2);
+        CHECK(mback->layer(1).is_adjustment() && mback->layer(1).adjustment.kind == Adjustment::Kind::GaussianBlur);
+        CHECK(mback->layer(1).has_mask() && mback->layer(1).mask.at(5, 5) == 255 && mback->layer(1).mask.at(35, 5) == 0);
+    }
+
     // The native format keeps the filter layer (as a placeholder plus the stash).
     const std::vector<uint8_t> bytes = io::save_psp_to_memory(doc);
     std::string err;

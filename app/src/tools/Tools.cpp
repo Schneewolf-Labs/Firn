@@ -237,7 +237,14 @@ public:
         stroke_->set_pressure_response(app.pen_size, app.pen_opacity);
         stroke_->set_symmetry(app.symmetry());
         // Assistants: the stroke follows the nearest one from where it starts.
-        assist_ = app.assistant_snap ? app.nearest_assistant(in.img_x, in.img_y) : -1;
+        // Either the assistant the user picked, or the nearest to where the
+        // stroke starts. Two vanishing points need the pick: "nearest" has
+        // no useful meaning once both of them cover the picture.
+        assist_ = -1;
+        if (app.assistant_snap) {
+            const int chosen = app.assistant_choice;
+            assist_ = chosen >= 0 && chosen < static_cast<int>(app.assistants().size()) ? chosen : app.nearest_assistant(in.img_x, in.img_y);
+        }
         float sx = in.img_x, sy = in.img_y;
         if (assist_ >= 0 && app.assistants()[assist_].kind == Assistant::Kind::Ruler) app.assist_point(assist_, sx, sy, sx, sy);
         assist_sx_ = sx; assist_sy_ = sy;
@@ -469,6 +476,10 @@ private:
 // parallel ruler or a ruler; drag a handle to move one, right-click to
 // remove it. The brushes follow them while View > Snap to Assistants is on.
 
+const char* kind_name(firn::Assistant::Kind k) {
+    return k == firn::Assistant::Kind::VanishingPoint ? "vanishing point" : k == firn::Assistant::Kind::Parallel ? "parallel ruler" : "ruler";
+}
+
 class AssistantTool : public Tool {
 public:
     const char* category() const override { return "View"; }
@@ -518,6 +529,24 @@ public:
         ImGui::Combo("Kind", &app.assistant_kind, "Vanishing Point\0Parallel Ruler\0Ruler\0");
         ImGui::SameLine();
         ImGui::Checkbox("Snap brushes", &app.assistant_snap);
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(150);
+        {
+            const auto& list = app.assistants();
+            const int chosen = app.assistant_choice;
+            char label[64];
+            if (chosen < 0 || chosen >= static_cast<int>(list.size())) std::snprintf(label, sizeof(label), "Nearest");
+            else std::snprintf(label, sizeof(label), "%d: %s", chosen + 1, kind_name(list[static_cast<size_t>(chosen)].kind));
+            if (ImGui::BeginCombo("Follow", label)) {
+                if (ImGui::Selectable("Nearest", chosen < 0)) app.assistant_choice = -1;
+                for (size_t i = 0; i < list.size(); ++i) {
+                    char item[64];
+                    std::snprintf(item, sizeof(item), "%zu: %s", i + 1, kind_name(list[i].kind));
+                    if (ImGui::Selectable(item, chosen == static_cast<int>(i))) app.assistant_choice = static_cast<int>(i);
+                }
+                ImGui::EndCombo();
+            }
+        }
         ImGui::SameLine();
         ImGui::Checkbox("Show", &app.show_assistants);
         ImGui::SameLine();
