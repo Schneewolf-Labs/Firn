@@ -117,6 +117,13 @@ section into the next version.
 - `edit.content_aware_fill` refuses when nothing is selected instead of
   reporting success and doing nothing.
 
+### Compatibility
+- Projects (`.ora`) written by this version need this version or later to
+  open, because vector layers moved to Firn's own object encoding. Projects
+  written by 0.2.0 still open here. `.PspImage` is unchanged in both
+  directions and still opens in the program Firn grew out of, vector shapes
+  included.
+
 
 ## 0.2.0 (2026-09-11)
 
