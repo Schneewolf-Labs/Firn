@@ -1,4 +1,5 @@
 #include "App.h"
+#include "ui/AdjustState.h"
 
 #include <algorithm>
 #include <cmath>
@@ -15,6 +16,8 @@
 using namespace firn;
 
 static Image mask_to_image(const Mask& m);
+
+App::~App() = default;
 
 App::App() : tools(make_default_tools()) {
     config.load();

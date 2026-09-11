@@ -79,6 +79,13 @@ docs/    notes on the original: command inventory, module mapping, FORMAT.md
   `raster::apply_through_mask`; tools pass `&doc->selection()` as the clip to
   `raster::Stroke` / `raster::flood_fill`. New pixel commands get this for
   free; new tools must opt in.
+- **Dialog parameters do not belong on `App`.** The Adjust and Effects
+  dialogs keep theirs in `AdjustState` (`app/src/ui/AdjustState.h`), which
+  only `Adjust.cpp` and `App.cpp` include; `App` holds it by pointer.
+  Reach it as `adjust_state->x`, never through a local reference: the
+  Effect Browser and Edit > Repeat store these lambdas and would outlive
+  one. Put new single-dialog state there rather than in `App.h`, which 25
+  translation units include.
 - **Adjustment and effect dialogs** live in `app/src/ui/Adjust.cpp` and use
   `adjust_modal(app, title, body, op)`: `body` draws widgets and returns
   true on change, `op` applies the parameters to an `Image`. The preview
