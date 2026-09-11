@@ -25,6 +25,9 @@ add_custom_target(firn_version
   BYPRODUCTS ${FIRN_VERSION_CPP}
   COMMENT "Recording the version and commit")
 
+include(${CMAKE_SOURCE_DIR}/cmake/commands.cmake)
+firn_generate_command_list(${CMAKE_CURRENT_SOURCE_DIR}/src/Script.cpp ${CMAKE_CURRENT_BINARY_DIR}/generated/InheritedCommands.h)
+
 add_executable(firn
   src/main.cpp
   ${FIRN_ICON_CPP}
@@ -61,7 +64,7 @@ add_executable(firn
   src/tools/DeformTools.cpp
   src/tools/WarpTools.cpp
 )
-target_include_directories(firn PRIVATE src)
+target_include_directories(firn PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/generated src)
 add_dependencies(firn firn_version)
 # Lets a development build find the sample tubes in the (gitignored) backup.
 target_compile_definitions(firn PRIVATE FIRN_SOURCE_DIR="${CMAKE_SOURCE_DIR}")

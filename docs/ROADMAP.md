@@ -220,6 +220,30 @@ against the 115 commands its own bundled scripts use.
       runtime and weights; that is a dependency and licensing decision,
       not just a feature
 
+## 17. Restructuring (2026-09-11)
+
+- [x] Phase 1: per-dialog state off `App` (145 members, 11 owners). App.h
+      733 lines / 379 member declarations -> 656 / 302
+- [x] Phase 4: `scripts/app_tests.py`, 91 checks over the part that lives in
+      `App`, which had 21 smoke checks over 14,800 lines
+- [x] `describe` publishes the inherited command names too, generated from
+      Script.cpp at build time so the list cannot drift
+- [ ] Phase 2 (group the remaining members into Documents / View /
+      Materials / Preferences): **measured and dropped.** About 2,000
+      call-site edits, 1,200 of them for `doc` alone, for readability only:
+      it reduces no coupling and no build time
+- [ ] Trimming App.h's includes: **measured and dropped.** Removing any one
+      saves 0.01 to 0.04 s, because they share transitive content App needs
+- [ ] Phase 3 (the GUI calling the action layer rather than `App`): the only
+      change that would move the 8.8 s rebuild, because that needs the 26
+      files including App.h to stop. It wants a narrow interface for the UI
+      to read state through, which is a redesign rather than a refactor.
+      Worth doing when the UI surface stops growing, not before
+
+Parsing App.h costs 0.59 s per translation unit: about 0.38 s of core
+headers it genuinely needs and 0.2 s of its own declarations. That is the
+budget any future attempt is working against.
+
 ## Dropped (not worth the effort for this port)
 
 - Art Media layers and tools (oil brush, chalk, pastel, palette knife,

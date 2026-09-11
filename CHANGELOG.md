@@ -7,6 +7,9 @@ section into the next version.
 ## Unreleased
 
 ### Added
+- `describe` publishes the inherited command names beside the actions, so
+  one call reports everything that can be invoked. The list is generated
+  from the source at build time and cannot fall behind.
 - Everything the menus and tool options do is now an action with a name and
   typed parameters, registered beside the menu item it shares an App method
   with, so the program can be driven from outside without a mouse.

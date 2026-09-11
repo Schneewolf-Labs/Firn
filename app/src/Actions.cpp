@@ -7,6 +7,7 @@
 #include <cstdio>
 
 #include "App.h"
+#include "InheritedCommands.h"
 #include "firn/commands.h"
 #include "firn/inpaint.h"
 
@@ -330,6 +331,11 @@ std::string describe_json(App& app) {
     Value tools = Value::array();
     for (const auto& t : app.tools) tools.push(Value::string(t->name()));
     root.set("tools", std::move(tools));
-    root.set("commands_note", Value::string("the original's App.Do commands are also accepted by name; see docs/COMMANDS.md"));
+    // The inherited command names, read out of Script.cpp at build time, so
+    // describe covers everything that can be called rather than half of it.
+    Value inherited = Value::array();
+    for (const char* c : kInheritedCommands) inherited.push(Value::string(c));
+    root.set("commands", std::move(inherited));
+    root.set("commands_note", Value::string("names from the program this grew out of, taking its parameter names; see docs/COMMANDS.md. A trailing * is a prefix."));
     return firn::json::dump(root);
 }

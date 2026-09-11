@@ -301,6 +301,14 @@ def test_api_surface(f):
     resize = next(a for a in api["actions"] if a["name"] == "image.resize")
     check({p["name"] for p in resize["params"]} >= {"width", "height", "filter"}, "image.resize documents its parameters")
     check(f.refused("no.such.action"), "an unknown action is refused")
+    cmds = api.get("commands", [])
+    check(len(cmds) > 120, "describe also publishes the inherited command names")
+    for required in ("GaussianBlur", "SelectAll", "NewRasterLayer", "Clarify"):
+        check(required in cmds, f"{required} is published")
+    check(any(c.endswith("*") for c in cmds), "prefix-matched commands are marked")
+    f.do("file.new", width=60, height=40, color="#808080")
+    check(f.do("GaussianBlur", Radius=2) is not None, "an inherited command runs alongside the actions")
+    f.do("file.close")
 
 
 def test_image_geometry(f):
