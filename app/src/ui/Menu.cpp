@@ -5,6 +5,7 @@
 
 #include "App.h"
 #include "ui/MenuState.h"
+#include "ui/Shortcut.h"
 #include "firn/adjust.h"
 #include "firn/icc.h"
 #include "firn/io.h"
@@ -127,22 +128,22 @@ void App::draw_menu() {
     if (!ImGui::BeginMainMenuBar()) return;
 
     if (ImGui::BeginMenu("File")) {
-        if (ImGui::MenuItem("New...", "Ctrl+N")) show_new_dialog = true;
-        if (ImGui::MenuItem("Open...", "Ctrl+O")) request_open();
+        if (ImGui::MenuItem("New...", SC("Ctrl+N"))) show_new_dialog = true;
+        if (ImGui::MenuItem("Open...", SC("Ctrl+O"))) request_open();
         if (ImGui::BeginMenu("Recent Files", !config.recent_files.empty())) {
             for (size_t i = 0; i < config.recent_files.size(); ++i) {
                 const std::string& r = config.recent_files[i];
                 if (ImGui::MenuItem(r.c_str())) { open_document(r); break; }
             }
             ImGui::Separator();
-        if (ImGui::MenuItem("Print...", "Ctrl+P", false, has_doc)) show_print_dialog = true;
+        if (ImGui::MenuItem("Print...", SC("Ctrl+P"), false, has_doc)) show_print_dialog = true;
         ImGui::EndMenu();
         }
-        if (ImGui::MenuItem("Close", "Ctrl+W", false, has_doc)) close_document(current_doc);
+        if (ImGui::MenuItem("Close", SC("Ctrl+W"), false, has_doc)) close_document(current_doc);
         if (ImGui::MenuItem("Close All", nullptr, false, has_doc)) { for (int i = static_cast<int>(docs.size()) - 1; i >= 0; --i) if (!document_modified(i)) close_document(i); if (!docs.empty()) close_document(0); }
         ImGui::Separator();
-        if (ImGui::MenuItem("Save", "Ctrl+S", false, has_doc)) save();
-        if (ImGui::MenuItem("Save As...", "Ctrl+Shift+S", false, has_doc)) request_save_as();
+        if (ImGui::MenuItem("Save", SC("Ctrl+S"), false, has_doc)) save();
+        if (ImGui::MenuItem("Save As...", SC("Ctrl+Shift+S"), false, has_doc)) request_save_as();
         if (ImGui::MenuItem("Revert", nullptr, false, has_doc && !doc_path.empty())) { if (modified()) show_revert_prompt = true; else revert(); }
         ImGui::Separator();
         if (ImGui::MenuItem("Preferences...")) { menu_state->prefs_edit = config; menu_state->prefs_scale_before = config.ui_scale; show_prefs_dialog = true; }
@@ -151,30 +152,30 @@ void App::draw_menu() {
         ImGui::EndMenu();
     }
     if (ImGui::BeginMenu("Edit")) {
-        if (ImGui::MenuItem("Undo", "Ctrl+Z", false, has_doc && history.can_undo())) undo();
-        if (ImGui::MenuItem("Redo", "Ctrl+Y", false, has_doc && history.can_redo())) redo();
+        if (ImGui::MenuItem("Undo", SC("Ctrl+Z"), false, has_doc && history.can_undo())) undo();
+        if (ImGui::MenuItem("Redo", SC("Ctrl+Y"), false, has_doc && history.can_redo())) redo();
         ImGui::Separator();
-        if (ImGui::MenuItem("Cut", "Ctrl+X", false, has_layer)) cut();
-        if (ImGui::MenuItem("Copy", "Ctrl+C", false, has_layer)) copy();
-        if (ImGui::MenuItem("Copy Merged", "Ctrl+Shift+C", false, has_doc)) copy_merged();
-        if (ImGui::MenuItem("Paste As New Image", "Ctrl+V")) paste_as_new_image();
-        if (ImGui::MenuItem("Paste As New Layer", "Ctrl+L", false, has_doc)) paste_as_new_layer();
-        if (ImGui::MenuItem("Paste Into Selection", "Ctrl+Shift+L", false, has_layer && doc->has_selection())) paste_into_selection();
+        if (ImGui::MenuItem("Cut", SC("Ctrl+X"), false, has_layer)) cut();
+        if (ImGui::MenuItem("Copy", SC("Ctrl+C"), false, has_layer)) copy();
+        if (ImGui::MenuItem("Copy Merged", SC("Ctrl+Shift+C"), false, has_doc)) copy_merged();
+        if (ImGui::MenuItem("Paste As New Image", SC("Ctrl+V"))) paste_as_new_image();
+        if (ImGui::MenuItem("Paste As New Layer", SC("Ctrl+L"), false, has_doc)) paste_as_new_layer();
+        if (ImGui::MenuItem("Paste Into Selection", SC("Ctrl+Shift+L"), false, has_layer && doc->has_selection())) paste_into_selection();
         if (ImGui::MenuItem("Clear", "Delete", false, has_layer)) clear_selection();
         if (ImGui::MenuItem("Content-Aware Fill", nullptr, false, has_layer && doc->has_selection())) content_aware_fill();
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("Rebuilds the selection from the rest of the picture, to remove something from it.");
         ImGui::Separator();
         {
             const std::string label = last_effect.empty() ? "Repeat" : "Repeat " + last_effect;
-            if (ImGui::MenuItem(label.c_str(), "Ctrl+Shift+Y", false, has_layer && !last_effect.empty())) repeat_last_effect();
+            if (ImGui::MenuItem(label.c_str(), SC("Ctrl+Shift+Y"), false, has_layer && !last_effect.empty())) repeat_last_effect();
         }
         ImGui::EndMenu();
     }
     if (ImGui::BeginMenu("View")) {
         if (ImGui::MenuItem("Zoom In", "+", false, has_doc)) zoom_about(canvas_center, 1.25f);
         if (ImGui::MenuItem("Zoom Out", "-", false, has_doc)) zoom_about(canvas_center, 0.8f);
-        if (ImGui::MenuItem("Fit to Window", "Ctrl+0", false, has_doc)) fit_requested = true;
-        if (ImGui::MenuItem("Actual Size", "Ctrl+Alt+0", false, has_doc)) { zoom = 1.0f; pan_x = pan_y = 0.0f; }
+        if (ImGui::MenuItem("Fit to Window", SC("Ctrl+0"), false, has_doc)) fit_requested = true;
+        if (ImGui::MenuItem("Actual Size", SC("Ctrl+Alt+0"), false, has_doc)) { zoom = 1.0f; pan_x = pan_y = 0.0f; }
         if (ImGui::MenuItem("Zoom to Selection", nullptr, false, has_doc && doc->has_selection())) zoom_to_selection();
         ImGui::Separator();
         ImGui::MenuItem("Rulers", nullptr, &show_rulers);
@@ -205,7 +206,7 @@ void App::draw_menu() {
             ImGui::EndMenu();
         }
         ImGui::Separator();
-        if (ImGui::MenuItem("Crop to Selection", "Ctrl+Shift+R", false, has_doc && doc->has_selection())) crop_to_selection();
+        if (ImGui::MenuItem("Crop to Selection", SC("Ctrl+Shift+R"), false, has_doc && doc->has_selection())) crop_to_selection();
         if (ImGui::MenuItem("Resize...", nullptr, false, has_doc)) open_resize_dialog();
         if (ImGui::MenuItem("Canvas Size...", nullptr, false, has_doc)) open_canvas_dialog();
         ImGui::Separator();
@@ -344,7 +345,7 @@ void App::draw_menu() {
             ImGui::EndMenu();
         }
         ImGui::Separator();
-        if (ImGui::MenuItem("Negative Image", "Ctrl+I", false, has_layer))
+        if (ImGui::MenuItem("Negative Image", SC("Ctrl+I"), false, has_layer))
             run(std::make_unique<InvertCommand>(layer));
         ImGui::EndMenu();
     }

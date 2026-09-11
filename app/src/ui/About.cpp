@@ -1,11 +1,13 @@
 // Help > About: version, commit, build facts, and the libraries in use.
 #include <cstdio>
+#include <cstring>
 #include <string>
 
 #include <SDL.h>
 #include <SDL_opengl.h>
 
 #include "App.h"
+#include "ui/Shortcut.h"
 #include "Config.h"
 #include "Tablet.h"
 #include "Version.h"
@@ -119,7 +121,12 @@ void App::draw_shortcuts_dialog() {
         if (ImGui::BeginTable(title, 2, ImGuiTableFlags_SizingFixedFit)) {
             for (size_t i = 0; i < n; ++i) {
                 ImGui::TableNextRow();
-                ImGui::TableNextColumn(); ImGui::TextUnformatted(rows[i].keys);
+                // Only menu-accelerator-style entries ("Ctrl+X...") go through
+                // App::handle_shortcuts's Cmd-accepting ctrl check; a bare "Ctrl"
+                // named as a drag modifier (e.g. selecting) means the physical
+                // key literally, so leave those as written.
+                const bool accel = std::strncmp(rows[i].keys, "Ctrl+", 5) == 0;
+                ImGui::TableNextColumn(); ImGui::TextUnformatted(accel ? SC(rows[i].keys) : rows[i].keys);
                 ImGui::TableNextColumn(); ImGui::TextDisabled("%s", rows[i].what);
             }
             ImGui::EndTable();

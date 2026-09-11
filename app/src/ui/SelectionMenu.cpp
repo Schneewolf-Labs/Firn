@@ -13,6 +13,7 @@
 #include "firn/raster.h"
 #include "firn/vector.h"
 #include "imgui.h"
+#include "ui/Shortcut.h"
 
 using namespace firn;
 
@@ -97,11 +98,11 @@ void App::draw_selections_menu() {
     const bool has_sel = has_doc && doc->has_selection();
     const int layer = active_layer();
     const bool raster = has_doc && layer >= 0 && doc->layer(layer).is_raster();
-    if (ImGui::MenuItem("Select All", "Ctrl+A", false, has_doc)) select_all();
-    if (ImGui::MenuItem("Select None", "Ctrl+D", false, has_sel)) select_none();
+    if (ImGui::MenuItem("Select All", SC("Ctrl+A"), false, has_doc)) select_all();
+    if (ImGui::MenuItem("Select None", SC("Ctrl+D"), false, has_sel)) select_none();
     if (ImGui::MenuItem("From Mask", nullptr, false, has_doc && layer >= 0 && (doc->layer(layer).has_mask() || raster))) select_from_mask();
     if (ImGui::MenuItem("From Vector Object", nullptr, false, has_doc && layer >= 0 && doc->layer(layer).is_vector())) select_from_vector();
-    if (ImGui::MenuItem("Invert", "Ctrl+Shift+I", false, has_doc)) select_invert();
+    if (ImGui::MenuItem("Invert", SC("Ctrl+Shift+I"), false, has_doc)) select_invert();
     ImGui::Separator();
     if (ImGui::BeginMenu("Matting", raster)) {
         auto matte = [&](const char* name, Color c) {
@@ -127,12 +128,12 @@ void App::draw_selections_menu() {
         ImGui::EndMenu();
     }
     ImGui::Separator();
-    if (ImGui::MenuItem("Hide Marquee", "Ctrl+Shift+M", !show_marquee, has_doc)) show_marquee = !show_marquee;
+    if (ImGui::MenuItem("Hide Marquee", SC("Ctrl+Shift+M"), !show_marquee, has_doc)) show_marquee = !show_marquee;
     if (ImGui::MenuItem("Edit Selection", nullptr, selection_edit, has_doc)) set_selection_edit(!selection_edit);
     ImGui::Separator();
     if (ImGui::MenuItem("Promote Selection to Layer", nullptr, false, raster && has_sel)) promote_selection_to_layer(false);
-    if (ImGui::MenuItem("Float", "Ctrl+F", false, raster && has_sel && !has_floating_layer())) promote_selection_to_layer(true);
-    if (ImGui::MenuItem("Defloat", "Ctrl+Shift+F", false, has_floating_layer())) defloat();
+    if (ImGui::MenuItem("Float", SC("Ctrl+F"), false, raster && has_sel && !has_floating_layer())) promote_selection_to_layer(true);
+    if (ImGui::MenuItem("Defloat", SC("Ctrl+Shift+F"), false, has_floating_layer())) defloat();
     ImGui::Separator();
     if (ImGui::BeginMenu("Load/Save Selection", has_doc)) {
         if (ImGui::BeginMenu("Load Selection From Alpha Channel", !doc->alpha_channels().empty())) {

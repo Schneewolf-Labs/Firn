@@ -7,6 +7,7 @@
 #include "App.h"
 #include "firn/icc.h"
 #include "imgui.h"
+#include "ui/Shortcut.h"
 
 // The image window. Draws the composite texture with zoom/pan, a checkerboard
 // behind it for transparency, handles wheel-zoom and middle/space-drag pan,
@@ -180,13 +181,13 @@ void App::draw_document_context_items(int index) {
     auto make_active = [&] { if (index != current_doc) activate_document(index); };
     if (ImGui::MenuItem("Image Information...", "Shift+I")) { make_active(); show_info_dialog = true; }
     ImGui::Separator();
-    if (ImGui::MenuItem("Fit to Window", "Ctrl+0")) { if (index == current_doc) fit_requested = true; else docs[index].fit_requested = true; }
-    if (ImGui::MenuItem("Actual Size", "Ctrl+Alt+0")) { if (index == current_doc) { zoom = 1.0f; pan_x = pan_y = 0.0f; } else { docs[index].zoom = 1.0f; docs[index].pan_x = docs[index].pan_y = 0.0f; docs[index].fit_requested = false; } }
+    if (ImGui::MenuItem("Fit to Window", SC("Ctrl+0"))) { if (index == current_doc) fit_requested = true; else docs[index].fit_requested = true; }
+    if (ImGui::MenuItem("Actual Size", SC("Ctrl+Alt+0"))) { if (index == current_doc) { zoom = 1.0f; pan_x = pan_y = 0.0f; } else { docs[index].zoom = 1.0f; docs[index].pan_x = docs[index].pan_y = 0.0f; docs[index].fit_requested = false; } }
     ImGui::Separator();
-    if (ImGui::MenuItem("Save", "Ctrl+S")) { make_active(); save(); }
-    if (ImGui::MenuItem("Save As...", "Ctrl+Shift+S")) { make_active(); request_save_as(); }
+    if (ImGui::MenuItem("Save", SC("Ctrl+S"))) { make_active(); save(); }
+    if (ImGui::MenuItem("Save As...", SC("Ctrl+Shift+S"))) { make_active(); request_save_as(); }
     ImGui::Separator();
-    if (ImGui::MenuItem("Close", "Ctrl+F4")) close_document(index);
+    if (ImGui::MenuItem("Close", SC("Ctrl+F4"))) close_document(index);
     if (ImGui::MenuItem("Close Others", nullptr, false, docs.size() > 1)) {
         make_active();
         for (int i = static_cast<int>(docs.size()) - 1; i >= 0; --i)
