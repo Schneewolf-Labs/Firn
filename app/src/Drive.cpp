@@ -265,7 +265,20 @@ bool Driver::parse_line(const std::string& line, App& app) {
         const ImGuiKey k = key_by_name(a[1]);
         if (k == ImGuiKey_None) return false;
         // ImGui wants the modifier flag (ImGuiMod_*) as well as the physical key.
-        auto mod_flag = [](ImGuiKey m) { return m == ImGuiKey_LeftCtrl ? ImGuiMod_Ctrl : m == ImGuiKey_LeftShift ? ImGuiMod_Shift : m == ImGuiKey_LeftAlt ? ImGuiMod_Alt : ImGuiKey_None; };
+        // On macOS it swaps Cmd and Ctrl on the way in, so the shortcut a Mac
+        // user reaches for is Cmd: a script asking for "ctrl" has to send
+        // Super, which ImGui then turns back into Ctrl. Without this every
+        // scripted shortcut silently does nothing there.
+        auto mod_flag = [](ImGuiKey m) {
+#ifdef __APPLE__
+            if (m == ImGuiKey_LeftCtrl) return ImGuiMod_Super;
+#endif
+            return m == ImGuiKey_LeftCtrl ? ImGuiMod_Ctrl : m == ImGuiKey_LeftShift ? ImGuiMod_Shift : m == ImGuiKey_LeftAlt ? ImGuiMod_Alt : ImGuiKey_None;
+        };
+#ifdef __APPLE__
+        for (ImGuiKey& m : mods)
+            if (m == ImGuiKey_LeftCtrl) m = ImGuiKey_LeftSuper;
+#endif
         for (ImGuiKey m : mods) {
             { Step s{Step::KeyDown}; s.key = m; steps_.push_back(s); }
             if (mod_flag(m) != ImGuiKey_None) { Step s{Step::KeyDown}; s.key = mod_flag(m); steps_.push_back(s); }

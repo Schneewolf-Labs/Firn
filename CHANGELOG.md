@@ -159,6 +159,10 @@ section into the next version.
   a lighter compression level.
 
 ### Fixed
+- macOS: the Text tool found no fonts, because the search knew the Linux and
+  Windows directories but none of Apple's. Scripted keyboard shortcuts did
+  nothing there either, since ImGui swaps Cmd and Ctrl on that platform and
+  the driver was sending the one that becomes Super.
 - A filter layer's mask is kept by the classic format as well, wrapped the
   way a masked raster layer is; only .ora had it before.
 - One Step Photo Fix blocked up the shadows and drained color instead of

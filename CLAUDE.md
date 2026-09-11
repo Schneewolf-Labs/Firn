@@ -263,6 +263,17 @@ docs/    notes on the original: command inventory, module mapping, FORMAT.md
   a failure of the whole fill.
 - Add a test in `tests/test_core.cpp` for every new raster op or command.
 
+## macOS
+
+ImGui swaps Cmd and Ctrl on Apple (`ConfigMacOSXBehaviors`, set from
+`__APPLE__`), so `io.KeyCtrl` is what a Mac user pressing **Cmd** produces
+and the app's shortcuts are already right there. The driver has to send
+Super for a script's `ctrl` so ImGui swaps it back, which
+`app/src/Drive.cpp` does; without it every scripted shortcut silently does
+nothing on that platform. The smoke and behaviour suites run on the macOS
+CI job for exactly this reason: building there proves nothing about
+whether the program works.
+
 ## Checking UI changes
 
 `scripts/app_tests.py` is the app's test suite: 84 checks over documents,
