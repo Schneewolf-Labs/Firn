@@ -189,6 +189,24 @@ Ideas taken from studying GIMP and Krita (reimplemented, not copied):
       3 MP project today, most of it the layer and merged PNGs)
 - [ ] Filter layer masks in the classic format (only .ora keeps them)
 
+## 15. Conveniences and compatibility (2026-09-10)
+
+From an audit of our menus against the original's, and of `App.Do`
+against the 115 commands its own bundled scripts use.
+
+- [x] Edit: Copy Merged, Paste Into Selection, Repeat last effect
+- [x] File > Revert, View > Zoom to Selection, rename a layer in place
+- [x] Script commands: 69 of 115 implemented, now 96
+- [x] Edge Preserving Smooth
+- [ ] Export Picture Tube (we read tubes but cannot make one)
+- [ ] Duplicate Window: two views of one image at different zooms. Needs
+      shared document ownership; App and DocState each own theirs outright
+- [ ] Vector node editing: Convert to Path, Add Path, node-level edits
+      (4 script commands wait on this)
+- [ ] The last script commands are runner plumbing (StartForeignWindow,
+      GetString, EventNotify, the preferences and file-location queries)
+      and two whose mapping is ambiguous (CombineRGB, MoveSelection)
+
 ## Dropped (not worth the effort for this port)
 
 - Art Media layers and tools (oil brush, chalk, pastel, palette knife,
