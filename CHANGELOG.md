@@ -6,6 +6,8 @@ section into the next version.
 
 ## Unreleased
 
+## 0.2.0 (2026-09-11)
+
 ### Added
 - Apache License 2.0.
 - Preferences: undo memory budget per image (default 1 GB).
