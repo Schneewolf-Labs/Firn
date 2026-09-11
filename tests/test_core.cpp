@@ -1249,6 +1249,36 @@ static void test_history_limit() {
     CHECK(!hist.can_undo() && doc.layer(0).pixels.get(0, 0).r == 0);  // 5 inverts, 3 undone -> 2 applied -> original
 }
 
+// Gradient::at_point applies the style, angle, centre, repeats and invert,
+// and is what both painting and the material dialog's preview go through.
+static void test_gradient_at_point() {
+    vec::Gradient g;
+    g.colors = {{{0, 0, 0, 255}, 0, 50}, {{255, 255, 255, 255}, 100, 50}};
+    g.opacities = {{100, 0, 50}, {100, 100, 50}};
+    // Linear at 0 degrees runs up the box: dark at the bottom, light at the top.
+    CHECK(g.at_point(50, 2, 0, 0, 100, 100).r > g.at_point(50, 98, 0, 0, 100, 100).r);
+    // Constant across a row.
+    CHECK(g.at_point(5, 50, 0, 0, 100, 100).r == g.at_point(95, 50, 0, 0, 100, 100).r);
+    // Turned 90 degrees it runs across instead.
+    g.angle = 90;
+    CHECK(g.at_point(5, 50, 0, 0, 100, 100).r != g.at_point(95, 50, 0, 0, 100, 100).r);
+    // cos(90 degrees) is not exactly zero in floating point, so allow a step of one.
+    CHECK(std::abs(g.at_point(50, 5, 0, 0, 100, 100).r - g.at_point(50, 95, 0, 0, 100, 100).r) <= 1);
+    // Radial: the centre and the rim differ, and opposite rim points match.
+    g.angle = 0;
+    g.style = vec::GradientStyle::Radial;
+    CHECK(g.at_point(50, 50, 0, 0, 100, 100).r != g.at_point(2, 2, 0, 0, 100, 100).r);
+    CHECK(std::abs(g.at_point(2, 50, 0, 0, 100, 100).r - g.at_point(98, 50, 0, 0, 100, 100).r) <= 1);
+    // Invert swaps the ends; repeats bring the start colour back inside.
+    g.style = vec::GradientStyle::Linear;
+    const int top = g.at_point(50, 2, 0, 0, 100, 100).r;
+    g.invert = true;
+    CHECK(std::abs(g.at_point(50, 2, 0, 0, 100, 100).r - (255 - top)) <= 1);
+    g.invert = false;
+    g.repeats = 1;
+    CHECK(g.at_point(50, 51, 0, 0, 100, 100).r > g.at_point(50, 55, 0, 0, 100, 100).r);
+}
+
 static void test_vector_core() {
     // Rectangle fill and stroke rasterize where expected.
     vec::Object r = vec::make_rectangle(4, 4, 16, 12);
@@ -2702,6 +2732,7 @@ int main() {
     test_firn_stash_resolution();
     test_move_layer();
     test_edge_preserving_smooth();
+    test_gradient_at_point();
     test_vector_core();
     test_history_limit();
     test_brush_texture();

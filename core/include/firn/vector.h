@@ -45,6 +45,10 @@ struct Gradient {
     int repeats = 0;
     bool invert = false;
     Color at(float t) const;       // t in 0..1 (repeats/invert already applied by caller)
+    // The color this gradient paints at a point inside the box, with its
+    // style, angle, center, repeats and invert applied. Used for painting
+    // and for the previews in the material dialog.
+    Color at_point(float px, float py, float bx0, float by0, float bx1, float by1) const;
 };
 
 struct PaintStyle {

@@ -7,6 +7,8 @@ section into the next version.
 ## Unreleased
 
 ### Fixed
+- Gradients picked from the library, or edited through Edit stops, painted
+  as the plain foreground-to-background gradient instead of themselves.
 - Native format: a fully transparent layer is written with a 1 x 1 tile;
   the previous empty-layer encoding hung the original on "Reading".
 
@@ -43,6 +45,11 @@ section into the next version.
   Brush Strokes, Inner Bevel, Average, Salt and Pepper, JPEG Artifact
   Removal, Digital Camera Noise Removal, Curves, Hue Map and Histogram
   Adjustment.
+- Material Properties: the Color tab gained red/green/blue and
+  hue/saturation/lightness entry on the original's 0..255 scale and an HTML
+  field; the Gradient tab lists the library as strips rather than names and
+  previews the gradient as it will paint, with its style, angle, centre,
+  repeats and invert applied.
 - Layers palette: double-clicking a layer's name renames it in place
   (its other settings stay behind Properties in the right-click menu).
 - File > Revert loads the saved file again and drops every change, asking

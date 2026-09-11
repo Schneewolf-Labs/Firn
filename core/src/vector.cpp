@@ -143,6 +143,10 @@ static float gradient_t(const Gradient& g, float px, float py, float bx0, float 
     return t;
 }
 
+Color Gradient::at_point(float px, float py, float bx0, float by0, float bx1, float by1) const {
+    return at(gradient_t(*this, px, py, bx0, by0, bx1, by1));
+}
+
 std::vector<Path> text_outline_paths(const TextInfo& t, const text::Font& font, float* baseline, std::vector<int>* glyph_ids) {
     std::vector<Path> out;
     std::vector<int> ids;
@@ -194,7 +198,7 @@ void paint(Image& dst, const std::vector<uint8_t>& cov, int w, int h, const Pain
             if (!c) continue;
             Color col = style.color;
             if (style.kind == PaintStyle::Kind::Gradient) {
-                col = style.gradient.at(gradient_t(style.gradient, x + 0.5f, y + 0.5f, bx0, by0, bx1, by1));
+                col = style.gradient.at_point(x + 0.5f, y + 0.5f, bx0, by0, bx1, by1);
             } else if (style.kind == PaintStyle::Kind::Pattern && style.pattern && !style.pattern->empty()) {
                 const float s = std::max(style.pattern_scale, 0.01f);
                 const float rad = style.pattern_angle * 3.14159265f / 180.0f;

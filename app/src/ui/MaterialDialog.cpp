@@ -11,6 +11,7 @@
 
 #include "App.h"
 #include "MaterialDialog.h"
+#include "firn/adjust.h"
 #include "firn/io.h"
 #include "firn/io_psp.h"
 #include "imgui.h"
@@ -160,6 +161,84 @@ void rainbow_picker(App& app, float width, float height) {
             (left ? app.fg_material : app.bg_material).kind = 0;
         }
     }
+}
+
+// RGB, HSL and HTML entry, the way the original's color dialog offers them:
+// red/green/blue and hue/saturation/lightness each 0..255, plus a hex field.
+void color_numbers(App& app, float* col) {
+    auto to8 = [](float v) { return static_cast<int>(std::clamp(v, 0.0f, 1.0f) * 255.0f + 0.5f); };
+    int rgb[3] = {to8(col[0]), to8(col[1]), to8(col[2])};
+    bool changed = false;
+    ImGui::TextUnformatted("Red");
+    for (int i = 0; i < 3; ++i) {
+        static const char* kLabels[3] = {"##r", "##g", "##b"};
+        static const char* kNames[3] = {"Red", "Green", "Blue"};
+        if (i) { ImGui::TextUnformatted(kNames[i]); }
+        ImGui::SameLine(92);
+        ImGui::SetNextItemWidth(80);
+        if (ImGui::InputInt(kLabels[i], &rgb[i])) { rgb[i] = std::clamp(rgb[i], 0, 255); changed = true; }
+    }
+    if (changed) for (int i = 0; i < 3; ++i) col[i] = rgb[i] / 255.0f;
+
+    // HSL in the original's 0..255 scale.
+    const adjust::HSL hsl = adjust::rgb_to_hsl(static_cast<uint8_t>(to8(col[0])), static_cast<uint8_t>(to8(col[1])), static_cast<uint8_t>(to8(col[2])));
+    int hsl255[3] = {static_cast<int>(hsl.h / 360.0f * 255.0f + 0.5f), static_cast<int>(hsl.s * 255.0f + 0.5f), static_cast<int>(hsl.l * 255.0f + 0.5f)};
+    bool hsl_changed = false;
+    for (int i = 0; i < 3; ++i) {
+        static const char* kLabels[3] = {"##h", "##s", "##l"};
+        static const char* kNames[3] = {"Hue", "Saturation", "Lightness"};
+        ImGui::TextUnformatted(kNames[i]);
+        ImGui::SameLine(92);
+        ImGui::SetNextItemWidth(80);
+        if (ImGui::InputInt(kLabels[i], &hsl255[i])) { hsl255[i] = std::clamp(hsl255[i], 0, 255); hsl_changed = true; }
+    }
+    if (hsl_changed) {
+        adjust::HSL h{hsl255[0] / 255.0f * 360.0f, hsl255[1] / 255.0f, hsl255[2] / 255.0f};
+        uint8_t r = 0, g = 0, b = 0;
+        adjust::hsl_to_rgb(h, &r, &g, &b);
+        col[0] = r / 255.0f; col[1] = g / 255.0f; col[2] = b / 255.0f;
+    }
+
+    // HTML code. The buffer follows the color unless it is being typed in.
+    ImGui::TextUnformatted("HTML");
+    ImGui::SameLine(92);
+    ImGui::SetNextItemWidth(80);
+    const bool typing = ImGui::IsItemActive();
+    if (!typing) std::snprintf(app.html_color, sizeof(app.html_color), "#%02X%02X%02X", to8(col[0]), to8(col[1]), to8(col[2]));
+    if (ImGui::InputText("##html", app.html_color, sizeof(app.html_color), ImGuiInputTextFlags_CharsHexadecimal | ImGuiInputTextFlags_AutoSelectAll)) {
+        const char* t = app.html_color;
+        while (*t == '#' || *t == ' ') ++t;
+        unsigned v = 0;
+        if (std::strlen(t) >= 6 && std::sscanf(t, "%6x", &v) == 1) {
+            col[0] = ((v >> 16) & 255) / 255.0f; col[1] = ((v >> 8) & 255) / 255.0f; col[2] = (v & 255) / 255.0f;
+        }
+    }
+}
+
+// A gradient drawn as a strip, over a checker so opacity stops show.
+void gradient_strip(ImDrawList* dl, const vec::Gradient& g, ImVec2 p0, ImVec2 p1) {
+    const int cells = std::max(8, static_cast<int>(p1.x - p0.x) / 2);
+    for (int i = 0; i < cells; ++i) {
+        const float x0 = p0.x + (p1.x - p0.x) * i / cells, x1 = p0.x + (p1.x - p0.x) * (i + 1) / cells + 1.0f;
+        dl->AddRectFilled(ImVec2(x0, p0.y), ImVec2(x1, p1.y), over_white(g.at(static_cast<float>(i) / (cells - 1))));
+    }
+    dl->AddRect(p0, p1, IM_COL32(0, 0, 0, 255));
+}
+
+// The gradient as it will paint: style, angle, center, repeats and invert
+// applied over a square, the way the original previews it.
+void gradient_style_preview(const vec::Gradient& g, float size) {
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    const ImVec2 p = ImGui::GetCursorScreenPos();
+    const int cells = 56;
+    const float step = size / cells;
+    for (int y = 0; y < cells; ++y)
+        for (int x = 0; x < cells; ++x) {
+            const Color c = g.at_point(x + 0.5f, y + 0.5f, 0, 0, static_cast<float>(cells), static_cast<float>(cells));
+            dl->AddRectFilled(ImVec2(p.x + x * step, p.y + y * step), ImVec2(p.x + (x + 1) * step + 1.0f, p.y + (y + 1) * step + 1.0f), over_white(c));
+        }
+    dl->AddRect(p, ImVec2(p.x + size, p.y + size), IM_COL32(0, 0, 0, 255));
+    ImGui::Dummy(ImVec2(size, size));
 }
 
 // The 48 basic colors of the classic Windows color dialog.
@@ -383,7 +462,11 @@ void App::draw_material_dialog() {
         if (ImGui::BeginTabItem("Color", nullptr, sel[0])) {
             material_tab = 0;
             m.kind = 0;
-            ImGui::ColorPicker4("##picker", col, ImGuiColorEditFlags_PickerHueWheel | ImGuiColorEditFlags_DisplayRGB | ImGuiColorEditFlags_DisplayHSV | ImGuiColorEditFlags_DisplayHex | ImGuiColorEditFlags_AlphaBar | ImGuiColorEditFlags_NoSidePreview);
+            ImGui::ColorPicker4("##picker", col, ImGuiColorEditFlags_PickerHueWheel | ImGuiColorEditFlags_NoSidePreview | ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoAlpha);
+            ImGui::SameLine();
+            ImGui::BeginGroup();
+            color_numbers(*this, col);
+            ImGui::EndGroup();
             ImGui::SameLine();
             ImGui::BeginGroup();
             ImGui::TextUnformatted("Basic colors");
@@ -413,17 +496,40 @@ void App::draw_material_dialog() {
             const vec::PaintStyle st = material_style(fg);
             const char* current = m.gradient_index >= 0 && m.gradient_index < static_cast<int>(gradient_library.size()) ? gradient_library[m.gradient_index].name.c_str()
                                   : m.gradient_index == -2 ? (m.gradient.name.empty() ? "(edited)" : m.gradient.name.c_str()) : "Foreground-Background";
-            ImGui::SetNextItemWidth(260);
-            if (ImGui::BeginCombo("Gradient", current)) {
-                if (ImGui::Selectable("Foreground-Background", m.gradient_index == -1)) { m.gradient_index = -1; gradient_sel_color = gradient_sel_opacity = -1; }
-                for (size_t i = 0; i < gradient_library.size(); ++i) {
-                    ImGui::PushID(static_cast<int>(i));
-                    if (ImGui::Selectable(gradient_library[i].name.c_str(), m.gradient_index == static_cast<int>(i))) { m.gradient_index = static_cast<int>(i); m.gradient = gradient_library[i]; gradient_sel_color = gradient_sel_opacity = -1; }
+            // The library as strips, the way the original shows it.
+            ImGui::TextDisabled("%s", current);
+            const ImVec2 cell(84, 22);
+            const int per_row = 4;
+            ImGui::BeginChild("##gradlist", ImVec2((cell.x + 8) * per_row + 24, 108), true);
+            {
+                // The child's own draw list, so the strips scroll and clip with it.
+                ImDrawList* gdl = ImGui::GetWindowDrawList();
+                int shown = 0;
+                auto entry = [&](const vec::Gradient& g, int index, const char* label) {
+                    ImGui::PushID(index);
+                    const ImVec2 p0 = ImGui::GetCursorScreenPos();
+                    ImGui::InvisibleButton("##g", cell);
+                    const bool picked = ImGui::IsItemClicked();
+                    gradient_strip(gdl, g, p0, ImVec2(p0.x + cell.x, p0.y + cell.y));
+                    if (m.gradient_index == index) gdl->AddRect(ImVec2(p0.x - 2, p0.y - 2), ImVec2(p0.x + cell.x + 2, p0.y + cell.y + 2), IM_COL32(255, 200, 60, 255), 0, 0, 2.0f);
+                    if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", label);
+                    if (picked) {
+                        m.gradient_index = index;
+                        if (index >= 0) m.gradient = gradient_library[static_cast<size_t>(index)];
+                        gradient_sel_color = gradient_sel_opacity = -1;
+                    }
                     ImGui::PopID();
-                }
-                ImGui::EndCombo();
+                    if (++shown % per_row) ImGui::SameLine(0, 8);
+                };
+                entry(st.gradient, -1, "Foreground-Background");
+                for (size_t i = 0; i < gradient_library.size(); ++i) entry(gradient_library[i], static_cast<int>(i), gradient_library[i].name.c_str());
             }
+            ImGui::EndChild();
             ImGui::SameLine();
+            ImGui::BeginGroup();
+            ImGui::TextDisabled("Preview");
+            gradient_style_preview(material_style(fg).gradient, 104.0f);
+            ImGui::EndGroup();
             if (ImGui::Button("Edit stops") && m.gradient_index == -1) {
                 // Editing the default gradient turns it into a private copy.
                 m.gradient = st.gradient;

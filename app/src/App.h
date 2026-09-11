@@ -509,6 +509,7 @@ struct App {
     int material_tab_request = -1;      // tab to select on the next frame
     int material_view = 0;              // Materials palette: 0 frame, 1 rainbow, 2 swatches
     float frame_hue = 0.0f;             // hue chosen on the frame picker's ring
+    char html_color[10] = "#000000";   // the material dialog's HTML field
     int gradient_sel_color = -1, gradient_sel_opacity = -1;   // selected stops in the gradient editor
     char gradient_save_name[64] = {};
     void open_material_dialog(bool foreground);

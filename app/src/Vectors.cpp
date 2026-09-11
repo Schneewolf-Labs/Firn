@@ -108,8 +108,10 @@ vec::PaintStyle App::material_style(bool foreground) const {
     if (m.kind == 1) {
         st.kind = vec::PaintStyle::Kind::Gradient;
         st.gradient = m.gradient;
-        if (m.gradient_index < 0) {
-            // The default gradient runs from the foreground to the background color.
+        if (m.gradient_index == -1) {
+            // The default gradient runs from the foreground to the background
+            // color. Index -2 is a copy the user has edited, which keeps its
+            // own stops and must not be overwritten here.
             st.gradient.name = "Foreground-Background";
             st.gradient.colors = {{float_color(fg_color), 0, 50}, {float_color(bg_color), 100, 50}};
             st.gradient.opacities = {{100, 0, 50}, {100, 100, 50}};
