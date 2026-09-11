@@ -89,7 +89,8 @@ void draw_metadata_tab(App& app) {
                 }
             } else {
                 const std::string text = e.text();
-                if (e.editable()) {
+                // Editing a value longer than the field would silently truncate it.
+                if (e.editable() && text.size() < sizeof(ms.meta_value)) {
                     if (ImGui::Selectable(text.empty() ? "(empty)" : text.c_str(), false, ImGuiSelectableFlags_AllowDoubleClick)) {
                         ms.meta_row = i;
                         std::snprintf(ms.meta_value, sizeof ms.meta_value, "%s", text.c_str());
