@@ -12,7 +12,7 @@ machine-readable JSON Schema, one schema per action.
 Replies are JSON. Success is `{"ok":true}` and whatever the action returns;
 a refusal comes back as a message and a non-zero exit from `firn-cli`.
 
-46 actions and 161 inherited command names.
+49 actions and 161 inherited command names.
 
 ## Documents
 
@@ -64,6 +64,7 @@ Save the image to a path, format taken from the extension.
 | parameter | type | required | default | meaning |
 |---|---|---|---|---|
 | `path` | string | yes |  | where to write it |
+| `quality` | number | no | `the last quality used` | JPEG and WebP quality, 1 to 100; 100 is lossless WebP |
 
 
 ## Editing
@@ -190,6 +191,13 @@ Flip top to bottom.
 Takes no parameters.
 
 
+### `image.metadata`
+
+List the Exif tags and text notes the image carries.
+
+Takes no parameters.
+
+
 ### `image.mirror`
 
 Mirror left to right.
@@ -215,6 +223,26 @@ Rotate the image.
 | parameter | type | required | default | meaning |
 |---|---|---|---|---|
 | `degrees` | number | no | `90` | clockwise |
+
+
+### `image.set_metadata`
+
+Set one Exif tag or text note.
+
+| parameter | type | required | default | meaning |
+|---|---|---|---|---|
+| `name` | string | no |  | the Exif tag name, or the keyword of a text note |
+| `value` | string | no |  | the new value |
+| `group` | string (Image, Exif, GPS, Interop, Text) | no | `Image` | which directory the tag is in |
+
+
+### `image.strip_metadata`
+
+Remove metadata from the image.
+
+| parameter | type | required | default | meaning |
+|---|---|---|---|---|
+| `what` | string (all, private) | no | `all` | everything, or only what identifies the photographer and the place |
 
 
 ## Selections

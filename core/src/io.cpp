@@ -273,6 +273,25 @@ bool embed_icc(const std::string& path, const std::vector<uint8_t>& icc, std::st
     return false;
 }
 
+meta::Metadata read_metadata(const std::string& path) {
+    const std::vector<uint8_t> d = read_file(path);
+    if (d.size() > 4 && d[0] == 0xFF && d[1] == 0xD8) return meta::parse_jpeg(d.data(), d.size());
+    if (d.size() > 8 && d[0] == 0x89 && d[1] == 'P') return meta::parse_png(d.data(), d.size());
+    return {};
+}
+
+bool embed_metadata(const std::string& path, const meta::Metadata& md, std::string* err) {
+    const std::vector<uint8_t> d = read_file(path);
+    std::vector<uint8_t> out;
+    if (d.size() > 4 && d[0] == 0xFF && d[1] == 0xD8) out = meta::apply_jpeg(d, md);
+    else if (d.size() > 8 && d[0] == 0x89 && d[1] == 'P') out = meta::apply_png(d, md);
+    else return true;   // nowhere to put it, and nothing was lost
+    if (out == d) return true;
+    if (write_file(path, out)) return true;
+    if (err) *err = "cannot write " + path;
+    return false;
+}
+
 bool save_png(const Image& img, const std::string& path, std::string* err) {
     stbi_write_png_compression_level = img.size_bytes() > (32u << 20) ? 4 : 8;
     int ok = stbi_write_png(path.c_str(), img.width(), img.height(), 4, img.data(), img.width() * 4);

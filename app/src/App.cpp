@@ -1211,7 +1211,8 @@ void App::handle_shortcuts() {
     if (io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_I, false)) show_info_dialog = true;
 
     // Single-key tool shortcuts, as in the original (A pan, Z zoom, E dropper, B brush, X eraser, F fill).
-    for (size_t i = 0; i < tools.size(); ++i) {
+    // A modifier means the key belongs to something else, such as Shift+I for Image Information.
+    for (size_t i = 0; i < tools.size() && !io.KeyShift && !io.KeyAlt && !io.KeySuper; ++i) {
         const char* sc = tools[i]->shortcut();
         if (!sc) continue;
         const ImGuiKey key = static_cast<ImGuiKey>(ImGuiKey_A + (sc[0] - 'A'));

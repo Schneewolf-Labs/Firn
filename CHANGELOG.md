@@ -7,6 +7,15 @@ section into the next version.
 ## Unreleased
 
 ### Added
+- Metadata: Exif tags and text notes are read from JPEG and PNG files, kept
+  through every edit, and written back on save, including into OpenRaster
+  projects. Image > Image Information has a Metadata tab that lists and edits
+  them, Remove Private drops GPS and serial numbers in one click, and the
+  actions `image.metadata`, `image.set_metadata` and `image.strip_metadata`
+  do the same from a script. Entries nothing touched keep their exact bytes.
+- `file.save_as` takes a `quality`, so a script can write a JPEG without the
+  dialog that the menu item raises.
+- A photograph to try things on: `samples/luca.jpg`.
 - The API documents itself: every action publishes JSON Schema for its
   parameters, including which are required, what values they accept and
   what is used when they are left out. `docs/API-reference.md` is the
@@ -47,6 +56,12 @@ section into the next version.
   a photograph it is convincing over texture and can leave a visible edge
   where it has to invent structure. A 360 x 300 hole in a 3 MP photo takes
   about two seconds, during which the window does not respond.
+
+### Fixed
+- Shift with a letter no longer changes tools as well as doing what the
+  shortcut asks, so Shift+I opens Image Information and leaves the tool alone.
+- `edit.content_aware_fill` refuses when nothing is selected instead of
+  reporting success and doing nothing.
 
 
 ## 0.2.0 (2026-09-11)

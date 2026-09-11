@@ -2892,8 +2892,75 @@ static void test_icc() {
     std::remove(png.c_str()); std::remove(jpg.c_str());
 }
 
+static void test_metadata() {
+    meta::Metadata md;
+    CHECK(md.empty());
+    CHECK(md.set(meta::Group::Image, meta::tag_for_name(meta::Group::Image, "Artist"), "Nobody in particular"));
+    CHECK(md.set(meta::Group::Image, 0x0110, "6"));                      // Orientation, a SHORT
+    CHECK(md.set(meta::Group::Exif, 0x829A, "1/250"));                   // ExposureTime, a RATIONAL
+    CHECK(md.set(meta::Group::Exif, 0x829D, "2.8"));                     // FNumber
+    CHECK(md.set(meta::Group::GPS, 0x0001, "N"));
+    CHECK(md.set_text("Comment", "a text chunk"));
+    CHECK(!md.set(meta::Group::Image, 0x4321, "no such tag"));
+    CHECK(md.find(meta::Group::Image, 0x013B)->text() == "Nobody in particular");
+    CHECK(md.find(meta::Group::Image, 0x013B)->name() == std::string("Artist"));
+    CHECK(md.find(meta::Group::Exif, 0x829A)->text() == "1/250");
+    CHECK(md.find(meta::Group::Exif, 0x829D)->text() == "2.8");
+    CHECK(md.find_text("Comment")->text() == "a text chunk");
+
+    // Everything survives the TIFF block, in its own directory.
+    const std::vector<uint8_t> tiff = meta::build_tiff(md);
+    CHECK(!tiff.empty() && tiff[0] == 'I' && tiff[1] == 'I');
+    const meta::Metadata back = meta::parse_tiff(tiff.data(), tiff.size());
+    CHECK(back.find(meta::Group::Image, 0x013B) && back.find(meta::Group::Image, 0x013B)->text() == "Nobody in particular");
+    CHECK(back.find(meta::Group::Image, 0x0110)->text() == "6");
+    CHECK(back.find(meta::Group::Exif, 0x829A)->text() == "1/250");
+    CHECK(back.find(meta::Group::Exif, 0x829D)->text() == "2.8");
+    CHECK(back.find(meta::Group::GPS, 0x0001)->text() == "N");
+
+    // And through real files, both ways.
+    Image img(4, 4, {10, 20, 30, 255});
+    const std::string png = tmp_path("firn_test_meta.png"), jpg = tmp_path("firn_test_meta.jpg");
+    CHECK(io::save_png(img, png) && io::embed_metadata(png, md));
+    const meta::Metadata from_png = io::read_metadata(png);
+    CHECK(from_png.find(meta::Group::Image, 0x013B)->text() == "Nobody in particular");
+    CHECK(from_png.find_text("Comment") && from_png.find_text("Comment")->text() == "a text chunk");
+    CHECK(io::load(png).has_value());
+    CHECK(io::save(img, jpg) && io::embed_metadata(jpg, md));
+    const meta::Metadata from_jpg = io::read_metadata(jpg);
+    CHECK(from_jpg.find(meta::Group::Exif, 0x829D)->text() == "2.8");
+    CHECK(from_jpg.find(meta::Group::GPS, 0x0001)->text() == "N");
+    CHECK(io::load(jpg).has_value());
+
+    // A document carries it, and saving writes it out again.
+    std::string err;
+    std::vector<std::string> warn;
+    auto doc = io::load_document(png, &err, &warn);
+    CHECK(doc && doc->metadata().find(meta::Group::Image, 0x013B));
+    const std::string out = tmp_path("firn_test_meta_out.jpg"), ora = tmp_path("firn_test_meta.ora");
+    CHECK(io::save_document(*doc, out, &err));
+    CHECK(io::read_metadata(out).find(meta::Group::Image, 0x013B));
+    // The project format keeps it too.
+    CHECK(io::save_document(*doc, ora, &err));
+    auto reopened = io::load_document(ora, &err, &warn);
+    CHECK(reopened && reopened->metadata().find(meta::Group::Exif, 0x829A));
+    CHECK(reopened->metadata().find_text("Comment"));
+
+    // Stripping what identifies the photographer and the place.
+    meta::Metadata priv = md;
+    priv.remove_private();
+    CHECK(!priv.find(meta::Group::GPS, 0x0001) && priv.find(meta::Group::Image, 0x013B));
+    // An untouched entry keeps its exact bytes; only edits rewrite a value.
+    meta::Metadata edited = back;
+    CHECK(edited.set(meta::Group::Image, 0x013B, "Someone else"));
+    CHECK(edited.find(meta::Group::Image, 0x013B)->text() == "Someone else");
+    CHECK(edited.find(meta::Group::Exif, 0x829A)->value == back.find(meta::Group::Exif, 0x829A)->value);
+    std::remove(png.c_str()); std::remove(jpg.c_str()); std::remove(out.c_str()); std::remove(ora.c_str());
+}
+
 int main() {
     test_icc();
+    test_metadata();
     test_16bit();
     test_print();
     test_json();

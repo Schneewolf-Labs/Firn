@@ -240,6 +240,13 @@ docs/    notes on the original: command inventory, module mapping, FORMAT.md
   into a `vec::PaintStyle`; the flood fill, shape, line and text tools all
   paint through it. The Material Properties dialog and the palette's
   material boxes and pickers live in `app/src/ui/MaterialDialog.cpp`.
+- **Metadata** (`core/include/firn/metadata.h`): Exif directories and PNG
+  text chunks parse into `meta::Entry` values that keep their TIFF type and
+  bytes, so an untouched entry round trips exactly. `Document::metadata()`
+  holds them (part of the undo state); `io::read_metadata` / `embed_metadata`
+  do the files, and `MetadataCommand` is the undoable edit. The camera's
+  embedded thumbnail is deliberately not carried over. The Metadata tab of
+  Image > Image Information is in `app/src/ui/Menu.cpp`.
 - **Saved selections** live in `Document::alpha_channels()` and round-trip
   through the native format; the current selection itself is not stored.
 - The toolbar and status bar (`app/src/ui/Toolbar.cpp`) sit outside the

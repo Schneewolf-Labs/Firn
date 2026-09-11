@@ -6,6 +6,7 @@
 #include "firn/blend.h"
 #include "firn/image.h"
 #include "firn/mask.h"
+#include "firn/metadata.h"
 #include "firn/adjustment.h"
 #include "firn/layerstyle.h"
 #include "firn/vector.h"
@@ -110,10 +111,15 @@ public:
         Mask selection;
         std::vector<AlphaChannel> alpha;
         std::vector<uint8_t> icc;
+        meta::Metadata metadata;
     };
     // Embedded ICC profile (empty = untagged, treated as sRGB).
     const std::vector<uint8_t>& icc() const { return icc_; }
     void set_icc(std::vector<uint8_t> bytes) { icc_ = std::move(bytes); ++revision_; }
+    // Exif and text metadata carried from the file it was loaded from.
+    const meta::Metadata& metadata() const { return metadata_; }
+    meta::Metadata& metadata() { return metadata_; }
+    void set_metadata(meta::Metadata md) { metadata_ = std::move(md); ++revision_; }
     State snapshot() const;
     void restore(const State& s);
 
@@ -185,6 +191,7 @@ private:
     std::vector<float> guides_h_, guides_v_;
     std::vector<Assistant> assistants_;
     std::vector<uint8_t> icc_;
+    meta::Metadata metadata_;
 };
 
 }  // namespace firn

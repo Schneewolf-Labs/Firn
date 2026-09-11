@@ -326,6 +326,11 @@ struct OraWriter {
             out += std::string("  <firn:assistant kind=\"") + kind + "\" x0=\"" + fmt(a.x0) + "\" y0=\"" + fmt(a.y0) + "\" x1=\"" + fmt(a.x1) + "\" y1=\"" + fmt(a.y1) + "\"/>\n";
         }
         if (!doc.icc().empty()) out += "  <firn:icc src=\"" + add_file("profile", "icc", doc.icc()) + "\"/>\n";
+        if (const std::vector<uint8_t> tiff = meta::build_tiff(doc.metadata()); !tiff.empty())
+            out += "  <firn:exif src=\"" + add_file("exif", "tif", tiff) + "\"/>\n";
+        for (const meta::Entry& e : doc.metadata().entries)
+            if (e.group == meta::Group::Text)
+                out += "  <firn:text key=\"" + escape(e.key) + "\" value=\"" + escape(e.text()) + "\"/>\n";
         for (const Document::AlphaChannel& ch : doc.alpha_channels()) {
             const Mask* m = &ch.mask;
             out += "  <firn:channel name=\"" + escape(ch.name) + "\" src=\"" + add_file("channel", "png", [m] { return mask_png(*m); }) + "\"/>\n";
@@ -510,6 +515,14 @@ std::unique_ptr<Document> load_ora_from_memory(const uint8_t* data, size_t size,
     for (const XmlNode& c : root.children) {
         if (c.name == "stack") rd.stack(c, 0);
         else if (c.name == "firn:icc") { if (const std::vector<uint8_t>* b = ar.find(c.attr_or("src", ""))) doc->set_icc(*b); }
+        else if (c.name == "firn:exif") {
+            if (const std::vector<uint8_t>* b = ar.find(c.attr_or("src", ""))) {
+                meta::Metadata md = meta::parse_tiff(b->data(), b->size());
+                for (meta::Entry& e : md.entries) doc->metadata().entries.push_back(std::move(e));
+                doc->metadata().sort();
+            }
+        }
+        else if (c.name == "firn:text") { doc->metadata().set_text(c.attr_or("key", ""), c.attr_or("value", "")); }
         else if (c.name == "firn:guide") {
             const float pos = static_cast<float>(c.number("pos", 0));
             (c.attr_or("axis", "h") == "v" ? doc->guides_v() : doc->guides_h()).push_back(pos);

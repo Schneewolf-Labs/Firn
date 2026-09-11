@@ -10,6 +10,7 @@
 #include "InheritedCommands.h"
 #include "firn/commands.h"
 #include "firn/inpaint.h"
+#include "firn/metadata.h"
 
 using firn::json::Value;
 
@@ -34,6 +35,12 @@ bool need_raster(App& app, bool* ok, std::string& err) {
     if (!need_doc(app, ok, err)) return false;
     if (app.active_is_raster()) return true;
     err = fail(ok, "the active layer is not a raster layer");
+    return false;
+}
+bool need_selection(App& app, bool* ok, std::string& err) {
+    if (!need_doc(app, ok, err)) return false;
+    if (app.doc->has_selection() && app.doc->selection().any()) return true;
+    err = fail(ok, "nothing is selected");
     return false;
 }
 
@@ -96,13 +103,22 @@ std::vector<Action> build() {
             if (app.doc_path.empty()) return fail(ok, "this image has no path yet; use file.save_as");
             return app.save_document(app.doc_path) ? ok_json() : fail(ok, app.status);
         });
-    add("file.save_as", "Save the image to a path, format taken from the extension", {{"path", "string", "where to write it", true}},
+    add("file.save_as", "Save the image to a path, format taken from the extension",
+        {{"path", "string", "where to write it", true},
+         {"quality", "number", "JPEG and WebP quality, 1 to 100; 100 is lossless WebP", false, nullptr, "the last quality used"}},
         [](App& app, const Value& p, bool* ok) {
             std::string e;
             if (!need_doc(app, ok, e)) return e;
             const std::string path = str(p, "path");
             if (path.empty()) return fail(ok, "file.save_as needs a path");
-            return app.save_document(path) ? ok_json() : fail(ok, app.status);
+            // Saving a JPEG from the menu asks for the quality; a script says
+            // it up front, or accepts the one already set, and is never asked.
+            if (p.find("quality")) app.jpeg_quality = std::clamp(num(p, "quality", app.jpeg_quality), 1, 100);
+            app.pending_jpeg_path = path;
+            const bool saved = app.save_document(path);
+            app.show_jpeg_dialog = false;
+            app.pending_jpeg_path.clear();
+            return saved ? ok_json() : fail(ok, app.status);
         });
     add("file.close", "Close the current image, discarding changes", {},
         [](App& app, const Value&, bool* ok) {
@@ -137,7 +153,12 @@ std::vector<Action> build() {
     add("edit.repeat", "Apply the last adjustment or effect again", {},
         [](App& app, const Value&, bool* ok) { std::string e; if (!need_raster(app, ok, e)) return e; app.repeat_last_effect(); return ok_json(); });
     add("edit.content_aware_fill", "Rebuild the selection from the rest of the picture", {},
-        [](App& app, const Value&, bool* ok) { std::string e; if (!need_raster(app, ok, e)) return e; app.content_aware_fill(); return ok_json(); });
+        [](App& app, const Value&, bool* ok) {
+            std::string e;
+            if (!need_raster(app, ok, e) || !need_selection(app, ok, e)) return e;
+            app.content_aware_fill();
+            return ok_json();
+        });
 
     // --- view ---
     add("view.zoom", "Set the zoom, or fit / actual size", {{"zoom", "number", "1 is actual size", false, nullptr, "1"}, {"mode", "string", "which way to zoom", false, "fit,actual,set", "fit unless zoom is given"}},
@@ -189,6 +210,61 @@ std::vector<Action> build() {
         });
     add("image.crop_to_selection", "Crop to the selection", {},
         [](App& app, const Value&, bool* ok) { std::string e; if (!need_doc(app, ok, e)) return e; app.crop_to_selection(); return ok_json(); });
+
+    add("image.metadata", "List the Exif tags and text notes the image carries", {},
+        [](App& app, const Value&, bool* ok) {
+            std::string e;
+            if (!need_doc(app, ok, e)) return e;
+            Value list = Value::array();
+            for (const firn::meta::Entry& m : app.doc->metadata().entries) {
+                Value row = Value::object();
+                row.set("group", Value::string(firn::meta::group_name(m.group)));
+                row.set("name", Value::string(m.name()));
+                row.set("value", Value::string(m.text()));
+                row.set("editable", Value::boolean(m.editable()));
+                list.push(std::move(row));
+            }
+            Value out = Value::object();
+            out.set("ok", Value::boolean(true));
+            out.set("metadata", std::move(list));
+            return firn::json::dump(out);
+        });
+    add("image.set_metadata", "Set one Exif tag or text note",
+        {{"name", "string", "the Exif tag name, or the keyword of a text note"},
+         {"value", "string", "the new value"},
+         {"group", "string", "which directory the tag is in", false, "Image,Exif,GPS,Interop,Text", "Image"}},
+        [](App& app, const Value& p, bool* ok) {
+            std::string e;
+            if (!need_doc(app, ok, e)) return e;
+            const std::string name = str(p, "name"), group = str(p, "group", "Image");
+            if (name.empty()) return fail(ok, "name is required");
+            firn::meta::Metadata md = app.doc->metadata();
+            bool done = false;
+            if (group == "Text") done = md.set_text(name, str(p, "value"));
+            else {
+                const firn::meta::Group g = group == "Exif"      ? firn::meta::Group::Exif
+                                            : group == "GPS"     ? firn::meta::Group::GPS
+                                            : group == "Interop" ? firn::meta::Group::Interop
+                                                                 : firn::meta::Group::Image;
+                const uint16_t tag = firn::meta::tag_for_name(g, name);
+                if (!tag) return fail(ok, "no " + group + " tag is called " + name);
+                done = md.set(g, tag, str(p, "value"));
+            }
+            if (!done) return fail(ok, "that value does not fit the tag");
+            app.run(std::make_unique<firn::MetadataCommand>("Metadata", std::move(md)));
+            return ok_json();
+        });
+    add("image.strip_metadata", "Remove metadata from the image",
+        {{"what", "string", "everything, or only what identifies the photographer and the place", false, "all,private", "all"}},
+        [](App& app, const Value& p, bool* ok) {
+            std::string e;
+            if (!need_doc(app, ok, e)) return e;
+            firn::meta::Metadata md = app.doc->metadata();
+            if (str(p, "what", "all") == "private") md.remove_private();
+            else md.entries.clear();
+            app.run(std::make_unique<firn::MetadataCommand>("Strip Metadata", std::move(md)));
+            return ok_json();
+        });
 
     // --- selection ---
     add("select.all", "Select everything", {}, [](App& app, const Value&, bool* ok) { std::string e; if (!need_doc(app, ok, e)) return e; app.select_all(); return ok_json(); });

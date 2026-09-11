@@ -1274,6 +1274,7 @@ std::unique_ptr<Document> load_document(const std::string& path, std::string* er
         bg.background = true;
         bg.set_deep(std::move(*deep));
         doc->set_icc(read_icc(path));
+        doc->set_metadata(read_metadata(path));
         return doc;
     }
     auto img = load(path, err);
@@ -1283,6 +1284,7 @@ std::unique_ptr<Document> load_document(const std::string& path, std::string* er
     bg.background = true;
     bg.pixels = std::move(*img);
     doc->set_icc(read_icc(path));
+    doc->set_metadata(read_metadata(path));
     return doc;
 }
 
@@ -2019,9 +2021,10 @@ bool save_document(const Document& doc, const std::string& path, std::string* er
     if (doc.bit_depth() == 16) {
         std::string ext = path.substr(path.find_last_of('.') == std::string::npos ? path.size() : path.find_last_of('.') + 1);
         for (char& c : ext) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-        if (ext == "png") return save_png16(doc.composite16(), path, err) && embed_icc(path, doc.icc(), err);
+        if (ext == "png")
+            return save_png16(doc.composite16(), path, err) && embed_icc(path, doc.icc(), err) && embed_metadata(path, doc.metadata(), err);
     }
-    return save(doc.composite(), path, err, jpeg_quality) && embed_icc(path, doc.icc(), err);
+    return save(doc.composite(), path, err, jpeg_quality) && embed_icc(path, doc.icc(), err) && embed_metadata(path, doc.metadata(), err);
 }
 
 }  // namespace firn::io

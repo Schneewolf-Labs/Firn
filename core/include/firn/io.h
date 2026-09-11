@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "firn/image.h"
+#include "firn/metadata.h"
 
 namespace firn::io {
 
@@ -22,6 +23,11 @@ std::vector<uint8_t> encode_png16(const Image16& img);   // empty on failure
 std::vector<uint8_t> read_icc(const std::string& path);
 // Adds a profile to an already written PNG or JPEG file in place.
 bool embed_icc(const std::string& path, const std::vector<uint8_t>& icc, std::string* err = nullptr);
+// Exif and text metadata of a JPEG or PNG file, empty when there is none.
+meta::Metadata read_metadata(const std::string& path);
+// Replaces the metadata of an already written PNG or JPEG file in place.
+// Other formats have nowhere to put it and succeed without doing anything.
+bool embed_metadata(const std::string& path, const meta::Metadata& md, std::string* err = nullptr);
 
 // Writes PNG. Returns false on failure.
 bool save_png(const Image& img, const std::string& path, std::string* err = nullptr);

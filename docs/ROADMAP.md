@@ -220,6 +220,16 @@ against the 115 commands its own bundled scripts use.
       runtime and weights; that is a dependency and licensing decision,
       not just a feature
 
+- [x] Metadata: Exif and text notes read, edited and written back for JPEG,
+      PNG and OpenRaster (`core/src/metadata.cpp`, Image > Image Information)
+- [ ] IPTC and XMP: the other two metadata standards a photograph carries.
+      XMP is RDF/XML in an APP1 segment, IPTC an IIM block inside a Photoshop
+      resource. Reading both is a day's work; the editor UI is already there
+- [ ] Keep the camera's embedded thumbnail rather than dropping it, by
+      regenerating it from the edited picture on save
+- [ ] Preferences switch for what leaves the machine: strip private metadata
+      on every export, as a default rather than a per-image action
+
 ## 17. Restructuring (2026-09-11)
 
 - [x] Phase 1: per-dialog state off `App` (145 members, 11 owners). App.h

@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <cfloat>
 #include <fstream>
 #include <memory>
 
@@ -17,6 +18,101 @@
 using namespace firn;
 
 bool blend_combo(const char* label, BlendMode& mode);  // Palettes.cpp
+
+namespace {
+
+// The Exif tags worth offering when a picture carries none of its own.
+struct AddableTag {
+    meta::Group group;
+    uint16_t tag;
+    const char* label;
+};
+const AddableTag kAddable[] = {
+    {meta::Group::Image, 0x010E, "Description"}, {meta::Group::Image, 0x013B, "Artist"},
+    {meta::Group::Image, 0x8298, "Copyright"},   {meta::Group::Image, 0x0131, "Software"},
+    {meta::Group::Image, 0x0132, "DateTime"},    {meta::Group::Exif, 0x9286, "UserComment"},
+    {meta::Group::Exif, 0x9003, "DateTimeOriginal"},
+};
+
+void commit_metadata(App& app, const meta::Metadata& md) {
+    if (!app.doc) return;
+    app.run(std::make_unique<MetadataCommand>("Metadata", md));
+    app.status = "Metadata updated";
+}
+
+void draw_metadata_tab(App& app) {
+    MenuState& ms = *app.menu_state;
+    meta::Metadata& md = ms.meta_edit;
+
+    ImGui::TextDisabled("Exif tags and text notes travel with PNG, JPEG and project files.");
+    if (ImGui::Button("Remove All")) { md.entries.clear(); ms.meta_row = -1; }
+    ImGui::SameLine();
+    if (ImGui::Button("Remove Private")) { md.remove_private(); ms.meta_row = -1; }
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Drops GPS, serial numbers, the owner's name and maker notes.");
+    ImGui::SameLine();
+    if (ImGui::BeginCombo("##add", "Add...", ImGuiComboFlags_WidthFitPreview)) {
+        for (const AddableTag& a : kAddable)
+            if (!md.find(a.group, a.tag) && ImGui::Selectable(a.label)) md.set(a.group, a.tag, "");
+        ImGui::EndCombo();
+    }
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(140);
+    ImGui::InputTextWithHint("##newkey", "New note", ms.meta_new_key, sizeof ms.meta_new_key);
+    ImGui::SameLine();
+    if (ImGui::Button("Add Note") && ms.meta_new_key[0]) { md.set_text(ms.meta_new_key, ""); ms.meta_new_key[0] = 0; }
+
+    const ImGuiTableFlags flags = ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY | ImGuiTableFlags_SizingStretchProp;
+    if (ImGui::BeginTable("metadata", 4, flags, ImVec2(620, 300))) {
+        ImGui::TableSetupColumn("Group", ImGuiTableColumnFlags_WidthFixed, 60);
+        ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthFixed, 170);
+        ImGui::TableSetupColumn("Value");
+        ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthFixed, 28);
+        ImGui::TableSetupScrollFreeze(0, 1);
+        ImGui::TableHeadersRow();
+        int remove_at = -1;
+        for (int i = 0; i < static_cast<int>(md.entries.size()); ++i) {
+            meta::Entry& e = md.entries[static_cast<size_t>(i)];
+            ImGui::PushID(i);
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            ImGui::TextDisabled("%s", meta::group_name(e.group));
+            ImGui::TableNextColumn();
+            ImGui::TextUnformatted(e.name().c_str());
+            ImGui::TableNextColumn();
+            if (ms.meta_row == i) {
+                ImGui::SetNextItemWidth(-FLT_MIN);
+                if (ImGui::IsWindowAppearing() || !ImGui::IsAnyItemActive()) ImGui::SetKeyboardFocusHere();
+                const bool done = ImGui::InputText("##v", ms.meta_value, sizeof ms.meta_value, ImGuiInputTextFlags_EnterReturnsTrue);
+                if (done || ImGui::IsItemDeactivated()) {
+                    if (done || ImGui::IsItemDeactivatedAfterEdit()) e.set_text(ms.meta_value);
+                    ms.meta_row = -1;
+                }
+            } else {
+                const std::string text = e.text();
+                if (e.editable()) {
+                    if (ImGui::Selectable(text.empty() ? "(empty)" : text.c_str(), false, ImGuiSelectableFlags_AllowDoubleClick)) {
+                        ms.meta_row = i;
+                        std::snprintf(ms.meta_value, sizeof ms.meta_value, "%s", text.c_str());
+                    }
+                    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Click to edit");
+                } else {
+                    ImGui::TextDisabled("%s", text.c_str());
+                }
+            }
+            ImGui::TableNextColumn();
+            if (ImGui::SmallButton("x")) remove_at = i;
+            ImGui::PopID();
+        }
+        if (remove_at >= 0) {
+            md.entries.erase(md.entries.begin() + remove_at);
+            ms.meta_row = -1;
+        }
+        ImGui::EndTable();
+    }
+    if (md.empty()) ImGui::TextDisabled("This image carries no metadata.");
+}
+
+}  // namespace
 
 // Menu structure follows the original's: File, Edit, View, Image, Effects, Adjust,
 // Layers, Objects, Selections, Window, Help. Most entries are placeholders
@@ -654,25 +750,44 @@ void App::draw_dialogs() {
     }
 
     if (ImGui::BeginPopupModal("Image Information", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
-        if (doc) {
-            size_t rasters = 0, groups = 0, masks = 0;
-            for (size_t i = 0; i < doc->layer_count(); ++i) {
-                rasters += doc->layer(i).is_raster();
-                groups += doc->layer(i).type == LayerType::Group;
-                masks += doc->layer(i).has_mask();
+        MenuState& ms = *menu_state;
+        if (doc && !ms.meta_loaded) { ms.meta_edit = doc->metadata(); ms.meta_row = -1; ms.meta_loaded = true; }
+        if (doc && ImGui::BeginTabBar("info_tabs")) {
+            if (ImGui::BeginTabItem("Image")) {
+                size_t rasters = 0, groups = 0, masks = 0;
+                for (size_t i = 0; i < doc->layer_count(); ++i) {
+                    rasters += doc->layer(i).is_raster();
+                    groups += doc->layer(i).type == LayerType::Group;
+                    masks += doc->layer(i).has_mask();
+                }
+                const double mb = static_cast<double>(doc->width()) * doc->height() * 4 * rasters / (1024.0 * 1024.0);
+                ImGui::Text("File:        %s", doc_path.empty() ? "(unsaved)" : doc_path.c_str());
+                ImGui::Text("Dimensions:  %d x %d pixels", doc->width(), doc->height());
+                ImGui::Text("Layers:      %zu raster, %zu group(s), %zu mask(s)", rasters, groups, masks);
+                ImGui::Text("Memory:      %.1f MB of layer pixels", mb);
+                ImGui::Text("Selection:   %s", doc->has_selection() ? "yes" : "none");
+                ImGui::Text("Depth:       %d bits per channel", doc->bit_depth());
+                { const icc::Profile prof = document_profile(); ImGui::Text("Profile:     %s", doc->icc().empty() ? "(untagged)" : prof.description.empty() ? "(unnamed)" : prof.description.c_str()); }
+                ImGui::Text("Metadata:    %zu entr%s", ms.meta_edit.size(), ms.meta_edit.size() == 1 ? "y" : "ies");
+                ImGui::Text("History:     %zu step(s), %s", history.size(), modified() ? "modified" : "saved");
+                ImGui::EndTabItem();
             }
-            const double mb = static_cast<double>(doc->width()) * doc->height() * 4 * rasters / (1024.0 * 1024.0);
-            ImGui::Text("File:        %s", doc_path.empty() ? "(unsaved)" : doc_path.c_str());
-            ImGui::Text("Dimensions:  %d x %d pixels", doc->width(), doc->height());
-            ImGui::Text("Layers:      %zu raster, %zu group(s), %zu mask(s)", rasters, groups, masks);
-            ImGui::Text("Memory:      %.1f MB of layer pixels", mb);
-            ImGui::Text("Selection:   %s", doc->has_selection() ? "yes" : "none");
-            ImGui::Text("Depth:       %d bits per channel", doc->bit_depth());
-            { const icc::Profile prof = document_profile(); ImGui::Text("Profile:     %s", doc->icc().empty() ? "(untagged)" : prof.description.empty() ? "(unnamed)" : prof.description.c_str()); }
-            ImGui::Text("History:     %zu step(s), %s", history.size(), modified() ? "modified" : "saved");
+            if (ImGui::BeginTabItem("Metadata")) {
+                draw_metadata_tab(*this);
+                ImGui::EndTabItem();
+            }
+            ImGui::EndTabBar();
         }
-        if (ImGui::Button("OK") || ImGui::IsKeyPressed(ImGuiKey_Escape, false) || ImGui::IsKeyPressed(ImGuiKey_Enter, false)) ImGui::CloseCurrentPopup();
+        ImGui::Separator();
+        const bool changed = doc && !(ms.meta_edit.entries == doc->metadata().entries);
+        ImGui::BeginDisabled(!changed);
+        if (ImGui::Button("Apply", ImVec2(90, 0))) { commit_metadata(*this, ms.meta_edit); ms.meta_loaded = false; ImGui::CloseCurrentPopup(); }
+        ImGui::EndDisabled();
+        ImGui::SameLine();
+        if (ImGui::Button(changed ? "Cancel" : "Close", ImVec2(90, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape, false)) { ms.meta_loaded = false; ImGui::CloseCurrentPopup(); }
         ImGui::EndPopup();
+    } else if (menu_state->meta_loaded && !ImGui::IsPopupOpen("Image Information")) {
+        menu_state->meta_loaded = false;
     }
 
     if (ImGui::BeginPopupModal("JPEG Options", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {

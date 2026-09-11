@@ -60,6 +60,11 @@
           "path": {
             "description": "where to write it",
             "type": "string"
+          },
+          "quality": {
+            "default": "the last quality used",
+            "description": "JPEG and WebP quality, 1 to 100; 100 is lossless WebP",
+            "type": "number"
           }
         },
         "required": [
@@ -346,6 +351,67 @@
       },
       "name": "image.crop_to_selection",
       "summary": "Crop to the selection"
+    },
+    {
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "name": "image.metadata",
+      "summary": "List the Exif tags and text notes the image carries"
+    },
+    {
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "group": {
+            "default": "Image",
+            "description": "which directory the tag is in",
+            "enum": [
+              "Image",
+              "Exif",
+              "GPS",
+              "Interop",
+              "Text"
+            ],
+            "type": "string"
+          },
+          "name": {
+            "description": "the Exif tag name, or the keyword of a text note",
+            "type": "string"
+          },
+          "value": {
+            "description": "the new value",
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "name": "image.set_metadata",
+      "summary": "Set one Exif tag or text note"
+    },
+    {
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "what": {
+            "default": "all",
+            "description": "everything, or only what identifies the photographer and the place",
+            "enum": [
+              "all",
+              "private"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "name": "image.strip_metadata",
+      "summary": "Remove metadata from the image"
     },
     {
       "input_schema": {

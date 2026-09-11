@@ -418,6 +418,25 @@ public:
 private:
 };
 
+// Edits the image's Exif and text metadata. Cheap to undo: it holds two
+// metadata lists rather than a snapshot of every layer.
+class MetadataCommand : public Command {
+public:
+    MetadataCommand(std::string name, meta::Metadata after) : name_(std::move(name)), after_(std::move(after)) {}
+    std::string name() const override { return name_; }
+    void execute(Document& doc) override { before_ = doc.metadata(); doc.set_metadata(after_); }
+    void undo(Document& doc) override { doc.set_metadata(before_); }
+    size_t memory_bytes() const override {
+        size_t n = sizeof(*this);
+        for (const meta::Metadata* m : {&before_, &after_})
+            for (const meta::Entry& e : m->entries) n += e.value.size() + e.key.size() + sizeof(meta::Entry);
+        return n;
+    }
+private:
+    std::string name_;
+    meta::Metadata before_, after_;
+};
+
 // Several commands as one history entry: executed in order, undone in reverse.
 class CompoundCommand : public Command {
 public:

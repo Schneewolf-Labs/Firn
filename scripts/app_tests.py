@@ -337,6 +337,43 @@ def test_image_geometry(f):
     check(f.refused("image.resize", width=0), "a nonsense size is refused")
 
 
+def test_metadata(f):
+    section("metadata")
+    out = os.path.join(OUT, "meta.png")
+    f.do("file.new", width=40, height=30, color="#334455")
+    check(json.loads(f.do("image.metadata"))["metadata"] == [], "a new image carries no metadata")
+    f.do("image.set_metadata", name="Artist", value="A Person")
+    f.do("image.set_metadata", group="Exif", name="UserComment", value="a note")
+    f.do("image.set_metadata", group="Text", name="Source", value="the test suite")
+    entries = {(m["group"], m["name"]): m["value"] for m in json.loads(f.do("image.metadata"))["metadata"]}
+    check(entries.get(("Image", "Artist")) == "A Person", "an Exif tag can be set by name")
+    check(entries.get(("Exif", "UserComment")) == "a note", "so can one in the Exif directory")
+    check(entries.get(("Text", "Source")) == "the test suite", "and a text note")
+    check(f.image()["last"] == "Metadata", "the edit is one history entry")
+    f.do("edit.undo")
+    check(len(json.loads(f.do("image.metadata"))["metadata"]) == 2, "undo takes the last one back")
+    f.do("edit.redo")
+    check(f.refused("image.set_metadata", name="NotATag", value="x"), "an unknown tag is refused")
+
+    # Out to a file and back in.
+    f.do("file.save_as", path=out)
+    f.do("file.close")
+    f.do("file.open", path=out)
+    reopened = {(m["group"], m["name"]): m["value"] for m in json.loads(f.do("image.metadata"))["metadata"]}
+    check(reopened.get(("Image", "Artist")) == "A Person", "it survives a PNG round trip")
+    check(reopened.get(("Text", "Source")) == "the test suite", "text notes survive too")
+
+    # Stripping.
+    f.do("image.set_metadata", group="GPS", name="GPSLatitudeRef", value="N")
+    f.do("image.strip_metadata", what="private")
+    after = {(m["group"], m["name"]) for m in json.loads(f.do("image.metadata"))["metadata"]}
+    check(("GPS", "GPSLatitudeRef") not in after, "stripping private data drops GPS")
+    check(("Image", "Artist") in after, "and leaves the rest alone")
+    f.do("image.strip_metadata")
+    check(json.loads(f.do("image.metadata"))["metadata"] == [], "stripping everything empties it")
+    f.do("file.close")
+
+
 def main():
     os.environ.setdefault("FIRN_WINDOW", "1280x800")
     firn = os.path.join(BUILD, "app", "firn")
@@ -353,7 +390,7 @@ def main():
         drive.recv_line(sock)
         f = Firn(sock)
         for case in (test_api_surface, test_documents, test_view, test_layers, test_selection,
-                     test_painting_and_materials, test_edit_actions, test_tools_and_history, test_image_geometry):
+                     test_painting_and_materials, test_edit_actions, test_tools_and_history, test_image_geometry, test_metadata):
             case(f)
         sock.sendall(b"quit\n")
         sock.settimeout(10.0)
