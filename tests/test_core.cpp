@@ -1434,6 +1434,58 @@ static void test_zip() {
 // a layer dropped on a group member joins the group.
 // Edge Preserving Smooth flattens noise inside an area but leaves the step
 // between two areas intact.
+// One Step Photo Fix should add punch without blocking up the shadows or
+// draining the color, which is what it used to do: the contrast stretch
+// collapsed everything below its clip point onto pure black, and clarify
+// then scaled those pixels by zero.
+static void test_one_step_photo_fix() {
+    // A photo-like image: a bright colorful half and a dark half that still
+    // holds detail.
+    Image img(64, 64);
+    for (int y = 0; y < 64; ++y)
+        for (int x = 0; x < 64; ++x) {
+            const int detail = ((x / 4 + y / 4) % 3) * 4;          // texture worth keeping
+            if (y < 32) img.set(x, y, {static_cast<uint8_t>(170 + detail), static_cast<uint8_t>(90 + detail), static_cast<uint8_t>(60 + detail), 255});
+            else img.set(x, y, {static_cast<uint8_t>(10 + detail), static_cast<uint8_t>(14 + detail), static_cast<uint8_t>(22 + detail), 255});
+        }
+    auto black_fraction = [](const Image& im) {
+        int n = 0;
+        for (size_t i = 0; i < im.size_bytes(); i += 4)
+            if (im.data()[i] <= 1 && im.data()[i + 1] <= 1 && im.data()[i + 2] <= 1) ++n;
+        return static_cast<double>(n) / (im.size_bytes() / 4);
+    };
+    auto mean_saturation = [](const Image& im) {
+        double s = 0;
+        size_t n = 0;
+        for (size_t i = 0; i < im.size_bytes(); i += 4) {
+            const int mx = std::max({im.data()[i], im.data()[i + 1], im.data()[i + 2]});
+            const int mn = std::min({im.data()[i], im.data()[i + 1], im.data()[i + 2]});
+            s += mx ? static_cast<double>(mx - mn) / mx : 0.0;
+            ++n;
+        }
+        return s / n;
+    };
+    auto shadow_levels = [](const Image& im) {   // distinct values left in the dark half
+        std::array<bool, 256> seen{};
+        seen.fill(false);
+        for (int y = 32; y < 64; ++y) for (int x = 0; x < 64; ++x) seen[im.get(x, y).b] = true;
+        int n = 0;
+        for (bool v : seen) if (v) ++n;
+        return n;
+    };
+    const double sat_before = mean_saturation(img);
+    const int levels_before = shadow_levels(img);
+    Image after = img;
+    photo::one_step_photo_fix(after);
+    CHECK(black_fraction(after) < 0.01);                  // the shadows are not crushed flat
+    CHECK(shadow_levels(after) >= levels_before - 1);     // and still hold their detail
+    CHECK(mean_saturation(after) > sat_before);           // a saturation enhancement raises saturation
+    // Clarify on its own must not invent pure black either.
+    Image cl = img;
+    photo::clarify(cl, 5);
+    CHECK(black_fraction(cl) <= black_fraction(img));
+}
+
 static void test_edge_preserving_smooth() {
     Image img(40, 40);
     for (int y = 0; y < 40; ++y)
@@ -2430,8 +2482,11 @@ static void test_photo_fix_suite() {
     // A dark, blue-tinted, low-contrast image.
     Image img(16, 16);
     for (int y = 0; y < 16; ++y) for (int x = 0; x < 16; ++x) img.set(x, y, {static_cast<uint8_t>(40 + x * 2), static_cast<uint8_t>(50 + x * 2), static_cast<uint8_t>(90 + x * 2), 255});
-    Image a = img; photo::auto_color_balance(a, 100);
+    // Cast removal is opt-in (the original's factory preset leaves it off).
+    Image a = img; photo::auto_color_balance(a, 100, 6500, true);
     CHECK(std::abs(a.get(8, 8).r - a.get(8, 8).b) < std::abs(img.get(8, 8).r - img.get(8, 8).b));   // less blue cast
+    Image keep = img; photo::auto_color_balance(keep, 100, 6500, false);
+    CHECK(keep.get(8, 8).b - keep.get(8, 8).r == img.get(8, 8).b - img.get(8, 8).r);                // colors left alone
     Image c = img; photo::auto_contrast_enhance(c, 1, 0, 1);
     CHECK(c.get(15, 0).r - c.get(0, 0).r > img.get(15, 0).r - img.get(0, 0).r);                      // more contrast
     Image sat = img; photo::auto_saturation(sat, 2, 2, false);
@@ -2732,6 +2787,7 @@ int main() {
     test_firn_stash_resolution();
     test_move_layer();
     test_edge_preserving_smooth();
+    test_one_step_photo_fix();
     test_gradient_at_point();
     test_vector_core();
     test_history_limit();

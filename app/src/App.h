@@ -250,9 +250,9 @@ struct App {
     float gamma_rgb[3] = {1.0f, 1.0f, 1.0f}; bool gamma_link = true;
     int fade_amount = 45;
     // Photo fixes
-    int acb_strength = 30, acb_temperature = 6500;
+    int acb_strength = 30, acb_temperature = 6500; bool acb_remove_cast = false;   // the original's factory preset has RemoveColorCast 0
     int ace_bias = 1, ace_strength = 0, ace_appearance = 1;
-    int ase_bias = 1, ase_strength = 1; bool ase_skin = true;
+    int ase_bias = 1, ase_strength = 1; bool ase_skin = false;   // Skintones 0 in the original's factory preset
     int clarify_strength = 2;
     float bwp_src_black[3] = {0, 0, 0}, bwp_src_white[3] = {1, 1, 1}, bwp_dst_black[3] = {0, 0, 0}, bwp_dst_white[3] = {1, 1, 1};
     float ha_low = 0.5f, ha_high = 0.5f, ha_gamma = 1.0f; int ha_midtones = 0, ha_channel = 0;

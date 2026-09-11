@@ -49,7 +49,18 @@ adjust::Lut clip_lut(const std::array<int, 256>& h, float low_percent, float hig
     acc = 0;
     for (int i = 255; i >= 0; --i) { acc += h[static_cast<size_t>(i)]; if (acc > total * high_percent / 100.0f) { hi = i; break; } }
     if (hi <= lo) { lo = std::max(0, lo - 1); hi = std::min(255, lo + 1); }
-    return adjust::levels_lut(lo, gamma, hi, 0, 255);
+    // The stretched range stops a few levels short of each end, and what
+    // falls outside the clip points is compressed into those few levels
+    // rather than collapsed onto 0 or 255. Without this toe and shoulder an
+    // auto contrast turns every shadow into the same flat black, which also
+    // costs the pixel its color once the luma LUT scales the channels.
+    const int toe = 6;
+    adjust::Lut lut = adjust::levels_lut(lo, gamma, hi, toe, 255 - toe);
+    if (lo > 0)
+        for (int i = 0; i <= lo; ++i) lut[static_cast<size_t>(i)] = clamp8(static_cast<float>(i) * toe / lo);
+    if (hi < 255)
+        for (int i = hi; i < 256; ++i) lut[static_cast<size_t>(i)] = clamp8(255 - toe + static_cast<float>(i - hi) * toe / (255 - hi));
+    return lut;
 }
 
 // Applies a luma LUT by scaling each pixel's channels by new/old luma.
@@ -67,7 +78,7 @@ void apply_luma_lut(Image& img, const adjust::Lut& lut) {
 
 }  // namespace
 
-void auto_color_balance(Image& img, int strength, int temperature) {
+void auto_color_balance(Image& img, int strength, int temperature, bool remove_cast) {
     const uint8_t* p = img.data();
     double sum[3] = {0, 0, 0};
     long n = 0;
@@ -79,8 +90,12 @@ void auto_color_balance(Image& img, int strength, int temperature) {
     if (n == 0) return;
     const double mean[3] = {sum[0] / n, sum[1] / n, sum[2] / n};
     const double gray = (mean[0] + mean[1] + mean[2]) / 3.0;
-    float gain[3];
-    for (int c = 0; c < 3; ++c) gain[c] = static_cast<float>(mean[c] > 1 ? gray / mean[c] : 1.0);
+    float gain[3] = {1.0f, 1.0f, 1.0f};
+    // Gray-world cast removal, only when asked for: it pulls the channel
+    // means together, which also drains real color from a picture that has
+    // no cast to remove.
+    if (remove_cast)
+        for (int c = 0; c < 3; ++c) gain[c] = static_cast<float>(mean[c] > 1 ? gray / mean[c] : 1.0);
     // Temperature: a mild red/blue tilt around 6500 K.
     const float t = std::clamp((temperature - 6500) / 6500.0f, -1.0f, 1.0f);
     gain[0] *= 1.0f - 0.25f * t;
@@ -119,11 +134,15 @@ void auto_saturation(Image& img, int bias, int strength, bool skin_tones) {
     }
 }
 
+// The original's own factory presets give the settings each step runs with:
+// AutoColorBalance strength 30 / 6500 K / RemoveColorCast 0,
+// AutoContrastEnhancement bias 1 strength 0 appearance 1, Clarify strength 2,
+// AutoSaturationEnhancement bias 1 strength 1 Skintones 0.
 void one_step_photo_fix(Image& img) {
-    auto_color_balance(img, 30);
+    auto_color_balance(img, 30, 6500, false);
     auto_contrast_enhance(img, 1, 0, 1);
     clarify(img, 2);
-    auto_saturation(img, 1, 1, true);
+    auto_saturation(img, 1, 1, false);
 }
 
 void clarify(Image& img, int strength) {
@@ -136,10 +155,20 @@ void clarify(Image& img, int strength) {
     for (size_t i = 0; i < img.size_bytes(); i += 4) {
         if (!d[i + 3]) continue;
         const float y = luma(d + i), yb = luma(b + i);
-        const float ny = y + (y - yb) * k;
-        if (y <= 0.0f) continue;
-        const float f = std::clamp(ny, 0.0f, 255.0f) / y;
-        for (int c = 0; c < 3; ++c) d[i + c] = clamp8(d[i + c] * f);
+        float delta = (y - yb) * k;
+        // The local contrast is added to every channel, not multiplied in:
+        // scaling by ny/y sent a dark pixel in a bright neighborhood to pure
+        // black, which blocked up the shadows of any contrasty photo. The
+        // room left at each end also limits the push, so nothing is driven
+        // into 0 or 255 just because its surroundings are far away.
+        const float room = delta > 0.0f ? 255.0f - std::max({d[i], d[i + 1], d[i + 2]})
+                                        : static_cast<float>(std::min({d[i], d[i + 1], d[i + 2]}));
+        // Approach the room left at that end instead of running past it, so
+        // a small push is untouched and a large one lands just short of the
+        // limit. Local contrast then never invents a pure black or white.
+        if (room > 0.5f) delta = std::copysign(room * (1.0f - std::exp(-std::abs(delta) / room)), delta);
+        else delta = 0.0f;
+        for (int c = 0; c < 3; ++c) d[i + c] = clamp8(d[i + c] + delta);
     }
 }
 

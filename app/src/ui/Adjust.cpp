@@ -598,8 +598,14 @@ void App::draw_adjust_dialogs() {
         [&](Image& img) { adjust::fade_correction(img, fade_amount); });
 
     adjust_modal(*this, "Automatic Color Balance",
-        [&] { bool c = ImGui::SliderInt("Strength", &acb_strength, 0, 100); c |= ImGui::SliderInt("Illuminant temperature (K)", &acb_temperature, 2000, 12000); return c; },
-        [&](Image& img) { photo::auto_color_balance(img, acb_strength, acb_temperature); });
+        [&] {
+            bool c = ImGui::SliderInt("Strength", &acb_strength, 0, 100);
+            c |= ImGui::SliderInt("Illuminant temperature (K)", &acb_temperature, 2000, 12000);
+            c |= ImGui::Checkbox("Remove color cast", &acb_remove_cast);
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Neutralizes an overall cast. Leave it off for a picture whose colors are meant to be strong.");
+            return c;
+        },
+        [&](Image& img) { photo::auto_color_balance(img, acb_strength, acb_temperature, acb_remove_cast); });
     adjust_modal(*this, "Automatic Contrast Enhancement",
         [&] { bool c = ImGui::Combo("Bias", &ace_bias, "Lighter\0Neutral\0Darker\0"); c |= ImGui::Combo("Strength", &ace_strength, "Normal\0Mild\0"); c |= ImGui::Combo("Appearance", &ace_appearance, "Flat\0Natural\0Bold\0"); return c; },
         [&](Image& img) { photo::auto_contrast_enhance(img, ace_bias, ace_strength, ace_appearance); });

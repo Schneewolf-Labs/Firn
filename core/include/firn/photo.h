@@ -10,13 +10,20 @@ namespace firn::photo {
 // Automatic Color Balance: gray-world correction blended by `strength`
 // (0..100), then a warm/cool shift towards `temperature` kelvin (6500 =
 // none; lower is warmer).
-void auto_color_balance(Image& img, int strength, int temperature = 6500);
+// Automatic Color Balance. `temperature` in kelvin tilts red against blue
+// (6500 is neutral). `remove_cast` additionally neutralizes an overall cast
+// by the gray-world rule; the original leaves it off by default
+// (RemoveColorCast 0 in its factory preset) because it flattens the colors
+// of a picture that is not actually miscast.
+void auto_color_balance(Image& img, int strength, int temperature = 6500, bool remove_cast = false);
 // Automatic Contrast Enhancement: bias 0 lighter / 1 neutral / 2 darker,
 // strength 0 normal / 1 mild, appearance 0 flat / 1 natural / 2 bold.
 void auto_contrast_enhance(Image& img, int bias, int strength, int appearance);
 // Automatic Saturation Enhancement: bias 0 less / 1 normal / 2 more
 // colorful, strength 0 weak / 1 normal / 2 strong; skin tones are protected.
-void auto_saturation(Image& img, int bias, int strength, bool skin_tones);
+// Automatic Saturation Enhancement. `skin_tones` holds back on skin hues;
+// the original's factory preset has it off (Skintones 0).
+void auto_saturation(Image& img, int bias, int strength, bool skin_tones = false);
 // One Step Photo Fix: the three automatic enhancements, clarify, then edge preservation.
 void one_step_photo_fix(Image& img);
 // Clarify: local contrast on luma, strength 1..5.

@@ -479,8 +479,12 @@ std::string App::do_command(const std::string& name, const Value& p, bool* ok) {
         const std::string bias = p.get("Bias").as_string("Neutral"), strength = p.get("Strength").as_string("Normal"), app = p.get("Appearance").as_string("Natural");
         return adjust("Automatic Contrast Enhancement", [=](Image& i) { photo::auto_contrast_enhance(i, bias == "Lighter" ? 0 : bias == "Darker" ? 2 : 1, strength == "Mild" ? 1 : 0, app == "Flat" ? 0 : app == "Bold" ? 2 : 1); });
     }
-    if (name == "AutoSaturationEnhancement") return adjust("Automatic Saturation Enhancement", [](Image& i) { photo::auto_saturation(i, 1, 1, true); });
-    if (name == "AutoColorBalance") return adjust("Automatic Color Balance", [s = static_cast<int>(num("Strength", 30)), t = static_cast<int>(num("Temperature", 6500))](Image& i) { photo::auto_color_balance(i, s, t); });
+    if (name == "AutoSaturationEnhancement")
+        return adjust("Automatic Saturation Enhancement", [b = static_cast<int>(num("Bias", 1)), st = static_cast<int>(num("Strength", 1)),
+                                                          skin = flag("Skintones", false)](Image& i) { photo::auto_saturation(i, b, st, skin); });
+    if (name == "AutoColorBalance")
+        return adjust("Automatic Color Balance", [s = static_cast<int>(num("Strength", 30)), t = static_cast<int>(num("Temperature", 6500)),
+                                                  cast = flag("RemoveColorCast", false)](Image& i) { photo::auto_color_balance(i, s, t, cast); });
     if (name == "HistogramEqualize") return adjust("Histogram Equalize", adjust::histogram_equalize);
     if (name == "HistogramStretch") return adjust("Histogram Stretch", adjust::histogram_stretch);
 
