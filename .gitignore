@@ -8,3 +8,6 @@ compile_commands.json
 .cache/
 # Backup of the original Windows install; large binaries, not source.
 WindowsInstall/
+# Shallow clones of GIMP and Krita, kept only to study their designs.
+# GPL source; never built, never copied from, never committed.
+reference/

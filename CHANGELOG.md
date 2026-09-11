@@ -6,26 +6,6 @@ section into the next version.
 
 ## Unreleased
 
-### Fixed
-- One Step Photo Fix blocked up the shadows and drained color instead of
-  improving the photo. Three causes: the automatic contrast stretch mapped
-  everything below its clip point onto pure black (and its luma multiplier
-  then took the pixel's color with it), Clarify scaled channels by a ratio
-  that reached zero for a dark pixel in a bright neighborhood, and the
-  pipeline ran gray-world cast removal and skin-tone damping that the
-  original's own factory presets leave switched off. The contrast stretch
-  now keeps a toe and shoulder, Clarify adds its local contrast rather than
-  multiplying it and approaches the room left at each end, and the pipeline
-  follows the original's documented defaults. On the bundled City photo,
-  pure black went from 4.5% of the image to 0.01% and saturation now rises
-  rather than falls.
-- Automatic Color Balance gained the original's RemoveColorCast option (off
-  by default) and Automatic Saturation Enhancement its Skintones option.
-- Gradients picked from the library, or edited through Edit stops, painted
-  as the plain foreground-to-background gradient instead of themselves.
-- Native format: a fully transparent layer is written with a 1 x 1 tile;
-  the previous empty-layer encoding hung the original on "Reading".
-
 ### Added
 - Apache License 2.0.
 - Preferences: undo memory budget per image (default 1 GB).
@@ -132,6 +112,26 @@ section into the next version.
   across all cores (20 MP: blur 2.0 s to 0.55 s, native save 9.8 s to 3.3 s);
   undo entries for painting keep only the changed rectangle; big PNGs use
   a lighter compression level.
+
+### Fixed
+- One Step Photo Fix blocked up the shadows and drained color instead of
+  improving the photo. Three causes: the automatic contrast stretch mapped
+  everything below its clip point onto pure black (and its luma multiplier
+  then took the pixel's color with it), Clarify scaled channels by a ratio
+  that reached zero for a dark pixel in a bright neighborhood, and the
+  pipeline ran gray-world cast removal and skin-tone damping that the
+  original's own factory presets leave switched off. The contrast stretch
+  now keeps a toe and shoulder, Clarify adds its local contrast rather than
+  multiplying it and approaches the room left at each end, and the pipeline
+  follows the original's documented defaults. On the bundled City photo,
+  pure black went from 4.5% of the image to 0.01% and saturation now rises
+  rather than falls.
+- Automatic Color Balance gained the original's RemoveColorCast option (off
+  by default) and Automatic Saturation Enhancement its Skintones option.
+- Gradients picked from the library, or edited through Edit stops, painted
+  as the plain foreground-to-background gradient instead of themselves.
+- Native format: a fully transparent layer is written with a 1 x 1 tile;
+  the previous empty-layer encoding hung the original on "Reading".
 
 ## 0.1.0 (2026-09-10)
 
