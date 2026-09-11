@@ -7,6 +7,8 @@
 #include "imgui.h"
 
 struct PaletteState {
+    ImGuiTextFilter tool_filter;
+    float options_content_height = 0;
     firn::LayerProps layer_props_before; // props at the start of a live slider drag
     int rename_layer = -1;
     char rename_buf[128] = {};

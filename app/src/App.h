@@ -281,6 +281,7 @@ struct App {
     struct RecoverEntry { std::string file, title, original_path, key; };
     std::vector<RecoverEntry> recover_files;
     bool show_recovery_dialog = false;
+    std::string recovery_error;
     void autosave_tick();
     void autosave_forget(int uid);
     void autosave_forget(const std::string& key);
@@ -652,8 +653,8 @@ struct App {
     void draw_menu(MenuBuilder& m);
     void draw_toolbar();
     void draw_status_bar();
-    static constexpr float toolbar_height = 30.0f;
-    static constexpr float status_height = 22.0f;
+    float toolbar_height = 30.0f;
+    float status_height = 22.0f;
     int cursor_x = 0, cursor_y = 0;     // image coordinates under the pointer, for the status bar
     bool cursor_inside = false;
     void draw_canvas();

@@ -10,6 +10,8 @@ void App::draw_toolbar() {
     const ImGuiViewport* vp = ImGui::GetMainViewport();
     ImGui::SetNextWindowPos(ImVec2(vp->WorkPos.x, vp->WorkPos.y));
     ImGui::SetNextWindowSize(ImVec2(vp->WorkSize.x, toolbar_height));
+    // Fixed chrome must not inherit the scaled minimum size of dockable windows.
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowMinSize, ImVec2(0, 0));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(6, 3));
@@ -41,13 +43,15 @@ void App::draw_toolbar() {
     ImGui::SameLine();
     material_box(*this, false, ImVec2(mb, mb));
     ImGui::End();
-    ImGui::PopStyleVar(3);
+    ImGui::PopStyleVar(4);
 }
 
 void App::draw_status_bar() {
     const ImGuiViewport* vp = ImGui::GetMainViewport();
     ImGui::SetNextWindowPos(ImVec2(vp->WorkPos.x, vp->WorkPos.y + vp->WorkSize.y - status_height));
     ImGui::SetNextWindowSize(ImVec2(vp->WorkSize.x, status_height));
+    // Fixed chrome must not inherit the scaled minimum size of dockable windows.
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowMinSize, ImVec2(0, 0));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(6, 2));
@@ -55,6 +59,7 @@ void App::draw_status_bar() {
     // Left: the last status message (first line only); right: cursor and image facts.
     std::string first = status.substr(0, status.find('\n'));
     ImGui::TextUnformatted(first.c_str());
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", status.c_str());
     if (doc) {
         char right[160];
         if (cursor_inside)
@@ -66,5 +71,5 @@ void App::draw_status_bar() {
         ImGui::TextUnformatted(right);
     }
     ImGui::End();
-    ImGui::PopStyleVar(3);
+    ImGui::PopStyleVar(4);
 }

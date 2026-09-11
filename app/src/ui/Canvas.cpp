@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <filesystem>
 
 #include <SDL_opengl.h>
 
@@ -18,6 +19,45 @@ void App::draw_canvas() {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
     ImGui::Begin("Image", nullptr, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
     ImGui::PopStyleVar();
+
+    if (docs.empty()) {
+        ImGui::BeginChild("Welcome", ImVec2(0, 0), false);
+        const ImVec2 available = ImGui::GetContentRegionAvail();
+        const float width = std::max(1.0f, std::min(440.0f * ui_scale, available.x - 32));
+        ImGui::SetCursorPos(ImVec2(std::max(16.0f, (available.x - width) * 0.5f), std::max(24.0f, available.y * 0.16f)));
+        ImGui::BeginGroup();
+        ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + width);
+        ImGui::TextUnformatted("Start creating");
+        ImGui::TextDisabled("Create an image or open something you are working on.");
+        ImGui::Spacing();
+        if (ImGui::Button("New image", ImVec2(width, 0))) show_new_dialog = true;
+        if (ImGui::Button("Open image...", ImVec2(width, 0))) request_open();
+        if (!recover_files.empty()) {
+            ImGui::Spacing();
+            ImGui::TextWrapped("Unsaved work is available to recover.");
+            if (ImGui::Button("Review recovery copies", ImVec2(width, 0))) show_recovery_dialog = true;
+        }
+        if (!config.recent_files.empty()) {
+            ImGui::Spacing();
+            ImGui::TextUnformatted("Recent images");
+            // Opening a file updates recents: don't iterate the live list.
+            const auto recent = config.recent_files;
+            for (size_t i = 0; i < recent.size(); ++i) {
+                ImGui::PushID(static_cast<int>(i));
+                const std::string title = std::filesystem::path(recent[i]).filename().string();
+                const bool clicked = ImGui::Selectable(title.c_str(), false, 0, ImVec2(width, 0));
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", recent[i].c_str());
+                ImGui::PopID();
+                if (clicked) { open_document(recent[i]); break; }
+            }
+        }
+        if (!status.empty()) { ImGui::Spacing(); ImGui::TextWrapped("%s", status.c_str()); }
+        ImGui::PopTextWrapPos();
+        ImGui::EndGroup();
+        ImGui::EndChild();
+        ImGui::End();
+        return;
+    }
 
     if (image_windows) {
         // A strip of arrangement buttons, then the workspace the windows live in.
@@ -260,6 +300,42 @@ void App::upload_document_texture(DocState& s) {
 // inside whatever window is current.
 void App::draw_canvas_view(ImVec2 view_pos, ImVec2 view_size) {
     ImDrawList* dl = ImGui::GetWindowDrawList();
+
+    // Fixed-height context keeps image coordinates stable during selection
+    // gestures and mask edits. Narrow panes scroll their context independently.
+    if (doc) {
+        const float height = ImGui::GetFrameHeightWithSpacing() * 2 + 8;
+        ImGui::SetCursorScreenPos(view_pos);
+        ImGui::BeginChild("Editing context", ImVec2(std::max(1.0f, view_size.x), height), false);
+        const int layer = active_layer();
+        const bool editing_mask = mask_edit && layer >= 0 && static_cast<size_t>(layer) == mask_proxy_layer;
+        const char* target = selection_edit ? "SELECTION MASK" : editing_mask ? "LAYER MASK" :
+            layer < 0 ? "No layer selected" : doc->layer(layer).is_vector() ? "Vector objects" :
+            doc->layer(layer).is_raster() ? "Pixels" : "Non-paintable layer";
+        ImGui::Text("%s  |  %s  |  %s", tool().name(), layer >= 0 ? doc->layer(layer).name.c_str() : "Choose a layer in Layers", target);
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s: %s", layer >= 0 ? doc->layer(layer).name.c_str() : "Choose a layer in Layers", target);
+        if (selection_edit || editing_mask) {
+            if (ImGui::SmallButton("Finish mask editing")) {
+                if (selection_edit) set_selection_edit(false); else set_mask_edit(false);
+            }
+            ImGui::SameLine();
+            ImGui::TextDisabled("Painting changes the mask.");
+        } else if (doc->has_selection()) {
+            if (ImGui::SmallButton("Deselect")) select_none();
+            ImGui::SameLine();
+            ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.4f, 1), "Selection limits pixel edits");
+        } else {
+            ImGui::TextDisabled("No pixel selection");
+        }
+        if (layer >= 0 && !doc->layer(layer).visible) {
+            ImGui::SameLine();
+            ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.4f, 1), "| Layer hidden");
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Enable this layer's visibility in Layers to see your edits.");
+        }
+        ImGui::EndChild();
+        view_pos.y += height;
+        view_size.y -= height;
+    }
 
     // Rulers take a strip along the top and left; the canvas view shrinks.
     const float ruler = show_rulers && doc ? 18.0f : 0.0f;

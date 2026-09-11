@@ -1,4 +1,5 @@
 // Firn: SDL2 + OpenGL3 + Dear ImGui (docking) bootstrap.
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -30,21 +31,24 @@ static const char* kAppTitle = "Firn";
 // Default workspace, applied only when no imgui.ini layout exists:
 //   Tools strip | Tool Options across the top, Image center | Materials/Overview
 //   over Layers/History on the right.
-static bool build_default_layout(ImGuiID dockspace_id) {
+static bool build_default_layout(App& app, ImGuiID dockspace_id) {
     ImGuiDockNode* node = ImGui::DockBuilderGetNode(dockspace_id);
     if (node && !node->IsLeafNode()) return false;  // preserve the saved layout and selected tab
 
     const ImGuiViewport* vp = ImGui::GetMainViewport();
     ImGui::DockBuilderRemoveNode(dockspace_id);
     ImGui::DockBuilderAddNode(dockspace_id, ImGuiDockNodeFlags_DockSpace);
-    ImGui::DockBuilderSetNodeSize(dockspace_id, ImVec2(vp->WorkSize.x, vp->WorkSize.y - App::toolbar_height - App::status_height));
+    ImGui::DockBuilderSetNodePos(dockspace_id, ImVec2(vp->WorkPos.x, vp->WorkPos.y + app.toolbar_height));
+    ImGui::DockBuilderSetNodeSize(dockspace_id, ImVec2(vp->WorkSize.x, vp->WorkSize.y - app.toolbar_height - app.status_height));
 
     ImGuiID center = dockspace_id;
-    ImGuiID left = ImGui::DockBuilderSplitNode(center, ImGuiDir_Left, 0.12f, nullptr, &center);
-    ImGuiID right = ImGui::DockBuilderSplitNode(center, ImGuiDir_Right, 0.22f, nullptr, &center);
-    ImGuiID top = ImGui::DockBuilderSplitNode(center, ImGuiDir_Up, 0.10f, nullptr, &center);
+    const float left_ratio = std::clamp(250.0f * app.ui_scale / vp->WorkSize.x, 0.18f, 0.28f);
+    const float right_ratio = std::clamp(260.0f * app.ui_scale / (vp->WorkSize.x * (1 - left_ratio)), 0.22f, 0.36f);
+    ImGuiID left = ImGui::DockBuilderSplitNode(center, ImGuiDir_Left, left_ratio, nullptr, &center);
+    ImGuiID right = ImGui::DockBuilderSplitNode(center, ImGuiDir_Right, right_ratio, nullptr, &center);
+    ImGuiID top = ImGui::DockBuilderSplitNode(center, ImGuiDir_Up, 0.07f, nullptr, &center);
     ImGuiID right_bottom = 0;
-    ImGuiID right_top = ImGui::DockBuilderSplitNode(right, ImGuiDir_Up, 0.45f, nullptr, &right_bottom);
+    ImGuiID right_top = ImGui::DockBuilderSplitNode(right, ImGuiDir_Up, 0.57f, nullptr, &right_bottom);
 
     ImGui::DockBuilderDockWindow("Tools", left);
     ImGui::DockBuilderDockWindow("Tool Options", top);
@@ -235,8 +239,8 @@ int main(int argc, char** argv) {
         app.draw_toolbar();
         app.draw_status_bar();
         ImGuiViewport* vp = ImGui::GetMainViewport();
-        const ImVec2 dock_pos(vp->WorkPos.x, vp->WorkPos.y + App::toolbar_height);
-        const ImVec2 dock_size(vp->WorkSize.x, vp->WorkSize.y - App::toolbar_height - App::status_height);
+        const ImVec2 dock_pos(vp->WorkPos.x, vp->WorkPos.y + app.toolbar_height);
+        const ImVec2 dock_size(vp->WorkSize.x, vp->WorkSize.y - app.toolbar_height - app.status_height);
         ImGui::SetNextWindowPos(dock_pos);
         ImGui::SetNextWindowSize(dock_size);
         ImGui::SetNextWindowViewport(vp->ID);
@@ -248,7 +252,7 @@ int main(int argc, char** argv) {
         const ImGuiID dockspace_id = ImGui::GetID("MainDockSpace");
         ImGui::DockSpace(dockspace_id, ImVec2(0, 0), ImGuiDockNodeFlags_PassthruCentralNode);
         ImGui::End();
-        const bool default_layout_created = first_frame && build_default_layout(dockspace_id);
+        const bool default_layout_created = first_frame && build_default_layout(app, dockspace_id);
         first_frame = false;
 #ifdef __APPLE__
         native_menu::update(app);

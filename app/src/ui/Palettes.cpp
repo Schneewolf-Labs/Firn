@@ -1,3 +1,5 @@
+#include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <memory>
@@ -10,6 +12,7 @@
 #include "MaterialDialog.h"
 #include "firn/vector.h"
 #include "imgui.h"
+#include "imgui_internal.h"
 
 using namespace firn;
 
@@ -17,36 +20,90 @@ using namespace firn;
 // Tools palette is a vertical strip like the original's Tools toolbar.
 static void draw_tools(App& app) {
     ImGui::Begin("Tools");
-    const char* last_cat = nullptr;
-    for (size_t i = 0; i < app.tools.size(); ++i) {
+    auto& filter = app.palette_state->tool_filter;
+    ImGui::SetNextItemWidth(-1);
+    if (ImGui::InputTextWithHint("##tool_search", "Search tools...", filter.InputBuf, sizeof(filter.InputBuf))) filter.Build();
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Search names, categories, or shortcuts. Use a comma for alternatives.");
+    if (filter.IsActive() && ImGui::SmallButton("Clear search")) filter.Clear();
+    ImGui::BeginChild("Tool list");
+    auto row = [&](size_t i) {
         const Tool& t = *app.tools[i];
-        if (!last_cat || std::strcmp(last_cat, t.category()) != 0) {
-            last_cat = t.category();
-            ImGui::SeparatorText(last_cat);
+        std::string label = t.name();
+        if (t.shortcut()) label += std::string(" (") + t.shortcut() + ")";
+        const float icon = ImGui::GetTextLineHeight();
+        const float width = std::max(1.0f, ImGui::GetContentRegionAvail().x - icon - 10.0f);
+        const float height = ImGui::CalcTextSize(label.c_str(), nullptr, false, width).y + 6.0f;
+        ImGui::PushID(static_cast<int>(i));
+        if (ImGui::Selectable("##tool", app.tool_index == static_cast<int>(i), 0, ImVec2(0, height))) app.select_tool(static_cast<int>(i));
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s / %s", t.category(), label.c_str());
+        const ImVec2 pos = ImGui::GetItemRectMin();
+        auto* dl = ImGui::GetWindowDrawList();
+        const ImU32 color = ImGui::GetColorU32(ImGuiCol_Text);
+        draw_tool_icon(dl, t.name(), ImVec2(pos.x + 2, pos.y + 3), icon, color);
+        dl->AddText(ImGui::GetFont(), ImGui::GetFontSize(), ImVec2(pos.x + icon + 8, pos.y + 3), color, label.c_str(), nullptr, width);
+        ImGui::PopID();
+    };
+    if (filter.IsActive()) {
+        int matches = 0;
+        for (size_t i = 0; i < app.tools.size(); ++i) {
+            const auto& t = *app.tools[i];
+            const std::string text = std::string(t.name()) + " " + t.category() + " " + (t.shortcut() ? t.shortcut() : "");
+            if (filter.PassFilter(text.c_str())) { row(i); ++matches; }
         }
-        char label[64], id[16];
-        if (t.shortcut()) std::snprintf(label, sizeof(label), "%s (%s)", t.name(), t.shortcut());
-        else std::snprintf(label, sizeof(label), "%s", t.name());
-        std::snprintf(id, sizeof(id), "##tool%zu", i);
-        // Icon at the left, drawn over the selectable's rect; the label follows it.
-        const float row = ImGui::GetTextLineHeight() + 4.0f;
-        if (ImGui::Selectable(id, app.tool_index == static_cast<int>(i), 0, ImVec2(0, row))) app.select_tool(static_cast<int>(i));
-        if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", label);
-        const ImVec2 r0 = ImGui::GetItemRectMin();
-        const ImU32 col = ImGui::GetColorU32(ImGuiCol_Text);
-        draw_tool_icon(ImGui::GetWindowDrawList(), t.name(), ImVec2(r0.x + 3.0f, r0.y + 2.0f), row - 4.0f, col);
-        ImGui::GetWindowDrawList()->AddText(ImVec2(r0.x + row + 6.0f, r0.y + 2.0f), col, label);
+        if (!matches) ImGui::TextWrapped("No matching tools. Try a name such as brush, selection, or shape.");
+    } else {
+        ImGui::SeparatorText("Common tools");
+        const char* common[] = {"Paint Brush", "Eraser", "Dropper", "Flood Fill", "Selection", "Move", "Crop", "Text", "Pan", "Zoom"};
+        for (const char* name : common)
+            for (size_t i = 0; i < app.tools.size(); ++i)
+                if (std::strcmp(name, app.tools[i]->name()) == 0) { row(i); break; }
+        ImGui::Spacing();
+        ImGui::SeparatorText("All tools");
+        // Collect categories once, without relying on tools being contiguous.
+        std::vector<std::string> categories;
+        for (const auto& t : app.tools)
+            if (std::find(categories.begin(), categories.end(), t->category()) == categories.end()) categories.push_back(t->category());
+        ImGui::PushStyleColor(ImGuiCol_Header, ImGui::GetStyleColorVec4(ImGuiCol_FrameBg));
+        for (const auto& category : categories) {
+            if (ImGui::CollapsingHeader(category.c_str())) {
+                ImGui::PushID(category.c_str());
+                for (size_t i = 0; i < app.tools.size(); ++i)
+                    if (category == app.tools[i]->category()) row(i);
+                ImGui::PopID();
+            }
+        }
+        ImGui::PopStyleColor();
     }
+    ImGui::EndChild();
     ImGui::End();
 }
 
 static void draw_tool_options(App& app) {
-    ImGui::Begin("Tool Options");
+    ImGui::Begin("Tool Options", nullptr, ImGuiWindowFlags_HorizontalScrollbar);
     ImGui::TextUnformatted(app.tool().name());
     ImGui::SameLine();
     ImGui::Spacing();
     ImGui::SameLine();
     app.tool().draw_options(app);
+    const float content_height = ImGui::GetCursorPosY() + ImGui::GetScrollY() + ImGui::GetStyle().WindowPadding.y + (ImGui::GetCurrentWindow()->ScrollbarX ? ImGui::GetStyle().ScrollbarSize : 0);
+    if (ImGui::BeginPopupContextWindow("Options sizing", ImGuiPopupFlags_MouseButtonRight | ImGuiPopupFlags_NoOpenOverItems)) {
+        if (ImGui::Checkbox("Fit height when options change", &app.config.fit_tool_options)) {
+            app.config.save();
+            app.palette_state->options_content_height = 0;
+        }
+        ImGui::EndPopup();
+    }
+    // Only resize a single options pane above the central canvas. Custom
+    // side docks, tab groups and floating palettes retain their dimensions.
+    ImGuiDockNode* node = ImGui::GetWindowDockNode();
+    if (app.config.fit_tool_options && node && node->Windows.Size == 1 && node->ParentNode &&
+        node->ParentNode->SplitAxis == ImGuiAxis_Y && node->ParentNode->ChildNodes[0] == node &&
+        node->ParentNode->ChildNodes[1]->HasCentralNodeChild &&
+        std::abs(content_height - app.palette_state->options_content_height) > 1.0f) {
+        const float height = std::clamp(content_height, ImGui::GetFrameHeight() * 2, std::max(ImGui::GetFrameHeight() * 2, node->ParentNode->Size.y * 0.35f));
+        node->SizeRef.y = height;
+        app.palette_state->options_content_height = content_height;
+    }
     ImGui::End();
 }
 
@@ -138,17 +195,19 @@ static void draw_layers(App& app) {
     Document& doc = *app.doc;
     const int active = app.active_layer();
 
-    if (ImGui::SmallButton("New")) app.layer_new();
-    ImGui::SameLine();
-    if (ImGui::SmallButton("Dup")) app.layer_duplicate();
-    ImGui::SameLine();
-    if (ImGui::SmallButton("Del")) app.layer_delete();
-    ImGui::SameLine();
-    if (ImGui::SmallButton("Up")) app.layer_arrange(+1);
-    ImGui::SameLine();
-    if (ImGui::SmallButton("Down")) app.layer_arrange(-1);
-    ImGui::SameLine();
-    if (ImGui::SmallButton("Merge Down")) app.layer_merge(0);
+    bool first_button = true;
+    auto layer_button = [&](const char* label) {
+        const float width = ImGui::CalcTextSize(label).x + ImGui::GetStyle().FramePadding.x * 2;
+        if (!first_button && ImGui::GetWindowPos().x + ImGui::GetWindowContentRegionMax().x - ImGui::GetItemRectMax().x > width + ImGui::GetStyle().ItemSpacing.x) ImGui::SameLine();
+        first_button = false;
+        return ImGui::SmallButton(label);
+    };
+    if (layer_button("New")) app.layer_new();
+    if (layer_button("Duplicate")) app.layer_duplicate();
+    if (layer_button("Delete")) app.layer_delete();
+    if (layer_button("Up")) app.layer_arrange(+1);
+    if (layer_button("Down")) app.layer_arrange(-1);
+    if (layer_button("Merge Down")) app.layer_merge(0);
 
     // Active layer controls: blend mode and opacity. The slider previews
     // live and commits one Layer Properties entry when released.

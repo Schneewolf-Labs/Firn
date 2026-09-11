@@ -395,10 +395,17 @@ bool material_box(App& app, bool foreground, ImVec2 size) {
 
 void draw_materials_header(App& app) {
     const float box = 40.0f;
+    ImGui::BeginGroup();
+    ImGui::TextUnformatted("Foreground");
     material_box(app, true, ImVec2(box, box));
+    ImGui::EndGroup();
     ImGui::SameLine();
+    ImGui::BeginGroup();
+    ImGui::TextUnformatted("Background");
     material_box(app, false, ImVec2(box, box));
-    ImGui::SameLine();
+    ImGui::EndGroup();
+    const float swap_width = ImGui::CalcTextSize("Swap").x + ImGui::GetStyle().FramePadding.x * 2;
+    if (ImGui::GetWindowPos().x + ImGui::GetWindowContentRegionMax().x - ImGui::GetItemRectMax().x > swap_width + ImGui::GetStyle().ItemSpacing.x) ImGui::SameLine();
     ImGui::BeginGroup();
     if (ImGui::SmallButton("Swap")) {
         for (int i = 0; i < 4; ++i) std::swap(app.fg_color[i], app.bg_color[i]);
@@ -411,17 +418,23 @@ void draw_materials_header(App& app) {
     }
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Black foreground on white background");
     ImGui::EndGroup();
-    ImGui::SameLine();
     ImGui::BeginGroup();
-    ImGui::Checkbox("Fg off", &app.fg_material.transparent);
+    ImGui::Checkbox("No foreground (stroke)", &app.fg_material.transparent);
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Transparent foreground: shapes get no stroke, text no outline");
-    ImGui::Checkbox("Bg off", &app.bg_material.transparent);
+    ImGui::Checkbox("No background (fill)", &app.bg_material.transparent);
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Transparent background: shapes and text get no fill");
     ImGui::EndGroup();
-    // Picker tabs like the original's Frame / Rainbow / Swatches.
+    ImGui::SetNextItemWidth(-1);
+    if (ImGui::ColorEdit4("##foreground_hex", app.fg_color, ImGuiColorEditFlags_DisplayHex | ImGuiColorEditFlags_NoPicker | ImGuiColorEditFlags_AlphaPreviewHalf)) app.fg_material.kind = 0;
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Foreground solid color: #RRGGBBAA. Editing switches to a solid material.");
+    float opacity = app.fg_color[3] * 100.0f;
+    ImGui::SetNextItemWidth(-1);
+    if (ImGui::SliderFloat("##foreground_opacity", &opacity, 0, 100, "Color opacity %.0f%%")) app.fg_color[3] = opacity / 100.0f;
+    if (app.fg_material.kind != 0) ImGui::TextWrapped("%s material active. Click the foreground preview to edit it.", app.fg_material.kind == 1 ? "Gradient" : "Pattern");
+    // Descriptive picker names keep their existing selection behavior.
     if (ImGui::BeginTabBar("##matview")) {
-        if (ImGui::BeginTabItem("Frame")) { app.material_view = 0; frame_picker(app, std::min(ImGui::GetContentRegionAvail().x - 4.0f, 200.0f)); ImGui::EndTabItem(); }
-        if (ImGui::BeginTabItem("Rainbow")) { app.material_view = 1; rainbow_picker(app, std::max(60.0f, ImGui::GetContentRegionAvail().x - 20.0f), 90.0f); ImGui::EndTabItem(); }
+        if (ImGui::BeginTabItem("Wheel")) { app.material_view = 0; frame_picker(app, std::max(80.0f, std::min({ImGui::GetContentRegionAvail().x - 4.0f, 200.0f * app.ui_scale, ImGui::GetContentRegionAvail().y - (app.recent_colors.empty() ? 4.0f : 58.0f * app.ui_scale)}))); ImGui::EndTabItem(); }
+        if (ImGui::BeginTabItem("Spectrum")) { app.material_view = 1; rainbow_picker(app, std::max(60.0f, ImGui::GetContentRegionAvail().x - 20.0f), 90.0f); ImGui::EndTabItem(); }
         if (ImGui::BeginTabItem("Swatches")) { app.material_view = 2; ImGui::EndTabItem(); }
         ImGui::EndTabBar();
     }

@@ -23,6 +23,7 @@ struct Config {
     int checker_size = 12;            // transparency checkerboard cell, in screen px
     int new_width = 800, new_height = 600;
     bool color_managed_display = true;   // convert tagged images to sRGB for the screen
+    bool fit_tool_options = true;     // fit the default options strip when its content changes
     bool image_windows = false;          // one window per image instead of tabs
     std::string theme = "Firn";          // a built-in or user theme name (see app/src/ui/Theme.h)
     std::string extra_tube_dir, extra_brush_dir, extra_texture_dir;

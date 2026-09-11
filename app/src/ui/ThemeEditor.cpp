@@ -49,6 +49,8 @@ void App::apply_theme_values(const Theme& t) {
     std::string path = t.font_path;
     if (path == "builtin" && std::abs(ui_scale - 1.0f) > 0.01f) path.clear();
     const float size = t.font_size * ui_scale;
+    toolbar_height = std::max(30.0f, size + ImGui::GetStyle().FramePadding.y * 2 + 8.0f);
+    status_height = std::max(22.0f, size + 6.0f);
     if (path != font_current_path || std::abs(size - font_current_size) > 0.01f) {
         font_pending_path = path;
         font_pending_size = size;

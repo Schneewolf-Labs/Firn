@@ -7,6 +7,17 @@ section into the next version.
 ## Unreleased
 
 ### Added
+- Searchable tools with common tools first and collapsible specialist categories.
+  Tool labels wrap, and the default Firn theme uses a 15 px system sans font.
+- A start screen with New Image, Open Image, recent files and access to deferred
+  recovery copies. Failed recoveries remain available to retry.
+- Canvas context identifying the active layer, pixels/vector/mask target and
+  selection, with Deselect and Finish Mask Editing controls.
+- Clearer Materials labels, foreground hex and opacity controls, and a color
+  wheel that fits the available panel space. Default panel widths follow UI scale.
+- Tool Options fits its height when its contents change; right-click the pane
+  background to disable this. Custom side docks and floating panes retain their
+  sizes, and long option rows scroll horizontally.
 - The project format is now lossless. An audit set every field of the
   document model to a non-default value and round-tripped it: twenty came
   back wrong. The active layer, the live selection, a group's expanded

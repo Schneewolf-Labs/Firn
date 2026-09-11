@@ -132,6 +132,8 @@ std::vector<Theme> Theme::builtins() {
     std::vector<Theme> out;
     // Firn: the dark theme tinted toward the icon's violet.
     Theme firn = from_imgui("Firn", ImGui::StyleColorsDark);
+    firn.font_path.clear(); // Crisp system sans; custom themes retain their font.
+    firn.font_size = 15.0f;
     ImVec4* c = firn.colors;
     const ImVec4 violet(0.42f, 0.30f, 0.86f, 1.0f), violet_dim(0.30f, 0.22f, 0.60f, 1.0f), violet_bright(0.55f, 0.42f, 0.98f, 1.0f);
     c[ImGuiCol_WindowBg] = ImVec4(0.10f, 0.09f, 0.13f, 1.0f);

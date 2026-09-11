@@ -83,6 +83,7 @@ void App::autosave_tick() {
 // Startup: leftover autosave files are offered for recovery.
 void App::check_recovery() {
     recover_files.clear();
+    recovery_error.clear();
     std::error_code ec;
     for (const auto& de : fs::directory_iterator(autosave_dir(), fs::directory_options::skip_permission_denied, ec)) {
         if (!de.is_regular_file(ec) || (de.path().extension() != ".ora" && de.path().extension() != ".pspimage")) continue;
@@ -102,33 +103,43 @@ void App::draw_recovery_dialog() {
     if (show_recovery_dialog && !ImGui::IsPopupOpen("Recover Unsaved Work")) ImGui::OpenPopup("Recover Unsaved Work");
     if (!show_recovery_dialog) return;
     ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    const ImVec2 space = ImGui::GetMainViewport()->WorkSize;
+    const float width = std::min(640.0f * ui_scale, std::max(300.0f, space.x - 32));
+    ImGui::SetNextWindowSize(ImVec2(width, 0), ImGuiCond_Always);
+    ImGui::SetNextWindowSizeConstraints(ImVec2(0, 0), ImVec2(width, std::max(120.0f, space.y - 32)));
     if (!ImGui::BeginPopupModal("Recover Unsaved Work", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) return;
-    ImGui::TextUnformatted("Firn did not close normally last time. Autosaved copies of these images exist:");
+    ImGui::PushTextWrapPos(0);
+    ImGui::TextUnformatted("Unsaved recovery copies are available for these images:");
+    ImGui::TextUnformatted("Recover opens them as unsaved documents. Your original files stay unchanged.");
     for (const RecoverEntry& e : recover_files) ImGui::BulletText("%s%s%s", e.title.c_str(), e.original_path.empty() ? "" : "  (", e.original_path.empty() ? "" : (e.original_path + ")").c_str());
     ImGui::Spacing();
-    if (ImGui::Button("Recover", ImVec2(120, 0))) {
+    if (ImGui::Button("Recover images", ImVec2(0, 0))) {
+        recovery_error.clear();
+        std::vector<RecoverEntry> failed;
         for (const RecoverEntry& e : recover_files) {
             std::string err; std::vector<std::string> warnings;
             auto d = io::load_psp(e.file, &err, &warnings);
-            if (!d) { status = "Recovery failed: " + err; continue; }
+            if (!d) { status = "Could not recover " + e.title + ": " + err; recovery_error += status + "\n"; failed.push_back(e); continue; }
             add_document(std::move(d), e.original_path);
             if (e.original_path.empty()) doc_title = e.title;
             saved_cursor = static_cast<size_t>(-1);  // recovered work counts as unsaved
             autosave_forget(e.key);
         }
-        recover_files.clear();
-        show_recovery_dialog = false;
-        ImGui::CloseCurrentPopup();
+        recover_files = std::move(failed);
+        show_recovery_dialog = !recover_files.empty();
+        if (!show_recovery_dialog) ImGui::CloseCurrentPopup();
     }
     ImGui::SameLine();
-    if (ImGui::Button("Discard", ImVec2(120, 0))) {
+    if (ImGui::Button("Delete recovery copies", ImVec2(0, 0))) {
         for (const RecoverEntry& e : recover_files) autosave_forget(e.key);
         recover_files.clear();
         show_recovery_dialog = false;
         ImGui::CloseCurrentPopup();
     }
     ImGui::SameLine();
-    if (ImGui::Button("Later", ImVec2(120, 0))) { show_recovery_dialog = false; ImGui::CloseCurrentPopup(); }
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Keep the files for the next start");
+    if (ImGui::Button("Start without recovering", ImVec2(0, 0))) { show_recovery_dialog = false; ImGui::CloseCurrentPopup(); }
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Keep recovery copies. Review them from the start screen or next time Firn opens.");
+    if (!recovery_error.empty()) ImGui::TextWrapped("%s", recovery_error.c_str());
+    ImGui::PopTextWrapPos();
     ImGui::EndPopup();
 }
