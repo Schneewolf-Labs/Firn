@@ -7,6 +7,18 @@ section into the next version.
 ## Unreleased
 
 ### Added
+- The project format is now lossless. An audit set every field of the
+  document model to a non-default value and round-tripped it: twenty came
+  back wrong. The active layer, the live selection, a group's expanded
+  state, dash arrays, pattern and texture images, per-object visibility,
+  styled line names, fractional point sizes, and every Adjustment field
+  outside the active kind are all carried now, and `test_openraster_lossless`,
+  `test_openraster_vectors` and `test_psp_vector_compat` keep them that way.
+- Vector layers in a project use Firn's own object encoding
+  (`core/src/io_vec.cpp`) rather than the original's shape layout, which had
+  nowhere to put most of the above. Projects written before this carry the
+  old blob and still open; new ones need this version or later. `.PspImage`
+  is unchanged and still opens in the original, vector shapes and all.
 - Metadata: Exif tags and text notes are read from JPEG and PNG files, kept
   through every edit, and written back on save, including into OpenRaster
   projects. Image > Image Information has a Metadata tab that lists and edits

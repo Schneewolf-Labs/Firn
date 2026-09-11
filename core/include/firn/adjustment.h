@@ -6,6 +6,7 @@
 
 #include "firn/adjust.h"
 #include "firn/image.h"
+#include "firn/json.h"
 
 // Adjustment layers: a color operation applied to everything composited
 // below the layer (within its group), through the layer's mask and opacity.
@@ -61,6 +62,12 @@ struct Adjustment {
     void apply(Image& img) const;   // in place; color kinds leave alpha alone
     static const char* kind_name(Kind k);
     bool operator==(const Adjustment&) const;
+
+    // Every field, for the project format. The native container stores only
+    // the active kind's parameters, the way the original does; this keeps
+    // the ones a person set and then switched away from.
+    json::Value to_json() const;
+    static Adjustment from_json(const json::Value& v);
 };
 
 }  // namespace firn

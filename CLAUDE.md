@@ -125,10 +125,23 @@ docs/    notes on the original: command inventory, module mapping, FORMAT.md
   image and the project format saves them; `App::guides_h()` and friends
   forward to the current document. They are not part of the undo state.
 - **OpenRaster (.ora)** is the project format (`core/src/io_ora.cpp`,
-  zip in `core/src/zip.cpp`): everything the Document holds round-trips,
-  Firn-only data goes in `firn:` attributes (docs/FORMAT.md, "OpenRaster").
-  The classic native format stays fully supported for the original; add
-  new Firn-only state to both the .ora writer and the Firn stash.
+  zip in `core/src/zip.cpp`) and it is **lossless**: everything the
+  Document holds round-trips exactly, down to the active layer, the live
+  selection, every field of an Adjustment (not just the active kind's) and
+  the whole vector object model. Firn-only data goes in `firn:` attributes
+  (docs/FORMAT.md, "OpenRaster"). Vector layers use Firn's own encoding,
+  `core/src/io_vec.cpp` (`io::encode_objects` / `decode_objects`), which is
+  the only thing that can hold dash arrays, pattern and texture images,
+  per-object visibility and fractional point sizes.
+  **Adding a field to the document model means adding it there too**, and
+  extending `test_openraster_lossless` / `test_openraster_vectors`, which
+  set every field to a non-default value and would otherwise pass on a
+  default that happens to match.
+  The classic native format stays fully supported for the original, at the
+  original's fidelity: `test_psp_vector_compat` pins what it carries and
+  what it cannot, and `scripts/original-open.sh` is the real check. Add new
+  Firn-only state to the .ora writer and, where the original can tolerate
+  it, the Firn stash.
 - **Native format reading** lives in `core/src/io_psp.cpp`; `docs/FORMAT.md`
   is the reference and must be updated when the reader learns a new block.
   `tests/test_psp_corpus.cpp` loads every sample under `WindowsInstall/`

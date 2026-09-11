@@ -228,6 +228,7 @@ struct OraWriter {
             out += " firn:mask=\"" + add_file("mask", "png", [Lp] { return mask_png(Lp->mask); }) + "\"";
             if (!L.mask_enabled) out += " firn:mask-enabled=\"0\"";
         }
+        if (!L.expanded) out += " firn:expanded=\"0\"";
         if (L.style.any()) out += " firn:style=\"" + escape(json::dump(L.style.to_json())) + "\"";
     }
 
@@ -243,12 +244,19 @@ struct OraWriter {
             f.set("blur_radius", json::Value::number(a.blur_radius)); f.set("average_radius", json::Value::number(a.average_radius));
             f.set("unsharp_radius", json::Value::number(a.unsharp_radius)); f.set("unsharp_strength", json::Value::number(a.unsharp_strength)); f.set("unsharp_clipping", json::Value::number(a.unsharp_clipping));
             out += " firn:type=\"filter\" firn:filter=\"" + escape(json::dump(f)) + "\"";
+            out += " firn:adjustment-full=\"" + escape(json::dump(a.to_json())) + "\"";
             src = add_file("layer", "png", encode_png(Image(1, 1, {0, 0, 0, 0})));
         } else if (L.is_adjustment()) {
             out += " firn:type=\"adjustment\" firn:adjustment=\"" + add_file("adjustment", "bin", adjustment_to_bytes(L.adjustment)) + "\"";
+            out += " firn:adjustment-full=\"" + escape(json::dump(L.adjustment.to_json())) + "\"";
             src = add_file("layer", "png", encode_png(Image(1, 1, {0, 0, 0, 0})));
         } else {
-            if (L.is_vector()) out += " firn:type=\"vector\" firn:vector=\"" + add_file("vector", "bin", vector_objects_to_bytes(L.objects)) + "\"";
+            // firn:objects is Firn's own encoding and holds the whole model.
+            // Projects written before it exists carry firn:vector instead, a
+            // blob in the original's shape layout, which the reader still
+            // accepts; writing both would nearly double the vector data for
+            // no reader outside Firn.
+            if (L.is_vector()) out += " firn:type=\"vector\" firn:objects=\"" + add_file("objects", "bin", encode_objects(L.objects)) + "\"";
             if (L.background) out += " firn:background=\"1\"";
             // Only the part of the layer that holds anything is stored, with
             // its offset, the way the other editors write it.
@@ -325,6 +333,11 @@ struct OraWriter {
             const char* kind = a.kind == Assistant::Kind::VanishingPoint ? "vanishing-point" : a.kind == Assistant::Kind::Parallel ? "parallel" : "ruler";
             out += std::string("  <firn:assistant kind=\"") + kind + "\" x0=\"" + fmt(a.x0) + "\" y0=\"" + fmt(a.y0) + "\" x1=\"" + fmt(a.x1) + "\" y1=\"" + fmt(a.y1) + "\"/>\n";
         }
+        if (doc.active_layer() >= 0) out += "  <firn:active index=\"" + std::to_string(doc.active_layer()) + "\"/>\n";
+        if (doc.has_selection() && doc.selection().any()) {
+            const Mask* sel = &doc.selection();
+            out += "  <firn:selection src=\"" + add_file("selection", "png", [sel] { return mask_png(*sel); }) + "\"/>\n";
+        }
         if (!doc.icc().empty()) out += "  <firn:icc src=\"" + add_file("profile", "icc", doc.icc()) + "\"/>\n";
         if (const std::vector<uint8_t> tiff = meta::build_tiff(doc.metadata()); !tiff.empty())
             out += "  <firn:exif src=\"" + add_file("exif", "tif", tiff) + "\"/>\n";
@@ -372,6 +385,7 @@ struct OraReader {
             if (auto img = png(*m)) L.mask = mask_from_image(*img, doc.width(), doc.height());
             L.mask_enabled = n.attr_or("firn:mask-enabled", "1") != "0";
         }
+        L.expanded = n.attr_or("firn:expanded", "1") != "0";
         if (const std::string* st = n.attr("firn:style")) {
             json::Value v;
             if (json::parse(*st, v)) L.style = LayerStyle::from_json(v);
@@ -400,14 +414,23 @@ struct OraReader {
             } else if (const std::vector<uint8_t>* bytes = ar.find(n.attr_or("firn:adjustment", ""))) {
                 adjustment_from_bytes(bytes->data(), bytes->size(), L.adjustment);
             }
+            // Written since the project format became lossless: every field,
+            // including the ones the active kind does not use.
+            if (const std::string* full = n.attr("firn:adjustment-full")) {
+                json::Value v;
+                if (json::parse(*full, v)) L.adjustment = Adjustment::from_json(v);
+            }
             return;
         }
         L.pixels = Image(doc.width(), doc.height(), {0, 0, 0, 0});
         L.background = n.attr_or("firn:background", "0") == "1";
         if (type == "vector") {
             L.type = LayerType::Vector;
-            L.expanded = false;
-            if (const std::vector<uint8_t>* bytes = ar.find(n.attr_or("firn:vector", ""))) vector_objects_from_bytes(bytes->data(), bytes->size(), L.objects);
+            if (!n.attr("firn:expanded")) L.expanded = false;
+            const std::vector<uint8_t>* full = ar.find(n.attr_or("firn:objects", ""));
+            if (!full || !decode_objects(full->data(), full->size(), L.objects))
+                if (const std::vector<uint8_t>* bytes = ar.find(n.attr_or("firn:vector", "")))
+                    vector_objects_from_bytes(bytes->data(), bytes->size(), L.objects);
             doc.rasterize_vector_layer(doc.layer_count() - 1);
             return;
         }
@@ -512,6 +535,7 @@ std::unique_ptr<Document> load_ora_from_memory(const uint8_t* data, size_t size,
     if (w <= 0 || h <= 0 || w > 65536 || h > 65536) { if (err) *err = "bad image size in stack.xml"; return nullptr; }
     auto doc = std::make_unique<Document>(w, h);
     OraReader rd{ar, *doc, warnings};
+    int active = -1;
     for (const XmlNode& c : root.children) {
         if (c.name == "stack") rd.stack(c, 0);
         else if (c.name == "firn:icc") { if (const std::vector<uint8_t>* b = ar.find(c.attr_or("src", ""))) doc->set_icc(*b); }
@@ -523,6 +547,13 @@ std::unique_ptr<Document> load_ora_from_memory(const uint8_t* data, size_t size,
             }
         }
         else if (c.name == "firn:text") { doc->metadata().set_text(c.attr_or("key", ""), c.attr_or("value", "")); }
+        else if (c.name == "firn:active") { active = static_cast<int>(c.number("index", -1)); }
+        else if (c.name == "firn:selection") {
+            if (const std::vector<uint8_t>* b = ar.find(c.attr_or("src", ""))) {
+                if (auto img = load_memory(b->data(), b->size()))
+                    doc->set_selection(mask_from_image(*img, doc->width(), doc->height()));
+            }
+        }
         else if (c.name == "firn:guide") {
             const float pos = static_cast<float>(c.number("pos", 0));
             (c.attr_or("axis", "h") == "v" ? doc->guides_v() : doc->guides_h()).push_back(pos);
@@ -547,7 +578,9 @@ std::unique_ptr<Document> load_ora_from_memory(const uint8_t* data, size_t size,
             if (warnings) warnings->push_back("No layers found; loaded the merged image instead");
         } else { if (err) *err = "no readable layers"; return nullptr; }
     }
-    doc->set_active_layer(static_cast<int>(doc->layer_count()) - 1);
+    doc->set_active_layer(active >= 0 && active < static_cast<int>(doc->layer_count())
+                              ? active
+                              : static_cast<int>(doc->layer_count()) - 1);
     doc->touch();
     return doc;
 }

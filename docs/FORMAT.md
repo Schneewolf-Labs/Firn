@@ -279,19 +279,56 @@ Dissolve, fall back to `svg:src-over`).
 
 Firn-only data lives in `firn:` attributes and elements that other readers
 ignore: `firn:blend` (the exact blend mode name), `firn:background`,
-`firn:mask` (a gray PNG, plus `firn:mask-enabled`), `firn:style` (the
-layer style as JSON), `firn:type` = `vector` (`firn:vector`: the native
-vector extension block bytes), `adjustment` (`firn:adjustment`: the native
-adjustment extension bytes) or `filter` (`firn:filter`: JSON parameters);
+`firn:expanded`, `firn:mask` (a gray PNG, plus `firn:mask-enabled`),
+`firn:style` (the layer style as JSON), and `firn:type` = `vector`
+(`firn:objects`, below), `adjustment` (`firn:adjustment`: the native
+adjustment extension bytes) or `filter` (`firn:filter`: JSON parameters).
+Adjustment and filter layers also carry `firn:adjustment-full`, the whole
+`Adjustment` structure as JSON: the native block holds only the active
+kind's parameters, the way the original writes them, and this keeps the
+values a person set and then switched away from.
 16-bit layers are 16-bit PNGs. `<firn:icc src>` holds the color profile,
-`<firn:channel name src>` each saved selection, `<firn:guide axis pos>`
-each ruler guide and `<firn:assistant kind x0 y0 x1 y1>` each painting
-assistant. Reading honors
+`<firn:exif src>` and `<firn:text key value>` the metadata,
+`<firn:channel name src>` each saved selection, `<firn:selection src>` the
+live selection, `<firn:active index>` the active layer, `<firn:guide axis
+pos>` each ruler guide and `<firn:assistant kind x0 y0 x1 y1>` each
+painting assistant. Reading honors
 offsets, hidden layers, nested stacks and 16-bit PNGs from other editors;
 unsupported operators are reported as warnings and composited Normal.
 The zip reader and writer are `core/src/zip.cpp` (store and deflate only);
 `zip::open` reads just the central directory so the file dialog can pull
 `Thumbnails/thumbnail.png` out of a large file without inflating its layers.
+
+### Vector objects (`firn:objects`)
+
+A vector layer's objects are written with Firn's own encoding
+(`core/src/io_vec.cpp`), not the original's shape layout. That layout is
+what makes `.PspImage` files open in the original, and it is also where
+that format stops: it has nowhere to put a dash array, a pattern or
+texture image, a hidden object, or a fractional point size. The project
+format is Firn's own file, so it carries all of it.
+
+The blob is `"FVEC"`, a version, the pattern and texture images as PNG
+(written once each and referred to by index, so two styles sharing one
+pattern store it once), then each object: name, flags, group count,
+stroke width, miter, the four carried file fields, both paint styles,
+the line style with its dashes, the text info, the paths with every
+node's anchor, both handles and its three flag bytes, and the two raw
+byte runs kept for the native writer. A decoder that does not recognise
+the magic or the version reports failure rather than guessing.
+
+Projects written before this existed carry `firn:vector` instead, the
+native shape blob; the reader still accepts it, and falls back to it
+whenever `firn:objects` is absent or unreadable. Nothing writes it any
+more: writing both would nearly double the vector data for a reader that
+exists nowhere outside Firn.
+
+`tests/test_core.cpp` holds the standing audit. `test_openraster_lossless`
+sets every document and layer field to a non-default value and checks each
+one after a round trip; `test_openraster_vectors` does the same for the
+object model; `test_psp_vector_compat` pins what the native container does
+and does not carry, so a change that starts losing more, or that breaks
+what the original reads, shows up as a failure.
 
 ## Firn stash
 

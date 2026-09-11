@@ -2892,16 +2892,151 @@ static void test_icc() {
     std::remove(png.c_str()); std::remove(jpg.c_str());
 }
 
-// What of a vector layer actually survives the project format: not just
-// that the objects come back, but that their geometry, paint, text and
-// grouping come back with them.
+// The project format is meant to be lossless: everything the document model
+// holds comes back. This sets each field to something that is not its
+// default, so a field the writer forgets shows up as a failure rather than
+// as a default that happens to match. Editor-only state (Layer::floating,
+// Object::selected) is deliberately not saved and not checked here.
+static void test_openraster_lossless() {
+    Document doc(40, 30);
+    Layer& bg = doc.add_layer("Back");
+    bg.background = true;
+    bg.pixels.fill({10, 20, 30, 255});
+    LayerStyle& s0 = bg.style;
+    s0.drop_shadow = true; s0.shadow_color = {1, 2, 3, 255};
+    s0.shadow_opacity = 0.4f; s0.shadow_offset_x = 7; s0.shadow_offset_y = -3; s0.shadow_blur = 9;
+    s0.outer_glow = true; s0.glow_color = {4, 5, 6, 255}; s0.glow_size = 11; s0.glow_opacity = 0.3f;
+    s0.inner_glow = true; s0.inner_glow_color = {7, 8, 9, 255}; s0.inner_glow_size = 12; s0.inner_glow_opacity = 0.2f;
+    s0.stroke = true; s0.stroke_color = {10, 11, 12, 255}; s0.stroke_width = 6; s0.stroke_opacity = 0.6f;
+    s0.bevel = true; s0.bevel_size = 4; s0.bevel_depth = 2.5f; s0.bevel_angle = 200;
+
+    Layer& grp = doc.add_layer("Grp");
+    grp.type = LayerType::Group;
+    grp.expanded = false;
+    grp.mask = mask::rectangle(40, 30, 0, 0, 20, 30, false);
+    grp.mask_enabled = false;
+    grp.opacity = 0.25f;
+    grp.blend = BlendMode::Dissolve;   // no SVG operator: restored from firn:blend
+
+    Layer& mem = doc.add_layer("Mem");
+    mem.depth = 1;
+    mem.pixels = Image(40, 30, {0, 0, 0, 0});
+    mem.pixels.set(5, 5, {99, 88, 77, 255});
+    mem.visible = false;
+
+    Layer& deep = doc.add_layer("Deep");
+    deep.depth = 1;
+    { Image16 d(40, 30); for (size_t i = 0; i < d.size(); i += 4) { d.data()[i] = 1234; d.data()[i + 1] = 4321; d.data()[i + 2] = 999; d.data()[i + 3] = 65535; } deep.set_deep(std::move(d)); }
+
+    // An adjustment layer whose kind uses only some of its fields: the rest
+    // are values a person set and switched away from, and must survive.
+    Layer& adj = doc.add_layer("Adj");
+    adj.type = LayerType::Adjustment;
+    Adjustment& a0 = adj.adjustment;
+    a0.kind = Adjustment::Kind::Levels;
+    a0.levels[0] = {1.4f, 10, 240, 5, 250};
+    a0.levels[1] = {0.8f, 3, 200, 1, 199};
+    a0.brightness = 12; a0.contrast = -7;
+    a0.hue = 30; a0.saturation = -20; a0.lightness = 15;
+    a0.colorize = true; a0.colorize_hue = 40; a0.colorize_saturation = 60;
+    a0.threshold = 77; a0.posterize = 3;
+    a0.curves[0] = {{0, 0}, {100, 150}, {255, 255}};
+    a0.hsl_ranges[2][3] = 42;
+    a0.color_balance.midtones[1] = -15;
+    a0.color_balance.preserve_luminosity = false;
+    a0.mixer.mix[1][2] = 40.5f;
+    a0.mixer.constant[0] = -3.5f;
+    a0.mixer.monochrome = true;
+
+    Layer& filt = doc.add_layer("Filt");
+    filt.type = LayerType::Adjustment;
+    filt.adjustment.kind = Adjustment::Kind::UnsharpMask;
+    filt.adjustment.unsharp_radius = 3.5f;
+    filt.adjustment.unsharp_strength = 140;
+    filt.adjustment.unsharp_clipping = 4;
+    filt.adjustment.blur_radius = 6.5f;      // another kind's field, still carried
+
+    doc.alpha_channels().push_back({"Saved", mask::rectangle(40, 30, 2, 2, 10, 10, false)});
+    doc.guides_h().push_back(6.5f);
+    doc.guides_v().push_back(11.25f);
+    { Assistant as; as.kind = Assistant::Kind::Parallel; as.x0 = 1; as.y0 = 2; as.x1 = 3; as.y1 = 4; doc.assistants().push_back(as); }
+    doc.set_icc(std::vector<uint8_t>{1, 2, 3, 4, 5});
+    doc.metadata().set(meta::Group::Image, 0x013B, "Someone");
+    doc.metadata().set_text("Note", "hello");
+    doc.set_selection(mask::rectangle(40, 30, 4, 4, 14, 14, false));
+    doc.set_active_layer(2);
+
+    const std::vector<uint8_t> bytes = io::save_ora_to_memory(doc);
+    std::string err;
+    std::vector<std::string> warnings;
+    auto b = io::load_ora_from_memory(bytes.data(), bytes.size(), &err, &warnings);
+    CHECK(b && err.empty() && warnings.empty());
+    CHECK(b->layer_count() == 6 && b->width() == 40 && b->height() == 30);
+    CHECK(b->layer(0).name == "Back" && b->layer(4).name == "Adj");
+
+    // Document state.
+    CHECK(b->active_layer() == 2);
+    CHECK(b->has_selection() && b->selection().at(8, 8) == 255 && b->selection().at(30, 20) == 0);
+    CHECK(b->alpha_channels().size() == 1 && b->alpha_channels()[0].name == "Saved" && b->alpha_channels()[0].mask.at(5, 5) == 255);
+    CHECK(b->guides_h().size() == 1 && std::abs(b->guides_h()[0] - 6.5f) < 0.01f);
+    CHECK(b->guides_v().size() == 1 && std::abs(b->guides_v()[0] - 11.25f) < 0.01f);
+    CHECK(b->assistants().size() == 1 && b->assistants()[0].kind == Assistant::Kind::Parallel && b->assistants()[0].y1 == 4);
+    CHECK(b->icc() == std::vector<uint8_t>({1, 2, 3, 4, 5}));
+    CHECK(b->metadata().find(meta::Group::Image, 0x013B) && b->metadata().find_text("Note"));
+    CHECK(b->bit_depth() == 16);
+
+    // Layer state.
+    const Layer& L0 = b->layer(0);
+    CHECK(L0.background && L0.pixels.get(1, 1).r == 10);
+    const LayerStyle& s = L0.style;
+    CHECK(s.drop_shadow && s.shadow_color.r == 1 && std::abs(s.shadow_opacity - 0.4f) < 0.01f);
+    CHECK(std::abs(s.shadow_offset_x - 7) < 0.01f && std::abs(s.shadow_offset_y + 3) < 0.01f && std::abs(s.shadow_blur - 9) < 0.01f);
+    CHECK(s.outer_glow && s.glow_color.g == 5 && std::abs(s.glow_size - 11) < 0.01f && std::abs(s.glow_opacity - 0.3f) < 0.01f);
+    CHECK(s.inner_glow && s.inner_glow_color.b == 9 && std::abs(s.inner_glow_size - 12) < 0.01f && std::abs(s.inner_glow_opacity - 0.2f) < 0.01f);
+    CHECK(s.stroke && s.stroke_color.r == 10 && s.stroke_width == 6 && std::abs(s.stroke_opacity - 0.6f) < 0.01f);
+    CHECK(s.bevel && std::abs(s.bevel_size - 4) < 0.01f && std::abs(s.bevel_depth - 2.5f) < 0.01f && std::abs(s.bevel_angle - 200) < 0.01f);
+
+    const Layer& G = b->layer(1);
+    CHECK(G.type == LayerType::Group && !G.expanded);
+    CHECK(G.has_mask() && G.mask.at(3, 3) == 255 && G.mask.at(30, 3) == 0 && !G.mask_enabled);
+    CHECK(std::abs(G.opacity - 0.25f) < 0.01f && G.blend == BlendMode::Dissolve);
+
+    const Layer& M = b->layer(2);
+    CHECK(M.depth == 1 && !M.visible && M.pixels.get(5, 5).r == 99);
+
+    const Layer& D = b->layer(3);
+    CHECK(D.depth == 1 && D.is_deep() && D.deep->data()[0] == 1234 && D.deep->data()[1] == 4321 && D.deep->data()[2] == 999);
+
+    // Adjustment layers keep every field, not only the active kind's.
+    const Adjustment& a = b->layer(4).adjustment;
+    CHECK(b->layer(4).is_adjustment() && a.kind == Adjustment::Kind::Levels);
+    CHECK(std::abs(a.levels[0].gamma - 1.4f) < 0.001f && a.levels[0].in_low == 10 && a.levels[0].out_high == 250);
+    CHECK(std::abs(a.levels[1].gamma - 0.8f) < 0.001f && a.levels[1].in_high == 200);
+    CHECK(a.brightness == 12 && a.contrast == -7);
+    CHECK(a.hue == 30 && a.saturation == -20 && a.lightness == 15);
+    CHECK(a.colorize && a.colorize_hue == 40 && a.colorize_saturation == 60);
+    CHECK(a.threshold == 77 && a.posterize == 3);
+    CHECK(a.curves[0].size() == 3 && std::abs(a.curves[0][1].second - 150) < 0.01f);
+    CHECK(a.hsl_ranges[2][3] == 42);
+    CHECK(a.color_balance.midtones[1] == -15 && !a.color_balance.preserve_luminosity);
+    CHECK(std::abs(a.mixer.mix[1][2] - 40.5f) < 0.01f && std::abs(a.mixer.constant[0] + 3.5f) < 0.01f && a.mixer.monochrome);
+
+    const Adjustment& f = b->layer(5).adjustment;
+    CHECK(f.kind == Adjustment::Kind::UnsharpMask && f.is_filter());
+    CHECK(std::abs(f.unsharp_radius - 3.5f) < 0.01f && f.unsharp_strength == 140 && f.unsharp_clipping == 4);
+    CHECK(std::abs(f.blur_radius - 6.5f) < 0.01f);
+}
+
+// The project format must be lossless: every field of the document model
+// comes back exactly. The native container cannot carry all of it, which is
+// what test_psp_vector_compat below pins down.
 static void test_openraster_vectors() {
     Document doc(64, 48);
     doc.add_layer("Background").background = true;
     Layer& L = doc.add_layer("Shapes");
     L.type = LayerType::Vector;
 
-    // A curved open path with real Bezier handles and a dashed, capped stroke.
+    // A curved open path with real Bezier handles, a dashed stroke and caps.
     {
         vec::Object o;
         o.name = "Curve";
@@ -2909,28 +3044,51 @@ static void test_openraster_vectors() {
         p.closed = false;
         vec::Node a; a.x = 4; a.y = 4; a.in_x = 2; a.in_y = 3; a.out_x = 9; a.out_y = 7;
         vec::Node b; b.x = 20; b.y = 30; b.in_x = 15; b.in_y = 22; b.out_x = 24; b.out_y = 33;
+        b.flags[0] = 1; b.flags[1] = 0x40; b.flags[2] = 3;
         p.nodes = {a, b};
         o.paths.push_back(p);
         o.stroke.kind = vec::PaintStyle::Kind::Solid;
         o.stroke.color = {12, 34, 56, 255};
         o.stroke_width = 3.5f;
+        o.miter = 7.5f;
         o.line.dashes = {4.0f, 2.0f};
         o.line.first_cap = 3;
         o.line.last_cap = 1;
+        o.line.name = "Dashed";
         o.antialias = false;
+        o.visible = false;
+        o.attr_raw = std::vector<uint8_t>(56, 0xAB);
         L.objects.push_back(o);
     }
-    // A closed shape filled with a gradient.
+    // A closed shape filled with a fully specified gradient.
     {
         vec::Object o = vec::make_ellipse(30, 20, 10, 6);
         o.name = "Blob";
         o.fill.kind = vec::PaintStyle::Kind::Gradient;
-        o.fill.gradient.style = vec::GradientStyle::Sunburst;
-        o.fill.gradient.angle = 33.0f;
-        o.fill.gradient.center_x = 40;
-        o.fill.gradient.colors = {{{255, 0, 0, 255}, 0, 50}, {{0, 0, 255, 255}, 100, 50}};
+        o.fill.gradient.name = "Sunset";
+        o.fill.gradient.style = vec::GradientStyle::Radial;
+        o.fill.gradient.angle = 77.5f;
+        o.fill.gradient.center_x = 35;
+        o.fill.gradient.repeats = 3;
+        o.fill.gradient.invert = true;
+        o.fill.gradient.colors = {{{255, 0, 0, 255}, 0, 40}, {{0, 0, 255, 255}, 100, 50}};
+        o.fill.gradient.opacities = {{100, 0, 50}, {30, 100, 55}};
         o.stroke.kind = vec::PaintStyle::Kind::None;
-        o.visible = false;
+        L.objects.push_back(o);
+    }
+    // A pattern fill and a stroke texture: images, which the original's shape
+    // layout has nowhere to put.
+    {
+        vec::Object o = vec::make_rectangle(40, 30, 60, 44);
+        o.name = "Patterned";
+        o.fill.kind = vec::PaintStyle::Kind::Pattern;
+        o.fill.pattern = std::make_shared<Image>(4, 4, Color{7, 8, 9, 255});
+        o.fill.pattern_scale = 2.5f;
+        o.fill.pattern_angle = 30.0f;
+        o.stroke.kind = vec::PaintStyle::Kind::Solid;
+        o.stroke.texture = std::make_shared<Image>(2, 2, Color{200, 200, 200, 255});
+        o.stroke.texture_scale = 1.5f;
+        o.stroke.texture_strength = 0.5f;
         L.objects.push_back(o);
     }
     // A group of two rectangles.
@@ -2949,18 +3107,21 @@ static void test_openraster_vectors() {
         r2.name = "Two";
         L.objects.push_back(r2);
     }
-    // A text object, which must stay editable text and not become outlines.
+    // Text, which must stay editable text rather than becoming outlines.
     {
         vec::Object o;
         o.name = "Label";
         o.is_text = true;
         o.text.text = "Firn";
         o.text.font_family = "DejaVu Sans";
-        o.text.size = 17.5f;
+        o.text.font_path = "/usr/share/fonts/x.ttf";
+        o.text.size = 17.5f;     // fractional: a whole-number field would round it
         o.text.align = 2;
         o.text.rotation = 15.0f;
         o.text.x = 6;
         o.text.y = 40;
+        o.text.baseline = 13.5f;
+        o.text.antialias = false;
         o.fill.kind = vec::PaintStyle::Kind::Solid;
         o.fill.color = {9, 9, 9, 255};
         L.objects.push_back(o);
@@ -2974,79 +3135,130 @@ static void test_openraster_vectors() {
     auto back = io::load_ora_from_memory(bytes.data(), bytes.size(), &err, &warnings);
     CHECK(back && err.empty() && back->layer_count() == 2);
     const Layer& R = back->layer(1);
-    CHECK(R.is_vector() && R.objects.size() == 6);
+    CHECK(R.is_vector() && R.objects.size() == 7);
 
     const vec::Object& curve = R.objects[0];
     CHECK(curve.name == "Curve");
     CHECK(curve.paths.size() == 1 && !curve.paths[0].closed && curve.paths[0].nodes.size() == 2);
     CHECK(std::abs(curve.paths[0].nodes[1].x - 20.0f) < 0.01f && std::abs(curve.paths[0].nodes[1].y - 30.0f) < 0.01f);
     CHECK(std::abs(curve.paths[0].nodes[0].out_x - 9.0f) < 0.01f && std::abs(curve.paths[0].nodes[1].in_y - 22.0f) < 0.01f);
+    CHECK(curve.paths[0].nodes[1].flags[1] == 0x40 && curve.paths[0].nodes[1].flags[2] == 3);
     CHECK(curve.stroke.kind == vec::PaintStyle::Kind::Solid && curve.stroke.color.r == 12 && curve.stroke.color.b == 56);
-    CHECK(std::abs(curve.stroke_width - 3.5f) < 0.01f);
+    CHECK(std::abs(curve.stroke_width - 3.5f) < 0.01f && std::abs(curve.miter - 7.5f) < 0.01f);
     CHECK(curve.line.first_cap == 3 && curve.line.last_cap == 1);
-    // KNOWN GAP: a shape's dash array has nowhere to go. The attribute chunk
-    // carries the end caps and the line style block the segment caps, but
-    // neither holds the dashes, so a dashed styled line comes back solid.
-    // Both formats share the shape writer, so both lose it. If this starts
-    // passing, the gap was fixed: assert the dashes instead.
-    CHECK(curve.line.dashes.empty());
+    CHECK(curve.line.dashes.size() == 2 && std::abs(curve.line.dashes[0] - 4.0f) < 0.01f);
+    CHECK(curve.line.name == "Dashed");
     CHECK(!curve.antialias);
+    CHECK(!curve.visible);
+    CHECK(curve.attr_raw.size() == 56 && curve.attr_raw[0] == 0xAB);
 
     const vec::Object& blob = R.objects[1];
-    CHECK(blob.name == "Blob");
-    // KNOWN GAP: Object::visible is never written. A vector object hidden
-    // from the Layers palette or the Vector Properties dialog comes back
-    // visible. Both formats, and nothing warns.
-    CHECK(blob.visible);
-    CHECK(blob.paths.size() == 1 && blob.paths[0].closed);
+    CHECK(blob.name == "Blob" && blob.paths.size() == 1 && blob.paths[0].closed);
     CHECK(blob.fill.kind == vec::PaintStyle::Kind::Gradient);
-    CHECK(blob.fill.gradient.style == vec::GradientStyle::Sunburst);
-    CHECK(std::abs(blob.fill.gradient.angle - 33.0f) < 0.5f);
-    CHECK(blob.fill.gradient.colors.size() == 2 && blob.fill.gradient.colors[0].color.r == 255 && blob.fill.gradient.colors[1].color.b == 255);
+    const vec::Gradient& g = blob.fill.gradient;
+    CHECK(g.name == "Sunset" && g.style == vec::GradientStyle::Radial);
+    CHECK(std::abs(g.angle - 77.5f) < 0.01f && std::abs(g.center_x - 35.0f) < 0.01f);
+    CHECK(g.repeats == 3 && g.invert);
+    CHECK(g.colors.size() == 2 && g.colors[0].color.r == 255 && std::abs(g.colors[0].mid - 40.0f) < 0.01f);
+    CHECK(g.opacities.size() == 2 && std::abs(g.opacities[1].opacity - 30.0f) < 0.01f && std::abs(g.opacities[1].mid - 55.0f) < 0.01f);
     CHECK(blob.stroke.kind == vec::PaintStyle::Kind::None);
 
-    CHECK(R.objects[2].is_group && R.objects[2].group_count == 2 && R.objects[2].name == "Pair");
-    CHECK(vec::group_end(R.objects, 2) == 5);
-    CHECK(R.objects[3].name == "One" && R.objects[3].fill.color.g == 255);
-    CHECK(R.objects[4].name == "Two");
+    const vec::Object& pat = R.objects[2];
+    CHECK(pat.fill.kind == vec::PaintStyle::Kind::Pattern);
+    CHECK(pat.fill.pattern && pat.fill.pattern->width() == 4 && pat.fill.pattern->get(1, 1).r == 7);
+    CHECK(std::abs(pat.fill.pattern_scale - 2.5f) < 0.01f && std::abs(pat.fill.pattern_angle - 30.0f) < 0.01f);
+    CHECK(pat.stroke.texture && pat.stroke.texture->width() == 2);
+    CHECK(std::abs(pat.stroke.texture_scale - 1.5f) < 0.01f && std::abs(pat.stroke.texture_strength - 0.5f) < 0.01f);
 
-    const vec::Object& label = R.objects[5];
+    CHECK(R.objects[3].is_group && R.objects[3].group_count == 2 && R.objects[3].name == "Pair");
+    CHECK(vec::group_end(R.objects, 3) == 6);
+    CHECK(R.objects[4].name == "One" && R.objects[4].fill.color.g == 255);
+    CHECK(R.objects[5].name == "Two");
+
+    const vec::Object& label = R.objects[6];
     CHECK(label.is_text && label.text.text == "Firn");
-    // Point size is stored as a whole number, so a fractional size rounds.
-    CHECK(std::abs(label.text.size - 18.0f) < 0.01f);
-    CHECK(label.text.align == 2);
-    CHECK(std::abs(label.text.rotation - 15.0f) < 0.5f);
+    CHECK(std::abs(label.text.size - 17.5f) < 0.01f);
+    CHECK(label.text.align == 2 && !label.text.antialias);
+    CHECK(std::abs(label.text.rotation - 15.0f) < 0.01f);
+    CHECK(std::abs(label.text.baseline - 13.5f) < 0.01f);
+    CHECK(label.text.font_path == "/usr/share/fonts/x.ttf" && label.text.font_family == "DejaVu Sans");
     CHECK(label.fill.color.r == 9);
 
-    // The rendered cache comes back too, so opening a project draws without
-    // re-rasterizing every vector layer first.
+    // The rendered cache comes back, so a project opens without re-rasterizing.
     CHECK(R.pixels.width() == 64 && R.pixels.height() == 48);
 
-    // KNOWN GAP: a pattern or texture paint style is an image, and the shape
-    // writer has no room for one. The kind survives but the image does not,
-    // so the object comes back painting its flat colour instead. Again both
-    // formats, and nothing warns.
-    {
-        Document pd(16, 16);
-        pd.add_layer("Background").background = true;
-        Layer& pl = pd.add_layer("V");
-        pl.type = LayerType::Vector;
-        vec::Object po = vec::make_rectangle(2, 2, 12, 12);
-        po.fill.kind = vec::PaintStyle::Kind::Pattern;
-        po.fill.pattern = std::make_shared<Image>(4, 4, Color{7, 8, 9, 255});
-        po.fill.pattern_scale = 2.5f;
-        pl.objects.push_back(po);
-        pl.pixels = Image(16, 16, {0, 0, 0, 0});
-        pd.rasterize_vector_layer(1);
-        const std::vector<uint8_t> pb = io::save_ora_to_memory(pd);
-        std::string perr;
-        auto pback = io::load_ora_from_memory(pb.data(), pb.size(), &perr, nullptr);
-        CHECK(pback && pback->layer(1).objects.size() == 1);
-        const vec::PaintStyle& pf = pback->layer(1).objects[0].fill;
-        CHECK(pf.kind == vec::PaintStyle::Kind::Pattern);
-        CHECK(!pf.pattern);
-        CHECK(std::abs(pf.pattern_scale - 1.0f) < 0.01f);
-    }
+    // Projects Firn wrote before it had its own object encoding carry only
+    // the native blob. The reader must still take that path, so the complete
+    // decoder has to reject those bytes rather than half-read them.
+    const std::vector<uint8_t> old_blob = io::vector_objects_to_bytes(L.objects);
+    std::vector<vec::Object> ignored;
+    CHECK(!io::decode_objects(old_blob.data(), old_blob.size(), ignored));
+    std::vector<vec::Object> from_old;
+    CHECK(io::vector_objects_from_bytes(old_blob.data(), old_blob.size(), from_old));
+    CHECK(from_old.size() == 7 && from_old[0].name == "Curve");
+    // And the new encoding refuses anything that is not its own.
+    CHECK(!io::decode_objects(reinterpret_cast<const uint8_t*>("not a vector blob"), 17, ignored));
+    CHECK(!io::decode_objects(nullptr, 0, ignored));
+}
+
+// The native container is what the original reads, so its shape layout is
+// fixed and cannot hold everything Firn's model does. This pins what it does
+// carry and what it drops, so a change to the writer that breaks the
+// original's reader, or that quietly starts losing more, shows up here.
+static void test_psp_vector_compat() {
+    Document doc(32, 24);
+    doc.add_layer("Background").background = true;
+    Layer& L = doc.add_layer("Shapes");
+    L.type = LayerType::Vector;
+    vec::Object o = vec::make_rectangle(3, 3, 20, 18);
+    o.name = "Box";
+    o.stroke.kind = vec::PaintStyle::Kind::Solid;
+    o.stroke.color = {11, 22, 33, 255};
+    o.stroke_width = 2.5f;
+    o.line.first_cap = 3;
+    o.line.last_cap = 1;
+    o.fill.kind = vec::PaintStyle::Kind::Gradient;
+    o.fill.gradient.style = vec::GradientStyle::Sunburst;
+    o.fill.gradient.colors = {{{255, 0, 0, 255}, 0, 50}, {{0, 0, 255, 255}, 100, 50}};
+    // The parts the original's layout has no room for.
+    o.line.dashes = {4.0f, 2.0f};
+    o.visible = false;
+    o.fill.pattern = std::make_shared<Image>(4, 4, Color{7, 8, 9, 255});
+    L.objects.push_back(o);
+    vec::Object t;
+    t.is_text = true;
+    t.text.text = "Hi";
+    t.text.font_family = "DejaVu Sans";
+    t.text.size = 17.5f;
+    t.fill.kind = vec::PaintStyle::Kind::Solid;
+    L.objects.push_back(t);
+    L.pixels = Image(32, 24, {0, 0, 0, 0});
+    doc.rasterize_vector_layer(1);
+
+    const std::vector<uint8_t> bytes = io::save_psp_to_memory(doc);
+    std::string err;
+    std::vector<std::string> warnings;
+    auto back = io::load_psp_from_memory(bytes.data(), bytes.size(), &err, &warnings);
+    CHECK(back && err.empty() && back->layer_count() == 2);
+    const Layer& R = back->layer(1);
+    CHECK(R.is_vector() && R.objects.size() == 2);
+    const vec::Object& b = R.objects[0];
+    // What the original's shape blocks do carry.
+    CHECK(b.name == "Box");
+    CHECK(b.paths.size() == 1 && b.paths[0].closed && b.paths[0].nodes.size() == 4);
+    CHECK(b.stroke.kind == vec::PaintStyle::Kind::Solid && b.stroke.color.g == 22);
+    CHECK(std::abs(b.stroke_width - 2.5f) < 0.01f);
+    CHECK(b.line.first_cap == 3 && b.line.last_cap == 1);
+    CHECK(b.fill.kind == vec::PaintStyle::Kind::Gradient && b.fill.gradient.style == vec::GradientStyle::Sunburst);
+    CHECK(b.fill.gradient.colors.size() == 2 && b.fill.gradient.colors[1].color.b == 255);
+    CHECK(R.objects[1].is_text && R.objects[1].text.text == "Hi");
+    // What it cannot. These are the reason .ora is the project format. If one
+    // of them starts passing, the native writer learned something new and this
+    // test should say so rather than keep pretending it did not.
+    CHECK(b.line.dashes.empty());          // no room for a dash array
+    CHECK(b.visible);                      // per-object visibility is not stored
+    CHECK(!b.fill.pattern);                // a pattern is an image
+    CHECK(std::abs(R.objects[1].text.size - 18.0f) < 0.01f);   // point size is a whole number
 }
 
 static void test_metadata() {
@@ -3117,7 +3329,9 @@ static void test_metadata() {
 
 int main() {
     test_icc();
+    test_openraster_lossless();
     test_openraster_vectors();
+    test_psp_vector_compat();
     test_metadata();
     test_16bit();
     test_print();

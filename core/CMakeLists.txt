@@ -22,6 +22,7 @@ add_library(firncore STATIC
   src/raster16.cpp
   src/icc.cpp
   src/metadata.cpp
+  src/io_vec.cpp
   src/io.cpp
   src/io_psp.cpp
   src/io_psd.cpp

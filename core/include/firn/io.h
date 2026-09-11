@@ -5,6 +5,7 @@
 
 #include "firn/image.h"
 #include "firn/metadata.h"
+#include "firn/vector.h"
 
 namespace firn::io {
 
@@ -28,6 +29,13 @@ meta::Metadata read_metadata(const std::string& path);
 // Replaces the metadata of an already written PNG or JPEG file in place.
 // Other formats have nowhere to put it and succeed without doing anything.
 bool embed_metadata(const std::string& path, const meta::Metadata& md, std::string* err = nullptr);
+
+// Firn's own encoding of a vector layer's objects: everything the model
+// holds, including dash arrays, pattern and texture images, per-object
+// visibility and fractional point sizes, none of which the original's
+// shape layout can carry. Used by the project format.
+std::vector<uint8_t> encode_objects(const std::vector<vec::Object>& objects);
+bool decode_objects(const uint8_t* data, size_t size, std::vector<vec::Object>& out);
 
 // Writes PNG. Returns false on failure.
 bool save_png(const Image& img, const std::string& path, std::string* err = nullptr);
