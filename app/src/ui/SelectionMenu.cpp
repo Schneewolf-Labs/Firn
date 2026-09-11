@@ -7,6 +7,7 @@
 #include <memory>
 
 #include "App.h"
+#include "ui/SelectionMenuState.h"
 #include "firn/commands.h"
 #include "firn/mask.h"
 #include "firn/raster.h"
@@ -181,12 +182,12 @@ void App::draw_selection_dialogs() {
     for (int which = Expand; which <= Feather; ++which) {
         if (!ImGui::BeginPopupModal(kTitles[which], nullptr, ImGuiWindowFlags_AlwaysAutoResize)) continue;
         escape();
-        ImGui::SliderInt("Pixels", &sel_modify_px, 1, 100);
+        ImGui::SliderInt("Pixels", &selection_menu_state->sel_modify_px, 1, 100);
         buttons(kTitles[which], [&] {
             modify(kTitles[which], [&](Mask& m) {
-                if (which == Expand) mask::expand(m, sel_modify_px);
-                else if (which == Contract) mask::contract(m, sel_modify_px);
-                else mask::feather(m, static_cast<float>(sel_modify_px));
+                if (which == Expand) mask::expand(m, selection_menu_state->sel_modify_px);
+                else if (which == Contract) mask::contract(m, selection_menu_state->sel_modify_px);
+                else mask::feather(m, static_cast<float>(selection_menu_state->sel_modify_px));
             });
         });
         ImGui::EndPopup();
@@ -197,12 +198,12 @@ void App::draw_selection_dialogs() {
         ImGui::RadioButton("Inside", &side, 0); ImGui::SameLine();
         ImGui::RadioButton("Outside", &side, 1); ImGui::SameLine();
         ImGui::RadioButton("Both", &side, 2);
-        ImGui::SliderInt("Feather amount", &sel_modify_px, 1, 100);
+        ImGui::SliderInt("Feather amount", &selection_menu_state->sel_modify_px, 1, 100);
         buttons("Inside/Outside Feather", [&] {
             modify("Inside/Outside Feather", [&](Mask& m) {
-                if (side == 0) mask::feather_inside(m, static_cast<float>(sel_modify_px));
-                else if (side == 1) mask::feather_outside(m, static_cast<float>(sel_modify_px));
-                else mask::feather(m, static_cast<float>(sel_modify_px));
+                if (side == 0) mask::feather_inside(m, static_cast<float>(selection_menu_state->sel_modify_px));
+                else if (side == 1) mask::feather_outside(m, static_cast<float>(selection_menu_state->sel_modify_px));
+                else mask::feather(m, static_cast<float>(selection_menu_state->sel_modify_px));
             });
         });
         ImGui::EndPopup();
@@ -213,10 +214,10 @@ void App::draw_selection_dialogs() {
         ImGui::RadioButton("Remove specks", &what, 0); ImGui::SameLine();
         ImGui::RadioButton("Remove holes", &what, 1); ImGui::SameLine();
         ImGui::RadioButton("Both", &what, 2);
-        ImGui::SliderInt("Speck size (pixels)", &sel_speck, 1, 1000, "%d", ImGuiSliderFlags_Logarithmic);
-        ImGui::SliderInt("Hole size (pixels)", &sel_hole, 1, 1000, "%d", ImGuiSliderFlags_Logarithmic);
+        ImGui::SliderInt("Speck size (pixels)", &selection_menu_state->sel_speck, 1, 1000, "%d", ImGuiSliderFlags_Logarithmic);
+        ImGui::SliderInt("Hole size (pixels)", &selection_menu_state->sel_hole, 1, 1000, "%d", ImGuiSliderFlags_Logarithmic);
         buttons("Remove Specks and Holes", [&] {
-            modify("Remove Specks and Holes", [&](Mask& m) { mask::remove_specks_and_holes(m, what == 1 ? 0 : sel_speck, what == 0 ? 0 : sel_hole); });
+            modify("Remove Specks and Holes", [&](Mask& m) { mask::remove_specks_and_holes(m, what == 1 ? 0 : selection_menu_state->sel_speck, what == 0 ? 0 : selection_menu_state->sel_hole); });
         });
         ImGui::EndPopup();
     }
@@ -225,15 +226,15 @@ void App::draw_selection_dialogs() {
         static int op = 0;  // 0 add, 1 subtract
         ImGui::RadioButton("Add color range", &op, 0); ImGui::SameLine();
         ImGui::RadioButton("Subtract color range", &op, 1);
-        ImGui::ColorEdit3("Reference color", sel_color);
+        ImGui::ColorEdit3("Reference color", selection_menu_state->sel_color);
         ImGui::SameLine();
-        if (ImGui::SmallButton("Foreground")) { for (int i = 0; i < 3; ++i) sel_color[i] = fg_color[i]; }
-        ImGui::SliderInt("Tolerance", &sel_tolerance, 0, 200);
-        ImGui::SliderInt("Softness", &sel_softness, 0, 200);
+        if (ImGui::SmallButton("Foreground")) { for (int i = 0; i < 3; ++i) selection_menu_state->sel_color[i] = fg_color[i]; }
+        ImGui::SliderInt("Tolerance", &selection_menu_state->sel_tolerance, 0, 200);
+        ImGui::SliderInt("Softness", &selection_menu_state->sel_softness, 0, 200);
         buttons("Select Color Range", [&] {
             if (active_layer() < 0 || !doc->layer(active_layer()).is_raster()) return;
-            const Color c{static_cast<uint8_t>(sel_color[0] * 255 + 0.5f), static_cast<uint8_t>(sel_color[1] * 255 + 0.5f), static_cast<uint8_t>(sel_color[2] * 255 + 0.5f), 255};
-            Mask range = mask::select_color_range(active_pixels(*this), c, sel_tolerance, sel_softness);
+            const Color c{static_cast<uint8_t>(selection_menu_state->sel_color[0] * 255 + 0.5f), static_cast<uint8_t>(selection_menu_state->sel_color[1] * 255 + 0.5f), static_cast<uint8_t>(selection_menu_state->sel_color[2] * 255 + 0.5f), 255};
+            Mask range = mask::select_color_range(active_pixels(*this), c, selection_menu_state->sel_tolerance, selection_menu_state->sel_softness);
             Mask result = doc->has_selection() ? doc->selection() : Mask(doc->width(), doc->height(), 0);
             mask::combine(result, range, op == 0 ? mask::Combine::Add : mask::Combine::Subtract);
             set_selection("Select Color Range", std::move(result));
@@ -242,11 +243,11 @@ void App::draw_selection_dialogs() {
     }
     if (ImGui::BeginPopupModal(kTitles[Similar], nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
         escape();
-        ImGui::SliderInt("Tolerance", &sel_tolerance, 0, 200);
+        ImGui::SliderInt("Tolerance", &selection_menu_state->sel_tolerance, 0, 200);
         ImGui::TextDisabled("Selects every pixel of the layer within the tolerance of a color inside the selection.");
         buttons("Select Similar", [&] {
             if (active_layer() < 0 || !doc->layer(active_layer()).is_raster() || !doc->has_selection()) return;
-            set_selection("Select Similar", mask::select_similar(active_pixels(*this), doc->selection(), sel_tolerance));
+            set_selection("Select Similar", mask::select_similar(active_pixels(*this), doc->selection(), selection_menu_state->sel_tolerance));
         });
         ImGui::EndPopup();
     }
@@ -259,17 +260,17 @@ void App::draw_selection_dialogs() {
     }
     if (ImGui::BeginPopupModal(kTitles[Smooth], nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
         escape();
-        ImGui::SliderInt("Smoothing amount", &sel_smooth_amount, 1, 100, "%d", ImGuiSliderFlags_Logarithmic);
+        ImGui::SliderInt("Smoothing amount", &selection_menu_state->sel_smooth_amount, 1, 100, "%d", ImGuiSliderFlags_Logarithmic);
         ImGui::Checkbox("Preserve corners", &sel_preserve_corners);
-        buttons("Smooth Selection", [&] { modify("Smooth Selection", [&](Mask& m) { mask::smooth(m, sel_smooth_amount, sel_preserve_corners); }); });
+        buttons("Smooth Selection", [&] { modify("Smooth Selection", [&](Mask& m) { mask::smooth(m, selection_menu_state->sel_smooth_amount, sel_preserve_corners); }); });
         ImGui::EndPopup();
     }
     if (ImGui::BeginPopupModal(kTitles[Defringe], nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
         escape();
-        ImGui::SliderInt("Width (pixels)", &sel_defringe, 1, 20);
+        ImGui::SliderInt("Width (pixels)", &selection_menu_state->sel_defringe, 1, 20);
         buttons("Defringe", [&] {
             if (active_layer() < 0 || !doc->layer(active_layer()).is_raster()) return;
-            const int w = sel_defringe;
+            const int w = selection_menu_state->sel_defringe;
             run(std::make_unique<AdjustCommand>(static_cast<size_t>(active_layer()), "Defringe", [w](Image& img) { raster::defringe(img, w); }));
         });
         ImGui::EndPopup();

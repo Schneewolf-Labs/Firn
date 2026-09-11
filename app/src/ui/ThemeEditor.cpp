@@ -6,6 +6,7 @@
 #include <filesystem>
 
 #include "App.h"
+#include "ui/ThemeEditorState.h"
 #include "firn/text.h"
 #include "imgui.h"
 #include "imgui_impl_opengl3.h"
@@ -96,13 +97,13 @@ void App::apply_pending_font() {
 void App::open_theme_editor() {
     ensure_themes();
     const Theme* t = find_theme(config.theme);
-    theme_edit = t ? *t : themes.front();
-    theme_edit_from = theme_edit.name;
-    std::snprintf(theme_name_buf, sizeof(theme_name_buf), "%s", theme_edit.name.c_str());
-    theme_editor_before = theme_edit;
-    theme_editor_before.capture_style();
-    theme_editor_before.font_path = font_current_path;
-    theme_editor_before.font_size = font_current_size;
+    theme_editor_state->theme_edit = t ? *t : themes.front();
+    theme_editor_state->theme_edit_from = theme_editor_state->theme_edit.name;
+    std::snprintf(theme_editor_state->theme_name_buf, sizeof(theme_editor_state->theme_name_buf), "%s", theme_editor_state->theme_edit.name.c_str());
+    theme_editor_state->theme_editor_before = theme_editor_state->theme_edit;
+    theme_editor_state->theme_editor_before.capture_style();
+    theme_editor_state->theme_editor_before.font_path = font_current_path;
+    theme_editor_state->theme_editor_before.font_size = font_current_size;
     show_theme_editor = true;
 }
 
@@ -134,7 +135,7 @@ void App::import_theme(const std::string& path) {
 
 void App::export_theme(const std::string& path) {
     std::string err;
-    Theme t = show_theme_editor ? theme_edit : (find_theme(config.theme) ? *find_theme(config.theme) : themes.front());
+    Theme t = show_theme_editor ? theme_editor_state->theme_edit : (find_theme(config.theme) ? *find_theme(config.theme) : themes.front());
     if (t.save(path, &err)) status = "Exported theme to " + path;
     else status = "Export theme: " + err;
 }
@@ -144,33 +145,33 @@ void App::draw_theme_editor() {
     if (!show_theme_editor) return;
     ImGui::SetNextWindowSize(ImVec2(760, 560), ImGuiCond_Appearing);
     if (!ImGui::BeginPopupModal("Theme Editor", nullptr, ImGuiWindowFlags_NoScrollbar)) return;
-    Theme& t = theme_edit;
+    Theme& t = theme_editor_state->theme_edit;
     bool changed = false;
 
     // Top row: which theme is being edited, and its name.
     ensure_themes();
     ImGui::SetNextItemWidth(200);
-    if (ImGui::BeginCombo("Theme", theme_edit_from.c_str())) {
+    if (ImGui::BeginCombo("Theme", theme_editor_state->theme_edit_from.c_str())) {
         for (const Theme& th : themes) {
-            if (ImGui::Selectable((th.name + (th.builtin ? "  (built-in)" : "")).c_str(), th.name == theme_edit_from)) {
-                theme_edit = th;
-                theme_edit_from = th.name;
-                std::snprintf(theme_name_buf, sizeof(theme_name_buf), "%s", th.name.c_str());
-                apply_theme_values(theme_edit);
+            if (ImGui::Selectable((th.name + (th.builtin ? "  (built-in)" : "")).c_str(), th.name == theme_editor_state->theme_edit_from)) {
+                theme_editor_state->theme_edit = th;
+                theme_editor_state->theme_edit_from = th.name;
+                std::snprintf(theme_editor_state->theme_name_buf, sizeof(theme_editor_state->theme_name_buf), "%s", th.name.c_str());
+                apply_theme_values(theme_editor_state->theme_edit);
             }
         }
         ImGui::EndCombo();
     }
     ImGui::SameLine();
     ImGui::SetNextItemWidth(200);
-    ImGui::InputText("Name", theme_name_buf, sizeof(theme_name_buf));
+    ImGui::InputText("Name", theme_editor_state->theme_name_buf, sizeof(theme_editor_state->theme_name_buf));
     ImGui::SameLine();
-    const Theme* source = find_theme(theme_edit_from);
-    if (ImGui::Button("Save") && theme_name_buf[0]) {
+    const Theme* source = find_theme(theme_editor_state->theme_edit_from);
+    if (ImGui::Button("Save") && theme_editor_state->theme_name_buf[0]) {
         std::string err;
-        const std::string name = theme_name_buf;
+        const std::string name = theme_editor_state->theme_name_buf;
         if (source && source->builtin && name == source->name) status = "Built-in themes cannot be overwritten: give it a new name.";
-        else if (save_theme(t, name, &err)) { theme_edit_from = name; config.theme = name; config.save(); status = "Saved theme " + name; }
+        else if (save_theme(t, name, &err)) { theme_editor_state->theme_edit_from = name; config.theme = name; config.save(); status = "Saved theme " + name; }
         else status = err;
     }
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Save to %s", Theme::user_dir().c_str());
@@ -180,17 +181,17 @@ void App::draw_theme_editor() {
         fs::remove(source->path, ec);
         const std::string gone = source->name;
         themes.erase(std::remove_if(themes.begin(), themes.end(), [&](const Theme& th) { return !th.builtin && th.name == gone; }), themes.end());
-        theme_edit = themes.front(); theme_edit_from = theme_edit.name;
-        std::snprintf(theme_name_buf, sizeof(theme_name_buf), "%s", theme_edit.name.c_str());
-        config.theme = theme_edit.name; config.save();
-        apply_theme_values(theme_edit);
+        theme_editor_state->theme_edit = themes.front(); theme_editor_state->theme_edit_from = theme_editor_state->theme_edit.name;
+        std::snprintf(theme_editor_state->theme_name_buf, sizeof(theme_editor_state->theme_name_buf), "%s", theme_editor_state->theme_edit.name.c_str());
+        config.theme = theme_editor_state->theme_edit.name; config.save();
+        apply_theme_values(theme_editor_state->theme_edit);
     }
     ImGui::SameLine();
     if (ImGui::Button("Import...")) { file_op = PendingFileOp::ImportTheme; file_dialog.open(FileDialog::Mode::Open, "Import Theme", {Theme::extension()}, config.last_directory); }
     ImGui::SameLine();
-    if (ImGui::Button("Export...")) { file_op = PendingFileOp::ExportTheme; file_dialog.open(FileDialog::Mode::Save, "Export Theme", {Theme::extension()}, std::string(theme_name_buf) + "." + Theme::extension()); }
+    if (ImGui::Button("Export...")) { file_op = PendingFileOp::ExportTheme; file_dialog.open(FileDialog::Mode::Save, "Export Theme", {Theme::extension()}, std::string(theme_editor_state->theme_name_buf) + "." + Theme::extension()); }
     ImGui::SameLine();
-    if (ImGui::Button("Revert") && source) { theme_edit = *source; apply_theme_values(theme_edit); }
+    if (ImGui::Button("Revert") && source) { theme_editor_state->theme_edit = *source; apply_theme_values(theme_editor_state->theme_edit); }
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Back to the theme as stored");
 
     ImGui::Separator();
@@ -299,7 +300,7 @@ void App::draw_theme_editor() {
     }
     ImGui::SameLine();
     if (ImGui::Button("Cancel", ImVec2(110, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape, false)) {
-        apply_theme_values(theme_editor_before);
+        apply_theme_values(theme_editor_state->theme_editor_before);
         show_theme_editor = false;
         ImGui::CloseCurrentPopup();
     }

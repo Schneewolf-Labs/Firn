@@ -9,6 +9,7 @@
 #include <SDL_opengl.h>
 
 #include "App.h"
+#include "ui/EffectBrowserState.h"
 #include "firn/raster.h"
 #include "imgui.h"
 
@@ -22,9 +23,9 @@ void App::reset_effect_browser() {
     for (GLuint t : browser_tex) if (t) glDeleteTextures(1, &t);
     browser_tex.assign(static_cast<size_t>(adjust_count()), 0);
     browser_state.assign(static_cast<size_t>(adjust_count()), 0);
-    browser_source = Image();
-    browser_revision = ~0ull;
-    browser_layer = -1;
+    fx_browser->browser_source = Image();
+    fx_browser->browser_revision = ~0ull;
+    fx_browser->browser_layer = -1;
 }
 
 void App::draw_effect_browser() {
@@ -37,13 +38,13 @@ void App::draw_effect_browser() {
     if (!ImGui::BeginPopupModal("Effect Browser", nullptr, ImGuiWindowFlags_NoScrollbar)) return;
 
     // Source thumbnail: the active layer, scaled to the tile.
-    if (browser_source.empty() || browser_revision != doc->revision() || browser_layer != active_layer()) {
+    if (fx_browser->browser_source.empty() || fx_browser->browser_revision != doc->revision() || fx_browser->browser_layer != active_layer()) {
         const Image& px = doc->layer(active_layer()).pixels;
         const float k = std::min(kTile / std::max(1, px.width()), kTile / std::max(1, px.height()));
         const int w = std::max(1, static_cast<int>(px.width() * k)), h = std::max(1, static_cast<int>(px.height() * k));
-        browser_source = raster::resample(px, w, h, raster::Filter::Bilinear);
-        browser_revision = doc->revision();
-        browser_layer = active_layer();
+        fx_browser->browser_source = raster::resample(px, w, h, raster::Filter::Bilinear);
+        fx_browser->browser_revision = doc->revision();
+        fx_browser->browser_layer = active_layer();
         for (GLuint& t : browser_tex) if (t) { glDeleteTextures(1, &t); t = 0; }
         std::fill(browser_state.begin(), browser_state.end(), 0);
     }
@@ -76,9 +77,9 @@ void App::draw_effect_browser() {
                     // The dialog has not registered yet (first frame); try next frame.
                 } else {
                     ++rendered_now;
-                    Image img = browser_source;
+                    Image img = fx_browser->browser_source;
                     it->second(img);
-                    if (img.width() != browser_source.width() || img.height() != browser_source.height()) img = raster::resample(img, browser_source.width(), browser_source.height(), raster::Filter::Bilinear);
+                    if (img.width() != fx_browser->browser_source.width() || img.height() != fx_browser->browser_source.height()) img = raster::resample(img, fx_browser->browser_source.width(), fx_browser->browser_source.height(), raster::Filter::Bilinear);
                     GLuint t = 0;
                     glGenTextures(1, &t);
                     glBindTexture(GL_TEXTURE_2D, t);
@@ -100,9 +101,9 @@ void App::draw_effect_browser() {
             const bool hov = ImGui::IsItemHovered();
             ImDrawList* dl = ImGui::GetWindowDrawList();
             dl->AddRectFilled(p0, ImVec2(p0.x + tile.x, p0.y + tile.y), hov ? ImGui::GetColorU32(ImGuiCol_HeaderHovered) : ImGui::GetColorU32(ImGuiCol_FrameBg), 4.0f);
-            const ImVec2 img0(p0.x + 4 + (kTile - browser_source.width()) * 0.5f, p0.y + 4 + (kTile - browser_source.height()) * 0.5f);
-            if (browser_tex[i]) dl->AddImage((ImTextureID)(intptr_t)browser_tex[i], img0, ImVec2(img0.x + browser_source.width(), img0.y + browser_source.height()));
-            else dl->AddRectFilled(img0, ImVec2(img0.x + browser_source.width(), img0.y + browser_source.height()), IM_COL32(80, 80, 80, 255));
+            const ImVec2 img0(p0.x + 4 + (kTile - fx_browser->browser_source.width()) * 0.5f, p0.y + 4 + (kTile - fx_browser->browser_source.height()) * 0.5f);
+            if (browser_tex[i]) dl->AddImage((ImTextureID)(intptr_t)browser_tex[i], img0, ImVec2(img0.x + fx_browser->browser_source.width(), img0.y + fx_browser->browser_source.height()));
+            else dl->AddRectFilled(img0, ImVec2(img0.x + fx_browser->browser_source.width(), img0.y + fx_browser->browser_source.height()), IM_COL32(80, 80, 80, 255));
             // Name, trimmed to the tile.
             std::string label = title;
             while (!label.empty() && ImGui::CalcTextSize(label.c_str()).x > kTile) label.pop_back();

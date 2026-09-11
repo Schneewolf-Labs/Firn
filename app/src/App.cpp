@@ -1,5 +1,13 @@
 #include "App.h"
 #include "ui/AdjustState.h"
+#include "ui/EffectBrowserState.h"
+#include "ui/SelectionMenuState.h"
+#include "ui/MenuState.h"
+#include "ui/MaterialDialogState.h"
+#include "ui/ThemeEditorState.h"
+#include "ui/TextDialogState.h"
+#include "tools/ToolState.h"
+#include "ui/EffectState.h"
 #include "firn/inpaint.h"
 
 #include <algorithm>
@@ -21,6 +29,15 @@ static Image mask_to_image(const Mask& m);
 App::~App() = default;
 
 App::App() : tools(make_default_tools()) {
+    fx_browser = std::make_unique<EffectBrowserState>();
+    selection_menu_state = std::make_unique<SelectionMenuState>();
+    menu_state = std::make_unique<MenuState>();
+    material_dialog_state = std::make_unique<MaterialDialogState>();
+    theme_editor_state = std::make_unique<ThemeEditorState>();
+    text_dialog_state = std::make_unique<TextDialogState>();
+    tool_state = std::make_unique<ToolState>();
+    adjust_state = std::make_unique<AdjustState>();
+    effect_state = std::make_unique<EffectState>();
     config.load();
     file_dialog.set_directory(config.last_directory);
     apply_config();

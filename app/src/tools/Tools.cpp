@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "App.h"
+#include "tools/ToolState.h"
 #include "firn/adjust.h"
 #include "firn/commands.h"
 #include "firn/io_psp.h"
@@ -139,7 +140,7 @@ public:
         raster::StrokeMode mode = raster::StrokeMode::Paint;
         std::function<Color(Color)> filter;
         std::function<Color(const Image&, int, int)> area_filter;
-        const float amount = app.retouch_amount / 100.0f;
+        const float amount = app.tool_state->retouch_amount / 100.0f;
         const bool primary = b == ImGuiMouseButton_Left;
 
         switch (kind_) {
@@ -220,7 +221,7 @@ public:
                 mode = raster::StrokeMode::Filter;
                 const Color from = to_color(primary ? app.bg_color : app.fg_color);
                 const Color to = to_color(primary ? app.fg_color : app.bg_color);
-                const int tol = app.replacer_tolerance;
+                const int tol = app.tool_state->replacer_tolerance;
                 filter = [from, to, tol](Color c) {
                     const int d = std::max({std::abs(c.r - from.r), std::abs(c.g - from.g), std::abs(c.b - from.b)});
                     return d <= tol ? Color{to.r, to.g, to.b, c.a} : c;
@@ -433,7 +434,7 @@ public:
             case Kind::LightenDarken: case Kind::DodgeBurn: case Kind::Saturation: case Kind::Hue: case Kind::Soften: case Kind::Sharpen:
                 ImGui::SameLine();
                 ImGui::SetNextItemWidth(100);
-                ImGui::SliderInt("Amount", &app.retouch_amount, 1, 100, "%d%%");
+                ImGui::SliderInt("Amount", &app.tool_state->retouch_amount, 1, 100, "%d%%");
                 ImGui::SameLine();
                 ImGui::TextDisabled(kind_ == Kind::LightenDarken ? "Left lightens, right darkens." :
                                     kind_ == Kind::DodgeBurn ? "Left dodges (lightens), right burns." :
@@ -443,7 +444,7 @@ public:
             case Kind::ColorReplacer:
                 ImGui::SameLine();
                 ImGui::SetNextItemWidth(100);
-                ImGui::SliderInt("Tolerance", &app.replacer_tolerance, 0, 200);
+                ImGui::SliderInt("Tolerance", &app.tool_state->replacer_tolerance, 0, 200);
                 ImGui::SameLine();
                 ImGui::TextDisabled("Paints foreground over background color.");
                 break;
@@ -637,7 +638,7 @@ public:
             ImGui::SameLine();
             ImGui::TextDisabled("Left paints the foreground color, right the background.");
         } else {
-            ImGui::SliderInt("Amount", &app.retouch_amount, 1, 100, "%d%%");
+            ImGui::SliderInt("Amount", &app.tool_state->retouch_amount, 1, 100, "%d%%");
             ImGui::SameLine();
             ImGui::TextDisabled("Left smudges, right pushes.");
         }
@@ -714,7 +715,7 @@ private:
         Image& px = app.paint_pixels(layer_);
         const int r = rad_, W = 2 * r + 1;
         const int ox = static_cast<int>(std::floor(cx)) - r, oy = static_cast<int>(std::floor(cy)) - r;
-        const float strength = push_ ? 1.0f : app.retouch_amount / 100.0f;
+        const float strength = push_ ? 1.0f : app.tool_state->retouch_amount / 100.0f;
         const Mask& clip = app.doc->selection();
         for (int y = 0; y < W; ++y)
             for (int x = 0; x < W; ++x) {
@@ -749,7 +750,7 @@ public:
         const size_t layer = app.active_layer();
         Image& target = app.paint_pixels(layer);
         Image before = target;
-        adjust::red_eye(target, in.img_x, in.img_y, app.brush.size * 0.5f, app.redeye_strength);
+        adjust::red_eye(target, in.img_x, in.img_y, app.brush.size * 0.5f, app.tool_state->redeye_strength);
         const int r = static_cast<int>(app.brush.size * 0.5f) + 2;
         const raster::Rect rect{static_cast<int>(in.img_x) - r, static_cast<int>(in.img_y) - r, static_cast<int>(in.img_x) + r, static_cast<int>(in.img_y) + r};
         app.paint_touched(layer, &rect);
@@ -764,8 +765,8 @@ public:
         ImGui::SliderFloat("Size", &app.brush.size, 2.0f, 200.0f, "%.0f", ImGuiSliderFlags_Logarithmic);
         ImGui::SameLine();
         ImGui::SetNextItemWidth(100);
-        float st = app.redeye_strength * 100.0f;
-        if (ImGui::SliderFloat("Strength", &st, 10.0f, 100.0f, "%.0f%%")) app.redeye_strength = st / 100.0f;
+        float st = app.tool_state->redeye_strength * 100.0f;
+        if (ImGui::SliderFloat("Strength", &st, 10.0f, 100.0f, "%.0f%%")) app.tool_state->redeye_strength = st / 100.0f;
         ImGui::SameLine();
         ImGui::TextDisabled("Click on the pupil.");
     }
@@ -869,10 +870,10 @@ public:
             const Color color = to_color(fg ? app.fg_color : app.bg_color);
             changed = raster::flood_fill(target, static_cast<int>(std::floor(in.img_x)),
                                          static_cast<int>(std::floor(in.img_y)), color,
-                                         app.fill_tolerance, app.fill_opacity, &app.doc->selection());
+                                         app.tool_state->fill_tolerance, app.tool_state->fill_opacity, &app.doc->selection());
         } else {
             // Gradient or pattern: fill the matching region through the material.
-            Mask region = mask::magic_wand(target, static_cast<int>(std::floor(in.img_x)), static_cast<int>(std::floor(in.img_y)), app.fill_tolerance, true);
+            Mask region = mask::magic_wand(target, static_cast<int>(std::floor(in.img_x)), static_cast<int>(std::floor(in.img_y)), app.tool_state->fill_tolerance, true);
             if (app.doc->has_selection()) mask::combine(region, app.doc->selection(), mask::Combine::Intersect);
             int rx0 = target.width(), ry0 = target.height(), rx1 = -1, ry1 = -1;
             std::vector<uint8_t> cov(region.data(), region.data() + region.size());
@@ -880,7 +881,7 @@ public:
                 for (int x = 0; x < region.width(); ++x)
                     if (region.at(x, y)) { rx0 = std::min(rx0, x); ry0 = std::min(ry0, y); rx1 = std::max(rx1, x); ry1 = std::max(ry1, y); }
             if (rx1 < rx0) return;
-            if (app.fill_opacity < 1.0f) for (uint8_t& c : cov) c = static_cast<uint8_t>(c * app.fill_opacity + 0.5f);
+            if (app.tool_state->fill_opacity < 1.0f) for (uint8_t& c : cov) c = static_cast<uint8_t>(c * app.tool_state->fill_opacity + 0.5f);
             vec::paint(target, cov, target.width(), target.height(), app.material_style(fg), static_cast<float>(rx0), static_cast<float>(ry0), static_cast<float>(rx1 + 1), static_cast<float>(ry1 + 1));
             changed = raster::Rect{rx0, ry0, rx1 + 1, ry1 + 1};
         }
@@ -890,11 +891,11 @@ public:
     }
     void draw_options(App& app) override {
         ImGui::SetNextItemWidth(140);
-        ImGui::SliderInt("Tolerance", &app.fill_tolerance, 0, 200);
+        ImGui::SliderInt("Tolerance", &app.tool_state->fill_tolerance, 0, 200);
         ImGui::SameLine();
         ImGui::SetNextItemWidth(140);
-        float op = app.fill_opacity * 100.0f;
-        if (ImGui::SliderFloat("Opacity", &op, 1.0f, 100.0f, "%.0f")) app.fill_opacity = op / 100.0f;
+        float op = app.tool_state->fill_opacity * 100.0f;
+        if (ImGui::SliderFloat("Opacity", &op, 1.0f, 100.0f, "%.0f")) app.tool_state->fill_opacity = op / 100.0f;
     }
 };
 
@@ -1151,8 +1152,8 @@ public:
         if (!in.inside || !app.doc || app.active_layer() < 0) return;
         const int x = static_cast<int>(std::floor(in.img_x)), y = static_cast<int>(std::floor(in.img_y));
         Mask shape = app.wand_sample_merged
-            ? mask::magic_wand(app.doc->composite(), x, y, app.wand_tolerance, app.wand_contiguous)
-            : mask::magic_wand(app.doc->layer(app.active_layer()).pixels, x, y, app.wand_tolerance, app.wand_contiguous);
+            ? mask::magic_wand(app.doc->composite(), x, y, app.tool_state->wand_tolerance, app.wand_contiguous)
+            : mask::magic_wand(app.doc->layer(app.active_layer()).pixels, x, y, app.tool_state->wand_tolerance, app.wand_contiguous);
         const int saved = app.sel_mode;
         app.sel_mode = gesture_mode(app);
         app.apply_selection_gesture("Magic Wand", std::move(shape));
@@ -1160,7 +1161,7 @@ public:
     }
     void draw_options(App& app) override {
         ImGui::SetNextItemWidth(110);
-        ImGui::SliderInt("Tolerance", &app.wand_tolerance, 0, 200);
+        ImGui::SliderInt("Tolerance", &app.tool_state->wand_tolerance, 0, 200);
         ImGui::SameLine();
         ImGui::Checkbox("Contiguous", &app.wand_contiguous);
         ImGui::SameLine();
@@ -1336,7 +1337,7 @@ public:
     }
     void on_drag(App& app, const ToolInput& in, ImGuiMouseButton) override {
         if (!active_) return;
-        const float step = std::max(1.0f, (app.tube_step_override > 0 ? app.tube_step_override : std::max(1, app.tube_info.step)) * app.tube_scale);
+        const float step = std::max(1.0f, (app.tool_state->tube_step_override > 0 ? app.tool_state->tube_step_override : std::max(1, app.tube_info.step)) * app.tool_state->tube_scale);
         const float dx = in.img_x - last_x_, dy = in.img_y - last_y_;
         const float len = std::hypot(dx, dy);
         if (len <= 0.0f) return;
@@ -1360,8 +1361,8 @@ public:
     }
     void draw_overlay(App& app, const ToolInput& in) override {
         if (app.tube_image.empty()) return;
-        const float cw = app.tube_image.width() / static_cast<float>(app.tube_info.columns) * app.tube_scale * in.zoom;
-        const float ch = app.tube_image.height() / static_cast<float>(app.tube_info.rows) * app.tube_scale * in.zoom;
+        const float cw = app.tube_image.width() / static_cast<float>(app.tube_info.columns) * app.tool_state->tube_scale * in.zoom;
+        const float ch = app.tube_image.height() / static_cast<float>(app.tube_info.rows) * app.tool_state->tube_scale * in.zoom;
         in.dl->AddRect(ImVec2(in.screen.x - cw * 0.5f, in.screen.y - ch * 0.5f), ImVec2(in.screen.x + cw * 0.5f, in.screen.y + ch * 0.5f), IM_COL32(255, 255, 255, 160));
     }
     void draw_options(App& app) override {
@@ -1375,18 +1376,18 @@ public:
         }
         ImGui::SameLine();
         ImGui::SetNextItemWidth(90);
-        float pct = app.tube_scale * 100.0f;
-        if (ImGui::SliderFloat("Scale", &pct, 10.0f, 250.0f, "%.0f%%")) app.tube_scale = pct / 100.0f;
+        float pct = app.tool_state->tube_scale * 100.0f;
+        if (ImGui::SliderFloat("Scale", &pct, 10.0f, 250.0f, "%.0f%%")) app.tool_state->tube_scale = pct / 100.0f;
         ImGui::SameLine();
         ImGui::SetNextItemWidth(80);
-        ImGui::InputInt("Step", &app.tube_step_override);
-        app.tube_step_override = std::max(0, app.tube_step_override);
+        ImGui::InputInt("Step", &app.tool_state->tube_step_override);
+        app.tool_state->tube_step_override = std::max(0, app.tool_state->tube_step_override);
         ImGui::SameLine();
         ImGui::SetNextItemWidth(110);
-        ImGui::Combo("Placement", &app.tube_placement, "As tube\0Random\0Continuous\0");
+        ImGui::Combo("Placement", &app.tool_state->tube_placement, "As tube\0Random\0Continuous\0");
         ImGui::SameLine();
         ImGui::SetNextItemWidth(110);
-        ImGui::Combo("Selection", &app.tube_selection, "As tube\0Random\0Incremental\0Angular\0");
+        ImGui::Combo("Selection", &app.tool_state->tube_selection, "As tube\0Random\0Incremental\0Angular\0");
         if (app.tube_index >= 0) {
             ImGui::SameLine();
             ImGui::TextDisabled("%d cells, step %d", app.tube_info.total, app.tube_info.step);
@@ -1396,11 +1397,11 @@ public:
 private:
     void stamp(App& app, float cx, float cy, float angle) {
         const io::TubeInfo& t = app.tube_info;
-        const int placement = app.tube_placement ? app.tube_placement : t.placement;
-        const int selection = app.tube_selection ? app.tube_selection : t.selection;
+        const int placement = app.tool_state->tube_placement ? app.tool_state->tube_placement : t.placement;
+        const int selection = app.tool_state->tube_selection ? app.tool_state->tube_selection : t.selection;
         // Random placement jitters the position by up to a quarter step.
         if (placement == 1) {
-            const float step = std::max(1.0f, (app.tube_step_override > 0 ? app.tube_step_override : std::max(1, t.step)) * app.tube_scale);
+            const float step = std::max(1.0f, (app.tool_state->tube_step_override > 0 ? app.tool_state->tube_step_override : std::max(1, t.step)) * app.tool_state->tube_scale);
             cx += (rnd() - 0.5f) * step * 0.5f;
             cy += (rnd() - 0.5f) * step * 0.5f;
         }
@@ -1411,7 +1412,7 @@ private:
         const int cw = app.tube_image.width() / t.columns, ch = app.tube_image.height() / t.rows;
         const int col = cell % t.columns, row = cell / t.columns;
         Image tile = raster::crop(app.tube_image, {col * cw, row * ch, (col + 1) * cw, (row + 1) * ch});
-        const int ow = std::max(1, static_cast<int>(cw * app.tube_scale + 0.5f)), oh = std::max(1, static_cast<int>(ch * app.tube_scale + 0.5f));
+        const int ow = std::max(1, static_cast<int>(cw * app.tool_state->tube_scale + 0.5f)), oh = std::max(1, static_cast<int>(ch * app.tool_state->tube_scale + 0.5f));
         if (ow != cw || oh != ch) tile = raster::resample(tile, ow, oh, raster::Filter::Bilinear);
         Image& target = app.paint_pixels(layer_);
         const int ox = static_cast<int>(std::floor(cx)) - ow / 2, oy = static_cast<int>(std::floor(cy)) - oh / 2;

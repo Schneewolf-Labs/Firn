@@ -92,6 +92,14 @@ struct App {
     // this one.
     std::unique_ptr<struct AdjustState> adjust_state;
 
+    std::unique_ptr<struct EffectState> effect_state;   // app/src/ui/EffectState.h
+    std::unique_ptr<struct ToolState> tool_state;   // app/src/tools/ToolState.h
+    std::unique_ptr<struct TextDialogState> text_dialog_state;   // app/src/ui/TextDialogState.h
+    std::unique_ptr<struct ThemeEditorState> theme_editor_state;   // app/src/ui/ThemeEditorState.h
+    std::unique_ptr<struct MaterialDialogState> material_dialog_state;   // app/src/ui/MaterialDialogState.h
+    std::unique_ptr<struct MenuState> menu_state;   // app/src/ui/MenuState.h
+    std::unique_ptr<struct SelectionMenuState> selection_menu_state;   // app/src/ui/SelectionMenuState.h
+    std::unique_ptr<struct EffectBrowserState> fx_browser;   // app/src/ui/EffectBrowserState.h
     Config config;
     bool show_rulers = true, show_grid = false, show_guides = true;
     bool snap_to_guides = true, snap_to_grid = false;
@@ -133,11 +141,7 @@ struct App {
     int tool_index = 0;
     int active_button = -1;             // mouse button of the gesture in progress, or -1
     firn::raster::Brush brush;
-    int retouch_amount = 20;            // % per stroke for lighten/darken, saturation, hue
     bool clone_aligned = true, clone_sample_merged = false;
-    int replacer_tolerance = 30;
-    int fill_tolerance = 20;
-    float fill_opacity = 1.0f;
     // Selection tool options (shared by Selection / Freehand / Magic Wand)
     int sel_shape = 0;                  // Selection tool shape: see kSelectionShapes in Tools.cpp
     int sel_mode = 0;                   // mask::Combine as int: 0 replace, 1 add, 2 subtract, 3 intersect
@@ -148,13 +152,8 @@ struct App {
     int sel_smoothing = 0;              // outline smoothing 0..100
     bool show_marquee = true;
     // Selections > Modify dialog parameters.
-    int sel_tolerance = 30, sel_softness = 20;
-    float sel_color[3] = {1.0f, 1.0f, 1.0f};
-    int sel_speck = 10, sel_hole = 10;
-    int sel_smooth_amount = 5;
     bool sel_preserve_corners = true;
     bool sel_aa_inside = true, sel_aa_outside = true;
-    int sel_defringe = 1;
     // Edit Selection: paint the selection as a mask with the ordinary tools.
     bool selection_edit = false;
     firn::Mask selection_edit_before;
@@ -167,7 +166,6 @@ struct App {
     void draw_selections_menu();
     void draw_selection_dialogs();
     void draw_layer_menu_items();
-    int wand_tolerance = 20;
     int fgsel_size = 24;                  // Foreground Select: mark brush size
     int csmudge_rate = 30, csmudge_length = 60, csmudge_mode = 0;   // Color Smudge: color added per stamp (%), how far it is carried (%), 0 smearing / 1 dulling
     bool fgsel_merged = true;             //   classify on the merged image
@@ -221,9 +219,6 @@ struct App {
     std::map<std::string, std::function<void(firn::Image&)>> effect_ops;
     std::vector<GLuint> browser_tex;
     std::vector<uint8_t> browser_state;   // 0 pending, 1 done, 2 failed
-    firn::Image browser_source;
-    uint64_t browser_revision = ~0ull;
-    int browser_layer = -1;
     void draw_effect_browser();
     void reset_effect_browser();
     struct Preview {
@@ -249,38 +244,18 @@ struct App {
     std::string do_command(const std::string& name, const firn::json::Value& params, bool* ok);
     // Parameters, remembered between uses like the original's dialogs.
     int colorize_hue = 0, colorize_sat = 128;
-    int hsl_h = 0, hsl_s = 0, hsl_l = 0;
-    int lv_in_lo = 0, lv_in_hi = 255, lv_out_lo = 0, lv_out_hi = 255;
-    float lv_gamma = 1.0f, gamma_value = 1.0f;
     float gamma_rgb[3] = {1.0f, 1.0f, 1.0f}; bool gamma_link = true;
-    int fade_amount = 45;
     // Photo fixes
-    float bwp_src_black[3] = {0, 0, 0}, bwp_src_white[3] = {1, 1, 1}, bwp_dst_black[3] = {0, 0, 0}, bwp_dst_white[3] = {1, 1, 1};
-    int edge_smooth_amount = 30;        // Edge Preserving Smooth
-    int jpeg_strength = 1, jpeg_crispness = 30;
-    float ca_red = 0.0f, ca_blue = 0.0f;
-    int nr_strength = 50, nr_blend = 70, nr_sharpen = 0;
     // Geometric / distortion / reflection / image effects
-    int edge_mode = 1; float edge_color[3] = {0, 0, 0};
-    int curl_cols = 4, curl_rows = 4, curl_radius = 60, curl_strength = 50;
     int dmap_source = -1; float dmap_intensity = 10.0f, dmap_blur = 0.0f; bool dmap_2d = false;
     bool polar_rect = true;
-    float halo_radius = 60.0f, halo_offset = 20.0f; int halo_spikes = 12, halo_bend = 0;
-    float warp_cx = 50.0f, warp_cy = 50.0f, warp_size = 50.0f; int warp_strength_fx = 50;
     bool wind_left = true; int wind_strength = 30;
     bool cyl_vertical = false; int cyl_strength = 50;
     bool persp_vertical = false; int persp_distortion = 40;
     bool skew_vertical = false; int skew_angle = 20;
     int fb_opacity = 60, fb_intensity = 5; float fb_cx = 50.0f, fb_cy = 50.0f; bool fb_elliptical = false;
-    float pat_angle = 0.0f, pat_cx = 50.0f, pat_cy = 50.0f, pat_scale = 25.0f; int pat_rotation = 0;
-    float mirror_angle = 0.0f, mirror_cx = 50.0f, mirror_cy = 50.0f;
-    int offset_x = 0, offset_y = 0;
-    int tile_method = 0, tile_direction = 0, tile_transition = 50;
     // Artistic / texture / art media effects
-    firn::effects::Light fx_lights[5]; int fx_darkness = 40;
     int curl_corner = 3; float curl_w = 40.0f, curl_h = 40.0f; int curl_r = 30; float curl_back[3] = {0.9f, 0.9f, 0.9f}, curl_fill[3] = {1, 1, 1}; bool curl_transparent = false;
-    float redeye_strength = 1.0f;
-    float sun_x = 0.5f, sun_y = 0.5f, sun_brightness = 0.8f, sun_ray_brightness = 0.6f; int sun_rays = 12; float sun_color[3] = {1, 1, 0.9f};
     bool show_info_dialog = false;
     // Pen tablet (app/src/Tablet.cpp): pressure, tilt, eraser tip.
     PenState pen;
@@ -335,40 +310,18 @@ struct App {
     float font_pending_size = 13.0f, font_current_size = 13.0f;
     void apply_pending_font();
     bool show_theme_editor = false;
-    Theme theme_edit, theme_editor_before;
-    std::string theme_edit_from;        // name of the theme the edit started from
-    char theme_name_buf[64] = {};
     void open_theme_editor();
     void draw_theme_editor();
     bool show_prefs_dialog = false;
-    Config prefs_edit;                  // working copy while the dialog is open
-    float prefs_scale_before = 0.0f;    // UI scale to restore when the dialog is cancelled
     void apply_config();                // push config values into live state
-    int threshold_value = 128, posterize_levels = 6, solarize_threshold = 128;
     firn::adjust::ChannelMix mixer;
-    int mixer_row = 0;
     std::vector<std::pair<float, float>> curve_points{{0, 0}, {255, 255}};
-    int curve_drag = -1;
-    float usm_radius = 2.0f; int usm_strength = 100, usm_clipping = 0;
-    int median_radius = 1;
-    float motion_angle = 0.0f; int motion_strength = 10;
     int mosaic_w = 8, mosaic_h = 8; bool mosaic_square = true;
     int noise_percent = 20; bool noise_gaussian = false, noise_mono = false;
     int shadow_x = 5, shadow_y = 5; float shadow_opacity = 0.5f, shadow_blur = 5.0f; float shadow_color[3] = {0, 0, 0};
     firn::adjust::ColorBalance color_balance; int cb_range = 1;
-    int sepia_amount = 50;
-    firn::adjust::HueMap hue_map_params;
-    float wave_ha = 5, wave_hw = 40, wave_va = 0, wave_vw = 40;
-    int pinch_strength = 50;
-    float twirl_degrees = 90;
     int button_width = 10; float button_opacity = 0.75f; float button_color[3] = {0.5f, 0.5f, 0.5f}; bool button_transparent = false;
     int bevel_width = 10; float bevel_angle = 315, bevel_depth = 1.0f, bevel_ambient = 1.0f;
-    int cutout_x = 5, cutout_y = 5; float cutout_opacity = 0.6f, cutout_blur = 5; float cutout_color[3] = {0, 0, 0};
-    float ripple_amp = 5, ripple_wave = 30;
-    int spherize_strength = 50, lens_strength = 30;
-    int halftone_cell = 6; float halftone_angle = 45; float halftone_ink[3] = {0, 0, 0}, halftone_paper[3] = {1, 1, 1};
-    int chrome_bands = 4; float chrome_brightness = 1.0f;
-    int obevel_width = 8; float obevel_angle = 315, obevel_depth = 1.0f; float obevel_color[3] = {0.7f, 0.7f, 0.7f};
     // Mask overlay while editing: red tint over hidden areas
     bool show_mask_overlay = true;
     GLuint overlay_tex = 0;
@@ -386,13 +339,9 @@ struct App {
     int resize_w = 0, resize_h = 0;
     float resize_pct = 100.0f;
     bool resize_lock = true;
-    int resize_by_percent = 0;
-    int resize_filter = 4;              // raster::Filter; Smart by default, as in the original
     // Canvas size dialog
     int canvas_w = 0, canvas_h = 0, canvas_anchor = 4;  // 3x3 anchor, 4 = center
     // Rotate dialog
-    float rotate_degrees = 15.0f;
-    int rotate_cw = 1;
     // Color management (ui/ImageMenu.cpp)
     bool color_managed_display = true;
     firn::Image display_cache;               // composite converted to sRGB for the screen
@@ -487,19 +436,12 @@ struct App {
         bool transparent = false;
     };
     Material fg_material, bg_material;
+    Material material_backup;           // what the dialog opened with; Material is nested here, so it cannot move out with the rest
     firn::vec::PaintStyle material_style(bool foreground) const;   // as a paint style
     // Material Properties dialog (app/src/ui/MaterialDialog.cpp).
     bool show_material_dialog = false;
     bool material_dialog_fg = true;
-    Material material_backup;
-    float color_backup[4] = {0, 0, 0, 1};
-    int material_tab = 0;               // 0 color, 1 gradient, 2 pattern
-    int material_tab_request = -1;      // tab to select on the next frame
     int material_view = 0;              // Materials palette: 0 frame, 1 rainbow, 2 swatches
-    float frame_hue = 0.0f;             // hue chosen on the frame picker's ring
-    char html_color[10] = "#000000";   // the material dialog's HTML field
-    int gradient_sel_color = -1, gradient_sel_opacity = -1;   // selected stops in the gradient editor
-    char gradient_save_name[64] = {};
     void open_material_dialog(bool foreground);
     void draw_material_dialog();
     std::shared_ptr<const firn::Image> texture_image(int index);   // loads and caches a paper texture as an image
@@ -569,8 +511,6 @@ struct App {
     void layer_convert_to_raster();
     std::vector<firn::vec::Path> text_paths(const firn::vec::TextInfo& t, std::vector<int>* glyph_ids = nullptr) const;  // outlines, block top-left at (0, 0)
     void place_text_object(firn::vec::Object& o, const firn::vec::TextInfo& t, float x, float y) const;   // rebuilds o's paths at (x, y) with rotation
-    int text_vec_layer = -1;             // vector layer the text dialog previews on (create_as_vector)
-    int text_vec_index = -1;             // object being previewed there
     std::vector<firn::vec::Object> text_vec_before;
     // Custom brush tips
     struct TipEntry { std::string path, name; std::shared_ptr<const firn::raster::BrushTip> tip; };
@@ -595,9 +535,6 @@ struct App {
     firn::Image tube_image;              // the loaded tube sheet
     firn::io::TubeInfo tube_info;
     std::string tube_loaded_path;
-    float tube_scale = 1.0f;
-    int tube_step_override = 0;          // 0 = use the tube's own step
-    int tube_placement = 0, tube_selection = 0;  // 0 = as in the file
     void ensure_tubes();
     bool load_tube(int index);
     // Text tool
@@ -605,17 +542,11 @@ struct App {
     bool fonts_loaded = false;
     int font_index = 0;
     std::shared_ptr<firn::text::Font> text_font;
-    char text_buf[2048] = "Text";
     float text_size = 48.0f;
     bool text_antialias = true;
-    int text_align = 0;
     float text_stroke = 0.0f;           // outline width in px, foreground material
-    float text_angle = 0.0f;            // degrees clockwise
-    int text_x_offset = 0, text_y_offset = 0;  // placement shift from stroke padding / rotation
     int text_x = 0, text_y = 0;
     bool show_text_dialog = false;
-    int text_temp_layer = -1;           // preview layer while the dialog is open
-    int text_prev_active = -1;
     void ensure_fonts();
     void draw_text_dialog();
     firn::LayerProps layer_props_edit;  // dialog working copy
@@ -623,8 +554,6 @@ struct App {
     bool show_imgui_demo = false;
     int new_w = 800, new_h = 600;
     float blur_radius = 3.0f;
-    int box_radius = 3;
-    int sel_modify_px = 1;
     std::string status;
     bool quit = false;
 

@@ -10,6 +10,7 @@
 #include <memory>
 
 #include "App.h"
+#include "ui/MaterialDialogState.h"
 #include "MaterialDialog.h"
 #include "firn/adjust.h"
 #include "firn/io.h"
@@ -95,13 +96,13 @@ void frame_picker(App& app, float size) {
     const float half = r_in * 0.68f;
     const ImVec2 s0(c.x - half, c.y - half), s1(c.x + half, c.y + half);
     float hr, hg, hb;
-    ImGui::ColorConvertHSVtoRGB(app.frame_hue, 1.0f, 1.0f, hr, hg, hb);
+    ImGui::ColorConvertHSVtoRGB(app.material_dialog_state->frame_hue, 1.0f, 1.0f, hr, hg, hb);
     const ImU32 hue_col = IM_COL32(static_cast<int>(hr * 255), static_cast<int>(hg * 255), static_cast<int>(hb * 255), 255);
     dl->AddRectFilledMultiColor(s0, s1, IM_COL32(255, 255, 255, 255), hue_col, hue_col, IM_COL32(255, 255, 255, 255));
     dl->AddRectFilledMultiColor(s0, s1, IM_COL32(0, 0, 0, 0), IM_COL32(0, 0, 0, 0), IM_COL32(0, 0, 0, 255), IM_COL32(0, 0, 0, 255));
     dl->AddRect(s0, s1, IM_COL32(0, 0, 0, 255));
     // Hue marker.
-    dl->AddCircle(ImVec2(c.x + std::cos(app.frame_hue * 6.2832f) * (r_in + r_out) * 0.5f, c.y + std::sin(app.frame_hue * 6.2832f) * (r_in + r_out) * 0.5f), 4.0f, IM_COL32(0, 0, 0, 255), 0, 2.0f);
+    dl->AddCircle(ImVec2(c.x + std::cos(app.material_dialog_state->frame_hue * 6.2832f) * (r_in + r_out) * 0.5f, c.y + std::sin(app.material_dialog_state->frame_hue * 6.2832f) * (r_in + r_out) * 0.5f), 4.0f, IM_COL32(0, 0, 0, 255), 0, 2.0f);
     ImGui::InvisibleButton("##frame", ImVec2(size, size), ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonRight);
     const bool left = ImGui::IsItemActive() && ImGui::IsMouseDown(ImGuiMouseButton_Left);
     const bool right = ImGui::IsItemActive() && ImGui::IsMouseDown(ImGuiMouseButton_Right);
@@ -113,12 +114,12 @@ void frame_picker(App& app, float size) {
     if (mp.x >= s0.x && mp.x <= s1.x && mp.y >= s0.y && mp.y <= s1.y) {
         const float sat = (mp.x - s0.x) / (s1.x - s0.x), val = 1.0f - (mp.y - s0.y) / (s1.y - s0.y);
         float r, g, b;
-        ImGui::ColorConvertHSVtoRGB(app.frame_hue, sat, val, r, g, b);
+        ImGui::ColorConvertHSVtoRGB(app.material_dialog_state->frame_hue, sat, val, r, g, b);
         set_color(target, ImVec4(r, g, b, 1)); m.kind = 0;
     } else if (dist >= r_in * 0.95f && dist <= r_out * 1.05f) {
         float hue = std::atan2(dy, dx) / 6.2832f;
         if (hue < 0) hue += 1.0f;
-        app.frame_hue = hue;
+        app.material_dialog_state->frame_hue = hue;
         float h, s, v;
         ImGui::ColorConvertRGBtoHSV(target[0], target[1], target[2], h, s, v);
         if (s < 0.05f) s = 1.0f;
@@ -204,9 +205,9 @@ void color_numbers(App& app, float* col) {
     ImGui::SameLine(92);
     ImGui::SetNextItemWidth(80);
     const bool typing = ImGui::IsItemActive();
-    if (!typing) std::snprintf(app.html_color, sizeof(app.html_color), "#%02X%02X%02X", to8(col[0]), to8(col[1]), to8(col[2]));
-    if (ImGui::InputText("##html", app.html_color, sizeof(app.html_color), ImGuiInputTextFlags_CharsHexadecimal | ImGuiInputTextFlags_AutoSelectAll)) {
-        const char* t = app.html_color;
+    if (!typing) std::snprintf(app.material_dialog_state->html_color, sizeof(app.material_dialog_state->html_color), "#%02X%02X%02X", to8(col[0]), to8(col[1]), to8(col[2]));
+    if (ImGui::InputText("##html", app.material_dialog_state->html_color, sizeof(app.material_dialog_state->html_color), ImGuiInputTextFlags_CharsHexadecimal | ImGuiInputTextFlags_AutoSelectAll)) {
+        const char* t = app.material_dialog_state->html_color;
         while (*t == '#' || *t == ' ') ++t;
         unsigned v = 0;
         if (std::strlen(t) >= 6 && std::sscanf(t, "%6x", &v) == 1) {
@@ -277,24 +278,24 @@ void gradient_editor(App& app, vec::Gradient& g) {
         const int v = static_cast<int>(g.opacities[i].opacity * 2.55f);
         const ImVec2 t[3] = {ImVec2(x, strip0.y - 1), ImVec2(x - tri * 0.7f, strip0.y - tri - 1), ImVec2(x + tri * 0.7f, strip0.y - tri - 1)};
         dl->AddTriangleFilled(t[0], t[1], t[2], IM_COL32(v, v, v, 255));
-        dl->AddTriangle(t[0], t[1], t[2], static_cast<int>(i) == app.gradient_sel_opacity ? IM_COL32(255, 160, 0, 255) : IM_COL32(0, 0, 0, 255), static_cast<int>(i) == app.gradient_sel_opacity ? 2.0f : 1.0f);
+        dl->AddTriangle(t[0], t[1], t[2], static_cast<int>(i) == app.material_dialog_state->gradient_sel_opacity ? IM_COL32(255, 160, 0, 255) : IM_COL32(0, 0, 0, 255), static_cast<int>(i) == app.material_dialog_state->gradient_sel_opacity ? 2.0f : 1.0f);
     }
     for (size_t i = 0; i < g.colors.size(); ++i) {
         const float x = marker_x(g.colors[i].pos);
         const Color c = g.colors[i].color;
         const ImVec2 t[3] = {ImVec2(x, strip1.y + 1), ImVec2(x - tri * 0.7f, strip1.y + tri + 1), ImVec2(x + tri * 0.7f, strip1.y + tri + 1)};
         dl->AddTriangleFilled(t[0], t[1], t[2], IM_COL32(c.r, c.g, c.b, 255));
-        dl->AddTriangle(t[0], t[1], t[2], static_cast<int>(i) == app.gradient_sel_color ? IM_COL32(255, 160, 0, 255) : IM_COL32(0, 0, 0, 255), static_cast<int>(i) == app.gradient_sel_color ? 2.0f : 1.0f);
+        dl->AddTriangle(t[0], t[1], t[2], static_cast<int>(i) == app.material_dialog_state->gradient_sel_color ? IM_COL32(255, 160, 0, 255) : IM_COL32(0, 0, 0, 255), static_cast<int>(i) == app.material_dialog_state->gradient_sel_color ? 2.0f : 1.0f);
     }
     ImGui::InvisibleButton("##gradedit", ImVec2(w, h + 2 * tri + 4));
     const ImVec2 mp = ImGui::GetIO().MousePos;
     const bool hovered = ImGui::IsItemHovered();
     if (hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
-        app.gradient_sel_color = app.gradient_sel_opacity = -1;
+        app.material_dialog_state->gradient_sel_color = app.material_dialog_state->gradient_sel_opacity = -1;
         if (mp.y > strip1.y) {
-            for (size_t i = 0; i < g.colors.size(); ++i) if (std::abs(marker_x(g.colors[i].pos) - mp.x) <= tri) app.gradient_sel_color = static_cast<int>(i);
+            for (size_t i = 0; i < g.colors.size(); ++i) if (std::abs(marker_x(g.colors[i].pos) - mp.x) <= tri) app.material_dialog_state->gradient_sel_color = static_cast<int>(i);
         } else if (mp.y < strip0.y) {
-            for (size_t i = 0; i < g.opacities.size(); ++i) if (std::abs(marker_x(g.opacities[i].pos) - mp.x) <= tri) app.gradient_sel_opacity = static_cast<int>(i);
+            for (size_t i = 0; i < g.opacities.size(); ++i) if (std::abs(marker_x(g.opacities[i].pos) - mp.x) <= tri) app.material_dialog_state->gradient_sel_opacity = static_cast<int>(i);
         }
     }
     if (hovered && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
@@ -302,32 +303,32 @@ void gradient_editor(App& app, vec::Gradient& g) {
         if (mp.y < strip0.y) {
             g.opacities.push_back({g.at(pos / 100.0f).a / 2.55f, pos, 50});
             std::sort(g.opacities.begin(), g.opacities.end(), [](const vec::OpacityStop& a, const vec::OpacityStop& b) { return a.pos < b.pos; });
-            for (size_t i = 0; i < g.opacities.size(); ++i) if (g.opacities[i].pos == pos) app.gradient_sel_opacity = static_cast<int>(i);
+            for (size_t i = 0; i < g.opacities.size(); ++i) if (g.opacities[i].pos == pos) app.material_dialog_state->gradient_sel_opacity = static_cast<int>(i);
         } else {
             Color c = g.at(pos / 100.0f); c.a = 255;
             g.colors.push_back({c, pos, 50});
             std::sort(g.colors.begin(), g.colors.end(), [](const vec::GradientStop& a, const vec::GradientStop& b) { return a.pos < b.pos; });
-            for (size_t i = 0; i < g.colors.size(); ++i) if (g.colors[i].pos == pos) app.gradient_sel_color = static_cast<int>(i);
+            for (size_t i = 0; i < g.colors.size(); ++i) if (g.colors[i].pos == pos) app.material_dialog_state->gradient_sel_color = static_cast<int>(i);
         }
     }
     if (ImGui::IsItemActive() && ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {
         const float pos = std::clamp((mp.x - strip0.x) / w * 100.0f, 0.0f, 100.0f);
-        if (app.gradient_sel_color >= 0 && app.gradient_sel_color < static_cast<int>(g.colors.size())) {
-            g.colors[app.gradient_sel_color].pos = pos;
+        if (app.material_dialog_state->gradient_sel_color >= 0 && app.material_dialog_state->gradient_sel_color < static_cast<int>(g.colors.size())) {
+            g.colors[app.material_dialog_state->gradient_sel_color].pos = pos;
             // Keep the selection on the dragged stop after the resort.
-            const Color c = g.colors[app.gradient_sel_color].color;
+            const Color c = g.colors[app.material_dialog_state->gradient_sel_color].color;
             std::sort(g.colors.begin(), g.colors.end(), [](const vec::GradientStop& a, const vec::GradientStop& b) { return a.pos < b.pos; });
-            for (size_t i = 0; i < g.colors.size(); ++i) if (g.colors[i].pos == pos && g.colors[i].color.r == c.r && g.colors[i].color.g == c.g && g.colors[i].color.b == c.b) app.gradient_sel_color = static_cast<int>(i);
-        } else if (app.gradient_sel_opacity >= 0 && app.gradient_sel_opacity < static_cast<int>(g.opacities.size())) {
-            g.opacities[app.gradient_sel_opacity].pos = pos;
-            const float o = g.opacities[app.gradient_sel_opacity].opacity;
+            for (size_t i = 0; i < g.colors.size(); ++i) if (g.colors[i].pos == pos && g.colors[i].color.r == c.r && g.colors[i].color.g == c.g && g.colors[i].color.b == c.b) app.material_dialog_state->gradient_sel_color = static_cast<int>(i);
+        } else if (app.material_dialog_state->gradient_sel_opacity >= 0 && app.material_dialog_state->gradient_sel_opacity < static_cast<int>(g.opacities.size())) {
+            g.opacities[app.material_dialog_state->gradient_sel_opacity].pos = pos;
+            const float o = g.opacities[app.material_dialog_state->gradient_sel_opacity].opacity;
             std::sort(g.opacities.begin(), g.opacities.end(), [](const vec::OpacityStop& a, const vec::OpacityStop& b) { return a.pos < b.pos; });
-            for (size_t i = 0; i < g.opacities.size(); ++i) if (g.opacities[i].pos == pos && g.opacities[i].opacity == o) app.gradient_sel_opacity = static_cast<int>(i);
+            for (size_t i = 0; i < g.opacities.size(); ++i) if (g.opacities[i].pos == pos && g.opacities[i].opacity == o) app.material_dialog_state->gradient_sel_opacity = static_cast<int>(i);
         }
     }
     ImGui::TextDisabled("Double-click the strip to add a color stop, above it for an opacity stop.");
-    if (app.gradient_sel_color >= 0 && app.gradient_sel_color < static_cast<int>(g.colors.size())) {
-        vec::GradientStop& st = g.colors[app.gradient_sel_color];
+    if (app.material_dialog_state->gradient_sel_color >= 0 && app.material_dialog_state->gradient_sel_color < static_cast<int>(g.colors.size())) {
+        vec::GradientStop& st = g.colors[app.material_dialog_state->gradient_sel_color];
         float c[3] = {st.color.r / 255.0f, st.color.g / 255.0f, st.color.b / 255.0f};
         ImGui::SetNextItemWidth(160);
         if (ImGui::ColorEdit3("Stop color", c)) st.color = {static_cast<uint8_t>(c[0] * 255 + 0.5f), static_cast<uint8_t>(c[1] * 255 + 0.5f), static_cast<uint8_t>(c[2] * 255 + 0.5f), 255};
@@ -338,9 +339,9 @@ void gradient_editor(App& app, vec::Gradient& g) {
         ImGui::SetNextItemWidth(120);
         ImGui::SliderFloat("Midpoint", &st.mid, 1.0f, 99.0f, "%.0f%%");
         ImGui::SameLine();
-        if (ImGui::Button("Delete") && g.colors.size() > 1) { g.colors.erase(g.colors.begin() + app.gradient_sel_color); app.gradient_sel_color = -1; }
-    } else if (app.gradient_sel_opacity >= 0 && app.gradient_sel_opacity < static_cast<int>(g.opacities.size())) {
-        vec::OpacityStop& st = g.opacities[app.gradient_sel_opacity];
+        if (ImGui::Button("Delete") && g.colors.size() > 1) { g.colors.erase(g.colors.begin() + app.material_dialog_state->gradient_sel_color); app.material_dialog_state->gradient_sel_color = -1; }
+    } else if (app.material_dialog_state->gradient_sel_opacity >= 0 && app.material_dialog_state->gradient_sel_opacity < static_cast<int>(g.opacities.size())) {
+        vec::OpacityStop& st = g.opacities[app.material_dialog_state->gradient_sel_opacity];
         ImGui::SetNextItemWidth(120);
         ImGui::SliderFloat("Opacity", &st.opacity, 0.0f, 100.0f, "%.0f%%");
         ImGui::SameLine();
@@ -350,7 +351,7 @@ void gradient_editor(App& app, vec::Gradient& g) {
         ImGui::SetNextItemWidth(120);
         ImGui::SliderFloat("Midpoint", &st.mid, 1.0f, 99.0f, "%.0f%%");
         ImGui::SameLine();
-        if (ImGui::Button("Delete") && g.opacities.size() > 1) { g.opacities.erase(g.opacities.begin() + app.gradient_sel_opacity); app.gradient_sel_opacity = -1; }
+        if (ImGui::Button("Delete") && g.opacities.size() > 1) { g.opacities.erase(g.opacities.begin() + app.material_dialog_state->gradient_sel_opacity); app.material_dialog_state->gradient_sel_opacity = -1; }
     } else {
         ImGui::TextDisabled("Click a stop marker to edit it.");
     }
@@ -431,15 +432,15 @@ void draw_materials_header(App& app) {
 void App::open_material_dialog(bool foreground) {
     material_dialog_fg = foreground;
     material_backup = foreground ? fg_material : bg_material;
-    std::memcpy(color_backup, foreground ? fg_color : bg_color, sizeof(color_backup));
+    std::memcpy(material_dialog_state->color_backup, foreground ? fg_color : bg_color, sizeof(material_dialog_state->color_backup));
     const Material& m = foreground ? fg_material : bg_material;
-    material_tab = std::clamp(m.kind, 0, 2);
-    material_tab_request = material_tab;
-    gradient_sel_color = gradient_sel_opacity = -1;
+    material_dialog_state->material_tab = std::clamp(m.kind, 0, 2);
+    material_dialog_state->material_tab_request = material_dialog_state->material_tab;
+    material_dialog_state->gradient_sel_color = material_dialog_state->gradient_sel_opacity = -1;
     show_material_dialog = true;
     float h, s, v;
     ImGui::ColorConvertRGBtoHSV(fg_color[0], fg_color[1], fg_color[2], h, s, v);
-    frame_hue = h;
+    material_dialog_state->frame_hue = h;
 }
 
 void App::draw_material_dialog() {
@@ -458,9 +459,9 @@ void App::draw_material_dialog() {
         // The tab matching the material's kind is selected once, when the
         // dialog opens; after that the user's clicks rule.
         ImGuiTabItemFlags sel[3] = {0, 0, 0};
-        if (material_tab_request >= 0 && material_tab_request < 3) { sel[material_tab_request] = ImGuiTabItemFlags_SetSelected; material_tab_request = -1; }
+        if (material_dialog_state->material_tab_request >= 0 && material_dialog_state->material_tab_request < 3) { sel[material_dialog_state->material_tab_request] = ImGuiTabItemFlags_SetSelected; material_dialog_state->material_tab_request = -1; }
         if (ImGui::BeginTabItem("Color", nullptr, sel[0])) {
-            material_tab = 0;
+            material_dialog_state->material_tab = 0;
             m.kind = 0;
             ImGui::ColorPicker4("##picker", col, ImGuiColorEditFlags_PickerHueWheel | ImGuiColorEditFlags_NoSidePreview | ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoAlpha);
             ImGui::SameLine();
@@ -490,7 +491,7 @@ void App::draw_material_dialog() {
             ImGui::EndTabItem();
         }
         if (ImGui::BeginTabItem("Gradient", nullptr, sel[1])) {
-            material_tab = 1;
+            material_dialog_state->material_tab = 1;
             m.kind = 1;
             ensure_gradients();
             const vec::PaintStyle st = material_style(fg);
@@ -516,7 +517,7 @@ void App::draw_material_dialog() {
                     if (picked) {
                         m.gradient_index = index;
                         if (index >= 0) m.gradient = gradient_library[static_cast<size_t>(index)];
-                        gradient_sel_color = gradient_sel_opacity = -1;
+                        material_dialog_state->gradient_sel_color = material_dialog_state->gradient_sel_opacity = -1;
                     }
                     ImGui::PopID();
                     if (++shown % per_row) ImGui::SameLine(0, 8);
@@ -570,11 +571,11 @@ void App::draw_material_dialog() {
             }
             // Save the current run as a library gradient.
             ImGui::SetNextItemWidth(200);
-            ImGui::InputTextWithHint("##gname", "Name for Save As", gradient_save_name, sizeof(gradient_save_name));
+            ImGui::InputTextWithHint("##gname", "Name for Save As", material_dialog_state->gradient_save_name, sizeof(material_dialog_state->gradient_save_name));
             ImGui::SameLine();
-            if (ImGui::Button("Save As...") && gradient_save_name[0]) {
+            if (ImGui::Button("Save As...") && material_dialog_state->gradient_save_name[0]) {
                 vec::Gradient g = material_style(fg).gradient;
-                g.name = gradient_save_name;
+                g.name = material_dialog_state->gradient_save_name;
                 namespace fs = std::filesystem;
                 const fs::path dir = fs::path(Config::directory()) / "gradients";
                 std::error_code ec;
@@ -592,7 +593,7 @@ void App::draw_material_dialog() {
             ImGui::EndTabItem();
         }
         if (ImGui::BeginTabItem("Pattern", nullptr, sel[2])) {
-            material_tab = 2;
+            material_dialog_state->material_tab = 2;
             m.kind = 2;
             ensure_patterns();
             const char* current = m.pattern_index >= 0 && m.pattern_index < static_cast<int>(pattern_library.size()) ? pattern_library[m.pattern_index].name.c_str()
@@ -678,7 +679,7 @@ void App::draw_material_dialog() {
         draw_material_swatch(*this, fg, p, ImVec2(p.x + 70, p.y + 36));
         // Previous: temporarily swap in the backup to draw it.
         Material live = m; float live_col[4]; std::memcpy(live_col, col, sizeof(live_col));
-        m = material_backup; std::memcpy(col, color_backup, sizeof(color_backup));
+        m = material_backup; std::memcpy(col, material_dialog_state->color_backup, sizeof(material_dialog_state->color_backup));
         draw_material_swatch(*this, fg, ImVec2(p.x + 90, p.y), ImVec2(p.x + 160, p.y + 36));
         m = live; std::memcpy(col, live_col, sizeof(live_col));
         ImGui::Dummy(ImVec2(160, 38));
@@ -687,7 +688,7 @@ void App::draw_material_dialog() {
     ImGui::SameLine();
     const bool cancel = ImGui::Button("Cancel", ImVec2(90, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape, false);
     ImGui::SameLine();
-    if (ImGui::Button("Reset", ImVec2(90, 0))) { m = material_backup; std::memcpy(col, color_backup, sizeof(color_backup)); }
+    if (ImGui::Button("Reset", ImVec2(90, 0))) { m = material_backup; std::memcpy(col, material_dialog_state->color_backup, sizeof(material_dialog_state->color_backup)); }
     if (ok) {
         // The brush's paper texture follows the foreground material's texture.
         if (fg) { if (m.texture_on && m.texture_index >= 0) select_texture(m.texture_index); else if (!m.texture_on) select_texture(-1); }
@@ -695,7 +696,7 @@ void App::draw_material_dialog() {
         ImGui::CloseCurrentPopup();
     } else if (cancel) {
         m = material_backup;
-        std::memcpy(col, color_backup, sizeof(color_backup));
+        std::memcpy(col, material_dialog_state->color_backup, sizeof(material_dialog_state->color_backup));
         ImGui::CloseCurrentPopup();
     }
     ImGui::EndPopup();

@@ -3,6 +3,7 @@
 #include <memory>
 
 #include "App.h"
+#include "ui/MenuState.h"
 #include "firn/adjust.h"
 #include "firn/icc.h"
 #include "firn/io.h"
@@ -47,7 +48,7 @@ void App::draw_menu() {
         if (ImGui::MenuItem("Save As...", "Ctrl+Shift+S", false, has_doc)) request_save_as();
         if (ImGui::MenuItem("Revert", nullptr, false, has_doc && !doc_path.empty())) { if (modified()) show_revert_prompt = true; else revert(); }
         ImGui::Separator();
-        if (ImGui::MenuItem("Preferences...")) { prefs_edit = config; prefs_scale_before = config.ui_scale; show_prefs_dialog = true; }
+        if (ImGui::MenuItem("Preferences...")) { menu_state->prefs_edit = config; menu_state->prefs_scale_before = config.ui_scale; show_prefs_dialog = true; }
         ImGui::Separator();
         if (ImGui::MenuItem("Exit")) request_quit();
         ImGui::EndMenu();
@@ -577,7 +578,7 @@ void App::draw_dialogs() {
     if (show_prefs_dialog) { ImGui::OpenPopup("Preferences"); show_prefs_dialog = false; }
 
     if (ImGui::BeginPopupModal("Preferences", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
-        Config& c = prefs_edit;
+        Config& c = menu_state->prefs_edit;
         ImGui::SeparatorText("General");
         ImGui::SetNextItemWidth(160); ImGui::SliderInt("Undo steps per image", &c.undo_limit, 1, 1000);
         ImGui::SetNextItemWidth(160); ImGui::SliderInt("Undo memory per image (MB)", &c.undo_memory_mb, 64, 16384, "%d", ImGuiSliderFlags_Logarithmic);
@@ -634,7 +635,7 @@ void App::draw_dialogs() {
             ImGui::CloseCurrentPopup();
         }
         ImGui::SameLine();
-        if (ImGui::Button("Cancel", ImVec2(90, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape, false)) { config.ui_scale = prefs_scale_before; apply_theme(config.theme); ImGui::CloseCurrentPopup(); }
+        if (ImGui::Button("Cancel", ImVec2(90, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape, false)) { config.ui_scale = menu_state->prefs_scale_before; apply_theme(config.theme); ImGui::CloseCurrentPopup(); }
         ImGui::EndPopup();
     }
 
@@ -782,10 +783,10 @@ void App::draw_dialogs() {
     if (ImGui::BeginPopupModal("Resize", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
         escape();
         const float aspect = doc ? static_cast<float>(doc->width()) / doc->height() : 1.0f;
-        ImGui::RadioButton("Pixels", &resize_by_percent, 0);
+        ImGui::RadioButton("Pixels", &menu_state->resize_by_percent, 0);
         ImGui::SameLine();
-        ImGui::RadioButton("Percent", &resize_by_percent, 1);
-        if (resize_by_percent) {
+        ImGui::RadioButton("Percent", &menu_state->resize_by_percent, 1);
+        if (menu_state->resize_by_percent) {
             ImGui::SetNextItemWidth(120);
             if (ImGui::InputFloat("%", &resize_pct, 1.0f, 10.0f, "%.1f") && doc) {
                 resize_pct = std::max(resize_pct, 0.1f);
@@ -806,13 +807,13 @@ void App::draw_dialogs() {
             ImGui::Checkbox("Lock aspect ratio", &resize_lock);
         }
         ImGui::SetNextItemWidth(160);
-        ImGui::Combo("Resample", &resize_filter, "Pixel resize\0Bilinear\0Bicubic\0Edge directed\0Smart size\0Lanczos\0Mitchell\0");
+        ImGui::Combo("Resample", &menu_state->resize_filter, "Pixel resize\0Bilinear\0Bicubic\0Edge directed\0Smart size\0Lanczos\0Mitchell\0");
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("Smart size picks for you: Lanczos when reducing or enlarging a little, edge directed past a doubling. Edge directed follows edges instead of averaging across them, which keeps diagonals and curves clean, and is slower. Lanczos is the sharpest for photographs and can ring on hard edges; Mitchell is soft and never rings.");
         ImGui::Text("%d x %d  ->  %d x %d", doc ? doc->width() : 0, doc ? doc->height() : 0, resize_w, resize_h);
         if (ImGui::Button("OK") || enter()) {
             if (doc && (resize_w != doc->width() || resize_h != doc->height())) {
                 tool().cancel(*this);
-                run(std::make_unique<ResizeCommand>(resize_w, resize_h, static_cast<raster::Filter>(resize_filter)));
+                run(std::make_unique<ResizeCommand>(resize_w, resize_h, static_cast<raster::Filter>(menu_state->resize_filter)));
                 fit_requested = true;
             }
             ImGui::CloseCurrentPopup();
@@ -856,13 +857,13 @@ void App::draw_dialogs() {
 
     if (ImGui::BeginPopupModal("Free Rotate", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
         escape();
-        ImGui::RadioButton("Right (clockwise)", &rotate_cw, 1);
+        ImGui::RadioButton("Right (clockwise)", &menu_state->rotate_cw, 1);
         ImGui::SameLine();
-        ImGui::RadioButton("Left", &rotate_cw, 0);
+        ImGui::RadioButton("Left", &menu_state->rotate_cw, 0);
         ImGui::SetNextItemWidth(160);
-        ImGui::SliderFloat("Degrees", &rotate_degrees, 0.0f, 359.99f, "%.2f");
+        ImGui::SliderFloat("Degrees", &menu_state->rotate_degrees, 0.0f, 359.99f, "%.2f");
         ImGui::TextDisabled("Uncovered corners take the background color on Background layers.");
-        if (ImGui::Button("OK") || enter()) { rotate(rotate_cw ? rotate_degrees : -rotate_degrees); ImGui::CloseCurrentPopup(); }
+        if (ImGui::Button("OK") || enter()) { rotate(menu_state->rotate_cw ? menu_state->rotate_degrees : -menu_state->rotate_degrees); ImGui::CloseCurrentPopup(); }
         ImGui::SameLine();
         if (ImGui::Button("Cancel")) ImGui::CloseCurrentPopup();
         ImGui::EndPopup();
