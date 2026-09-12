@@ -3873,8 +3873,8 @@ static void test_path_editing() {
     // nearest, reversing as needed, and the result is one continuous run.
     {
         vec::Object o;
-        o.paths.push_back(vec::make_polygon({{0, 0}, {10, 0}, {20, 0}}, false).paths[0]);
-        o.paths.push_back(vec::make_polygon({{40, 0}, {30, 0}, {20, 0}}, false).paths[0]);
+        o.paths.push_back(vec::make_polygon({{0.0f, 0.0f}, {10.0f, 0.0f}, {20.0f, 0.0f}}, false).paths[0]);
+        o.paths.push_back(vec::make_polygon({{40.0f, 0.0f}, {30.0f, 0.0f}, {20.0f, 0.0f}}, false).paths[0]);
         CHECK(vec::join_paths(o, 0, 1));
         CHECK(o.paths.size() == 1);
         const vec::Path& p = o.paths[0];
