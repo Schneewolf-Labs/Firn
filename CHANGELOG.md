@@ -7,6 +7,12 @@ section into the next version.
 ## Unreleased
 
 ### Changed
+- Box blur is between 6 and 84 times faster, and its cost no longer grows
+  with the radius: it keeps a running sum instead of re-adding the whole
+  window at every pixel, and spreads across cores like the other spatial
+  operations. The output is identical to the byte, so Average filter layers
+  look exactly as they did. At 1.9 megapixels a radius of 24 went from 317
+  milliseconds to 4.
 - Closing the program while a file is being read or written now waits for
   that to finish rather than racing it, and File > Exit says so instead of
   stacking prompts over the progress dialog.

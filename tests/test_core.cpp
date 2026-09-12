@@ -2900,6 +2900,59 @@ static void test_icc() {
     std::remove(png.c_str()); std::remove(jpg.c_str());
 }
 
+// Box blur: a running sum, so the cost does not grow with the radius. The
+// window always holds 2r+1 samples with out-of-range ones clamped to the
+// edge, which is what pins the result: these expectations are the averages
+// that definition produces, and they caught the off-by-one the first
+// running-sum attempt had.
+static void test_box_blur() {
+    // A single bright pixel in a flat field, radius 1: the 3x3 average.
+    {
+        Image img(5, 5, {0, 0, 0, 255});
+        img.set(2, 2, {90, 90, 90, 255});
+        raster::box_blur(img, 1);
+        CHECK(img.get(2, 2).r == 10);   // 90 / 9
+        CHECK(img.get(1, 2).r == 10 && img.get(3, 2).r == 10);
+        CHECK(img.get(0, 2).r == 0);    // outside the 3x3 window
+        CHECK(img.get(2, 2).a == 255);
+    }
+    // A flat image stays exactly flat at any radius: no drift from the
+    // running sum, and edge clamping keeps the window full.
+    for (int r : {1, 3, 9}) {
+        Image flat(9, 7, {37, 200, 5, 255});
+        raster::box_blur(flat, r);
+        for (int y = 0; y < 7; ++y)
+            for (int x = 0; x < 9; ++x)
+                CHECK(flat.get(x, y).r == 37 && flat.get(x, y).g == 200 && flat.get(x, y).b == 5 && flat.get(x, y).a == 255);
+    }
+    // A radius wider than the picture averages the whole thing.
+    {
+        Image img(2, 1, {0, 0, 0, 255});
+        img.set(0, 0, {100, 0, 0, 255});
+        img.set(1, 0, {0, 0, 0, 255});
+        raster::box_blur(img, 50);
+        // Every window is dominated by the clamped edges, so the two pixels
+        // keep their own side's colour rather than both becoming 50.
+        CHECK(img.get(0, 0).r > img.get(1, 0).r);
+    }
+    // A single row and a single column, where the other axis is all clamp.
+    {
+        Image row(4, 1, {0, 0, 0, 255});
+        row.set(0, 0, {255, 255, 255, 255});
+        raster::box_blur(row, 1);
+        CHECK(row.get(0, 0).r == 170);   // (255 + 255 + 0) / 3, the left edge repeated
+        CHECK(row.get(1, 0).r == 85);    // (255 + 0 + 0) / 3
+        CHECK(row.get(3, 0).r == 0);
+    }
+    // Radius zero leaves the image alone.
+    {
+        Image img(3, 3, {1, 2, 3, 4});
+        const Image before = img;
+        raster::box_blur(img, 0);
+        CHECK(std::memcmp(img.data(), before.data(), img.size_bytes()) == 0);
+    }
+}
+
 // Content-aware fill reports how far along it is and stops when asked, so
 // the interface can run it on a worker thread and still cancel it.
 static void test_inpaint_progress_and_cancel() {
@@ -3770,6 +3823,7 @@ static void test_metadata() {
 
 int main() {
     test_icc();
+    test_box_blur();
     test_inpaint_progress_and_cancel();
     test_gradient_map();
     test_lock_transparency();
