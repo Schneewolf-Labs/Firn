@@ -655,7 +655,7 @@ void App::draw_dialogs() {
 
     if (file_dialog.draw()) {
         if (file_op == PendingFileOp::Open) open_document(file_dialog.path());
-        else if (file_op == PendingFileOp::SaveAs) save_document(file_dialog.path());
+        else if (file_op == PendingFileOp::SaveAs) save_document_async(file_dialog.path());
         else if (file_op == PendingFileOp::LoadSelection) load_selection(file_dialog.path());
         else if (file_op == PendingFileOp::SaveSelection) save_selection(file_dialog.path());
         else if (file_op == PendingFileOp::LoadPalette) load_palette(file_dialog.path());
@@ -829,7 +829,7 @@ void App::draw_dialogs() {
         if (ImGui::Button("Save") || ImGui::IsKeyPressed(ImGuiKey_Enter, false) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter, false)) {
             const std::string p = pending_jpeg_path;
             ImGui::CloseCurrentPopup();
-            save_document(p);
+            save_document_async(p);
         }
         ImGui::SameLine();
         if (ImGui::Button("Cancel") || ImGui::IsKeyPressed(ImGuiKey_Escape, false)) { pending_jpeg_path.clear(); ImGui::CloseCurrentPopup(); }

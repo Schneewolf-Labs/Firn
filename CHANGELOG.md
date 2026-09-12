@@ -7,6 +7,13 @@ section into the next version.
 ## Unreleased
 
 ### Changed
+- Saving from File > Save or Save As no longer freezes the window either.
+  A 24 megapixel project with a few layers took about three seconds on the
+  interface thread; the writing now happens on a worker while the program
+  keeps drawing. It is deliberately not cancellable. Scripts, the driver
+  and the close-without-saving prompt still save synchronously, because
+  they act on the result straight away, and the action layer refuses to run
+  anything while a worker is reading the document.
 - Content-Aware Fill no longer freezes the window. It runs on a worker
   thread behind a progress dialog with a Cancel, so the program keeps
   drawing and responding while it works, and cancelling leaves the picture

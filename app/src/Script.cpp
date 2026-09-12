@@ -11,6 +11,7 @@
 
 #include "Actions.h"
 #include "App.h"
+#include "BackgroundJob.h"
 #include "firn/adjust.h"
 #include "firn/commands.h"
 #include "firn/effects.h"
@@ -806,6 +807,9 @@ std::string App::do_command(const std::string& name, const Value& p, bool* ok) {
     // Firn's own actions share the same entry point, under dotted names that
     // cannot collide with the original's (see app/src/Actions.cpp).
     if (const Action* action = find_action(name)) {
+        // A worker thread is reading the document behind the modal, so
+        // nothing may change it until that finishes.
+        if (job) { *ok = false; return job->name + " is still running"; }
         std::string error;
         if (!validate_action(*action, p, error)) { *ok = false; return error; }
         *ok = true;

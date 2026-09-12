@@ -358,6 +358,24 @@ def test_clipping_masks(f):
     f.do("file.close")
 
 
+def test_background_work(f):
+    section("background work")
+    out = os.path.join(OUT, "bg.ora")
+    f.do("file.new", width=64, height=48, color="#336699")
+    # Actions save synchronously, so the file is there when the call returns.
+    f.do("file.save_as", path=out)
+    check(os.path.exists(out), "a scripted save finishes before it returns")
+    size = os.path.getsize(out)
+    check(size > 0, "and wrote something")
+    # The same for the fill: synchronous through the API, so the pixels have
+    # changed by the time the next call runs.
+    f.do("select.rect", x0=20, y0=15, x1=44, y1=33)
+    f.do("edit.content_aware_fill")
+    check(f.image()["last"] == "Content-Aware Fill", "a scripted fill finishes before it returns")
+    f.do("select.none")
+    f.do("file.close")
+
+
 def test_lock_transparency(f):
     section("lock transparency")
     f.do("file.new", width=40, height=20, color="#ffffff")
@@ -611,7 +629,7 @@ def main():
         drive.recv_line(sock)
         f = Firn(sock)
         for case in (test_api_surface, test_documents, test_view, test_layers, test_selection,
-                     test_painting_and_materials, test_edit_actions, test_tools_and_history, test_image_geometry, test_clipping_masks, test_lock_transparency, test_pass_through_groups, test_blend_ranges, test_metadata, test_drawing_api, test_atomic_batches, test_discovery_v2):
+                     test_painting_and_materials, test_edit_actions, test_tools_and_history, test_image_geometry, test_clipping_masks, test_background_work, test_lock_transparency, test_pass_through_groups, test_blend_ranges, test_metadata, test_drawing_api, test_atomic_batches, test_discovery_v2):
             case(f)
         sock.sendall(b"quit\n")
         sock.settimeout(10.0)

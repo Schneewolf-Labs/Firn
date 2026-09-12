@@ -53,6 +53,10 @@ picture by exemplar synthesis, for removing an object outright. It runs on a wor
 thread behind a progress dialog, so the window keeps drawing and the fill can
 be called off part way; cancelling leaves the picture exactly as it was.
 
+Saving a large project also runs on a worker thread, so the window stays
+alive while the file is written. Saving is not interruptible, since a
+half-written file helps nobody.
+
 ## Selections
 
 Shift adds to a selection, Ctrl subtracts, and a plain click deselects.

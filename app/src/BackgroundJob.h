@@ -10,11 +10,18 @@
 #include "firn/image.h"
 
 struct BackgroundJob {
+    // What the main thread does with the result when the worker is done.
+    enum class Kind { Fill, Save };
+
+    Kind kind = Kind::Fill;
     std::string name;              // the dialog's title and the history entry
-    std::future<bool> done;        // false when the worker was cancelled
+    std::future<bool> done;        // false when the worker failed or was cancelled
     std::atomic<float> progress{0.0f};
     std::atomic<bool> cancel{false};
-    firn::Image result;            // the worker's buffer; read only once `done` is ready
-    size_t layer = 0;
+    bool cancellable = true;       // writing a file is not worth interrupting
     bool opened = false;           // the modal has been opened for this job
+
+    firn::Image result;            // Fill: the worker's buffer, read once `done` is ready
+    size_t layer = 0;              // Fill: where it goes
+    std::string path, error;       // Save
 };

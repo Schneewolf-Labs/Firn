@@ -565,6 +565,12 @@ struct App {
     void new_document(int w, int h);
     bool open_document(const std::string& path);
     bool save_document(const std::string& path);
+    // The same save with the writing on a worker thread, for the places a
+    // person is sitting there waiting: File > Save and Save As. Every other
+    // caller (scripts, the driver, the close prompt) stays synchronous,
+    // because they act on the result immediately.
+    void save_document_async(const std::string& path);
+    void after_saved(const std::string& path);
     void request_open();
     void request_save_as();
     void save();  // to doc_path, or Save As when there is none

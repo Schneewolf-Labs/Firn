@@ -295,6 +295,14 @@ bool App::save_document(const std::string& path) {
         status = "Save failed: " + err;
         return false;
     }
+    after_saved(path);
+    return true;
+}
+
+// Everything that happens once the bytes are on disk. Shared with the
+// background save, which does the writing on a worker and then calls this
+// on the main thread.
+void App::after_saved(const std::string& path) {
     doc_path = path;
     { const auto slash = path.find_last_of("/\\"); doc_title = slash == std::string::npos ? path : path.substr(slash + 1); }
     saved_state = history.state_id();
@@ -308,7 +316,37 @@ bool App::save_document(const std::string& path) {
         if (extras) status += "\nClassic format: filter layers and layer styles are kept for Firn only; the original shows the layers without them.";
         if (!doc->icc().empty()) status += "\nClassic format: the color profile is not stored (.ora keeps it).";
     }
-    return true;
+}
+
+void App::save_document_async(const std::string& path) {
+    if (!doc) return;
+    if (job) { status = job->name + " is still running."; return; }
+    set_selection_edit(false);
+    {
+        const auto dot = path.rfind('.');
+        std::string ext = dot == std::string::npos ? "" : path.substr(dot + 1);
+        for (char& c : ext) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        if ((ext == "jpg" || ext == "jpeg" || ext == "webp") && pending_jpeg_path != path) {
+            pending_jpeg_path = path;
+            show_jpeg_dialog = true;
+            return;
+        }
+        pending_jpeg_path.clear();
+    }
+    job = std::make_unique<BackgroundJob>();
+    job->kind = BackgroundJob::Kind::Save;
+    job->name = "Saving";
+    job->path = path;
+    job->cancellable = false;   // a half-written file helps nobody
+    BackgroundJob* j = job.get();
+    const Document* d = doc.get();
+    const int quality = jpeg_quality;
+    // Safe because the modal stops the document changing and the action
+    // layer refuses to run while a job is going.
+    j->done = std::async(std::launch::async, [j, d, quality] {
+        return io::save_document(*d, j->path, &j->error, quality);
+    });
+    status = "Saving " + path + "...";
 }
 
 void App::request_open() {
@@ -339,7 +377,7 @@ void App::save() {
     const auto dot = doc_path.rfind('.');
     std::string ext = dot == std::string::npos ? "" : doc_path.substr(dot + 1);
     for (char& c : ext) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-    if (!doc_path.empty() && std::find(exts.begin(), exts.end(), ext) != exts.end()) save_document(doc_path);
+    if (!doc_path.empty() && std::find(exts.begin(), exts.end(), ext) != exts.end()) save_document_async(doc_path);
     else request_save_as();
 }
 
@@ -571,27 +609,39 @@ void App::draw_background_job() {
     const bool ready = job->done.valid() && job->done.wait_for(std::chrono::seconds(0)) == std::future_status::ready;
     if (ImGui::BeginPopupModal("Working", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings)) {
         ImGui::TextUnformatted(job->name.c_str());
-        ImGui::ProgressBar(job->progress.load(std::memory_order_relaxed), ImVec2(280, 0));
-        const bool cancelling = job->cancel.load(std::memory_order_relaxed);
-        ImGui::BeginDisabled(cancelling);
-        if (ImGui::Button("Cancel", ImVec2(90, 0))) job->cancel.store(true, std::memory_order_relaxed);
-        ImGui::EndDisabled();
-        if (cancelling) { ImGui::SameLine(); ImGui::TextDisabled("Stopping..."); }
+        if (job->cancellable) {
+            ImGui::ProgressBar(job->progress.load(std::memory_order_relaxed), ImVec2(280, 0));
+            const bool cancelling = job->cancel.load(std::memory_order_relaxed);
+            ImGui::BeginDisabled(cancelling);
+            if (ImGui::Button("Cancel", ImVec2(90, 0))) job->cancel.store(true, std::memory_order_relaxed);
+            ImGui::EndDisabled();
+            if (cancelling) { ImGui::SameLine(); ImGui::TextDisabled("Stopping..."); }
+        } else {
+            // Nothing useful to report and nothing safe to interrupt, so an
+            // indeterminate bar rather than a fake number.
+            const float t = static_cast<float>(ImGui::GetTime());
+            ImGui::ProgressBar(-0.4f * t, ImVec2(280, 0), "");
+        }
         if (ready) ImGui::CloseCurrentPopup();
         ImGui::EndPopup();
     }
     if (!ready) return;
 
     const bool finished = job->done.get();
-    const size_t layer = job->layer;
-    if (!finished) status = job->name + " cancelled";
-    else if (!doc || layer >= doc->layer_count() || !doc->layer(layer).is_raster()) status = job->name + ": the layer is gone";
-    else {
-        // The work is done, so the command only has to hand the pixels over;
-        // a redo copies them rather than filling again.
-        run(std::make_unique<AdjustCommand>(layer, job->name,
-                                            [img = std::move(job->result)](Image& i) { i = img; }));
-        status = job->name + " done";
+    if (job->kind == BackgroundJob::Kind::Save) {
+        if (finished) after_saved(job->path);
+        else status = "Save failed: " + (job->error.empty() ? std::string("unknown error") : job->error);
+    } else {
+        const size_t layer = job->layer;
+        if (!finished) status = job->name + " cancelled";
+        else if (!doc || layer >= doc->layer_count() || !doc->layer(layer).is_raster()) status = job->name + ": the layer is gone";
+        else {
+            // The work is done, so the command only has to hand the pixels
+            // over; a redo copies them rather than filling again.
+            run(std::make_unique<AdjustCommand>(layer, job->name,
+                                                [img = std::move(job->result)](Image& i) { i = img; }));
+            status = job->name + " done";
+        }
     }
     job.reset();
 }

@@ -329,7 +329,12 @@ docs/    notes on the original: command inventory, module mapping, FORMAT.md
   than recomputes. Core operations take the cancel as an `on_progress`
   callback returning false. Actions stay synchronous
   (`content_aware_fill(false)`) because a script expects the work finished
-  when the call returns.
+  when the call returns, and `App::do_command` refuses every action while a
+  job is running so nothing can change the document under the worker.
+  Interactive saves take the same route (`save_document_async`, used by
+  File > Save and Save As only); the close prompt, the driver and scripts
+  stay on the synchronous `save_document` because they act on its result
+  immediately. `after_saved` is the bookkeeping both share.
 - **Content-aware fill** (`core/include/firn/inpaint.h`) synthesizes a
   region from the rest of the image by PatchMatch. Two things it is easy to
   get wrong and that its test pins down: the patch distance must weight
