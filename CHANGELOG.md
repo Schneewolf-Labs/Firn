@@ -6,6 +6,8 @@ section into the next version.
 
 ## Unreleased
 
+## 0.5.0 (2026-09-12)
+
 ### Fixed
 - Layer styles scale when the image is resized. Halving a picture used to
   leave a full-size drop shadow on it, twice as heavy against the artwork
