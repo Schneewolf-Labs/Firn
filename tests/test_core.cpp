@@ -3971,6 +3971,35 @@ static void test_metadata() {
     CHECK(reopened && reopened->metadata().find(meta::Group::Exif, 0x829A));
     CHECK(reopened->metadata().find_text("Comment"));
 
+    // The native container has nowhere of its own for metadata, so it rides
+    // in the Firn stash. This was the last thing Firn held that a save to
+    // that format used to drop.
+    {
+        Document d(16, 12);
+        Layer& b = d.add_layer("Background");
+        b.background = true;
+        b.pixels.fill({90, 110, 130, 255});
+        d.metadata().set(meta::Group::Image, 0x013B, "A Photographer");
+        d.metadata().set(meta::Group::Exif, 0x829A, "1/250");
+        d.metadata().set(meta::Group::GPS, 0x0001, "N");
+        d.metadata().set_text("Comment", "a text note");
+        const std::vector<uint8_t> native = io::save_psp_to_memory(d);
+        std::vector<std::string> w2;
+        auto back2 = io::load_psp_from_memory(native.data(), native.size(), &err, &w2);
+        CHECK(back2 && back2->layer_count() == 1);
+        const meta::Metadata& got = back2->metadata();
+        CHECK(got.find(meta::Group::Image, 0x013B) && got.find(meta::Group::Image, 0x013B)->text() == "A Photographer");
+        CHECK(got.find(meta::Group::Exif, 0x829A) && got.find(meta::Group::Exif, 0x829A)->text() == "1/250");
+        CHECK(got.find(meta::Group::GPS, 0x0001) && got.find(meta::Group::GPS, 0x0001)->text() == "N");
+        CHECK(got.find_text("Comment") && got.find_text("Comment")->text() == "a text note");
+        // An image with no metadata must not gain a stash for nothing.
+        Document plain(8, 8);
+        plain.add_layer("Background").background = true;
+        const std::vector<uint8_t> bare = io::save_psp_to_memory(plain);
+        auto back3 = io::load_psp_from_memory(bare.data(), bare.size(), &err, &w2);
+        CHECK(back3 && back3->metadata().empty());
+    }
+
     // Stripping what identifies the photographer and the place.
     meta::Metadata priv = md;
     priv.remove_private();

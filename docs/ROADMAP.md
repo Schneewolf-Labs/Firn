@@ -260,9 +260,10 @@ against Krita in both directions. In priority order:
 - [x] **Settled: the feather radius already matches the original** (see
       section 20). No change needed; the blur and the feather use different
       conventions because the words mean different things.
-- [ ] **Metadata in the native container.** The only place Firn knowingly
-      drops something it holds. The Firn stash already carries four other
-      kinds of Firn-only data.
+- [x] **Metadata in the native container.** The only place Firn knowingly
+      dropped something it holds. The Firn stash now carries it too: the
+      Exif directory as base64 TIFF and the text notes as key/value pairs,
+      bounded at 48 KB so the description the original reads stays sane.
 - [ ] **Vector node editing**: Convert to Path, Add Path, node-level edits.
       Vectors are a headline feature and this is the visible hole in them;
       four of the original's script commands wait on it. The large item,

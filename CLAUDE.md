@@ -309,7 +309,9 @@ docs/    notes on the original: command inventory, module mapping, FORMAT.md
   text chunks parse into `meta::Entry` values that keep their TIFF type and
   bytes, so an untouched entry round trips exactly. `Document::metadata()`
   holds them (part of the undo state); `io::read_metadata` / `embed_metadata`
-  do the files, and `MetadataCommand` is the undoable edit. The camera's
+  do the files, and `MetadataCommand` is the undoable edit. The native
+  container has nowhere of its own for metadata, so it rides in the Firn
+  stash (docs/FORMAT.md). The camera's
   embedded thumbnail is deliberately not carried over. The Metadata tab of
   Image > Image Information is in `app/src/ui/Menu.cpp`.
 - **Saved selections** live in `Document::alpha_channels()` and round-trip

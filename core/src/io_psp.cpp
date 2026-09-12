@@ -825,6 +825,50 @@ bool read_composite(const Reader& r, const Block& bank, const Header& hdr, const
 
 }  // namespace
 
+// Base64, so a binary Exif block survives a JSON string. Small and local:
+// the stash is the only thing in the codebase that needs it.
+std::string base64_encode(const std::vector<uint8_t>& d) {
+    static const char* t = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    std::string out;
+    out.reserve((d.size() + 2) / 3 * 4);
+    for (size_t i = 0; i < d.size(); i += 3) {
+        const uint32_t a = d[i];
+        const uint32_t b = i + 1 < d.size() ? d[i + 1] : 0;
+        const uint32_t c = i + 2 < d.size() ? d[i + 2] : 0;
+        const uint32_t v = (a << 16) | (b << 8) | c;
+        out += t[(v >> 18) & 63];
+        out += t[(v >> 12) & 63];
+        out += i + 1 < d.size() ? t[(v >> 6) & 63] : '=';
+        out += i + 2 < d.size() ? t[v & 63] : '=';
+    }
+    return out;
+}
+
+std::vector<uint8_t> base64_decode(const std::string& s) {
+    auto value = [](char c) -> int {
+        if (c >= 'A' && c <= 'Z') return c - 'A';
+        if (c >= 'a' && c <= 'z') return c - 'a' + 26;
+        if (c >= '0' && c <= '9') return c - '0' + 52;
+        if (c == '+') return 62;
+        if (c == '/') return 63;
+        return -1;
+    };
+    std::vector<uint8_t> out;
+    uint32_t acc = 0;
+    int bits = 0;
+    for (char c : s) {
+        const int v = value(c);
+        if (v < 0) continue;                 // padding and anything unexpected
+        acc = (acc << 6) | static_cast<uint32_t>(v);
+        bits += 6;
+        if (bits >= 8) {
+            bits -= 8;
+            out.push_back(static_cast<uint8_t>((acc >> bits) & 0xFF));
+        }
+    }
+    return out;
+}
+
 // --- Firn stash --------------------------------------------------------------
 // Things the original's format has no place for (our filter layers) ride in
 // the creator block's description field as JSON. The original shows the
@@ -911,6 +955,19 @@ void apply_firn_stash(const Reader& r, const Block& creator, Document& doc, std:
         const int idx = stash_layer(doc, pass_through[i], warnings);
         if (idx >= 0) doc.layer(idx).pass_through = true;
     }
+    const json::Value& md = v.get("metadata");
+    if (md.is_object()) {
+        meta::Metadata got;
+        const std::string exif = md.get("exif").as_string("");
+        if (!exif.empty()) {
+            const std::vector<uint8_t> tiff = base64_decode(exif);
+            got = meta::parse_tiff(tiff.data(), tiff.size());
+        }
+        const json::Value& notes = md.get("notes");
+        for (size_t i = 0; i < notes.size(); ++i)
+            got.set_text(notes[i].get("key").as_string(""), notes[i].get("value").as_string(""));
+        if (!got.empty()) doc.set_metadata(std::move(got));
+    }
     doc.touch();
 }
 
@@ -977,9 +1034,36 @@ std::string firn_stash(const Document& doc) {
         e.set("style", L.style.to_json());
         styles.push(std::move(e));
     }
-    if (filters.size() == 0 && styles.size() == 0 && clipped.size() == 0 && ranges.size() == 0 && pass_through.size() == 0) return {};
+    // Exif and text notes. The original's format has nowhere for them, and
+    // this is the last thing Firn held that a save to it used to drop.
+    json::Value metadata = json::Value::object();
+    bool have_metadata = false;
+    // The stash rides in the creator description, a field the original reads
+    // into its own buffer, so keep it bounded. JPEG caps an Exif segment at
+    // 64 KB anyway, so this only ever drops something pathological.
+    constexpr size_t kMaxExif = 48 * 1024;
+    if (const std::vector<uint8_t> tiff = meta::build_tiff(doc.metadata());
+        !tiff.empty() && tiff.size() <= kMaxExif) {
+        metadata.set("exif", json::Value::string(base64_encode(tiff)));
+        have_metadata = true;
+    }
+    {
+        json::Value notes = json::Value::array();
+        for (const meta::Entry& e : doc.metadata().entries) {
+            if (e.group != meta::Group::Text) continue;
+            json::Value n = json::Value::object();
+            n.set("key", json::Value::string(e.key));
+            n.set("value", json::Value::string(e.text()));
+            notes.push(std::move(n));
+        }
+        if (notes.size()) { metadata.set("notes", std::move(notes)); have_metadata = true; }
+    }
+    if (filters.size() == 0 && styles.size() == 0 && clipped.size() == 0 && ranges.size() == 0 &&
+        pass_through.size() == 0 && !have_metadata)
+        return {};
     json::Value root = json::Value::object();
     root.set("firn", json::Value::number(1));
+    if (have_metadata) root.set("metadata", std::move(metadata));
     if (filters.size()) root.set("filters", std::move(filters));
     if (styles.size()) root.set("styles", std::move(styles));
     if (clipped.size()) root.set("clipped", std::move(clipped));

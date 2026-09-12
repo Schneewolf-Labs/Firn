@@ -360,7 +360,11 @@ groups whose members act on the whole image below them; the original
 composites all of those normally. `styles` entries carry a layer index and a
 `style` object (the fields of
 `LayerStyle`, colors as `[r, g, b, a]`); the layer is written with its
-plain pixels, so the original shows it without the effects.
+plain pixels, so the original shows it without the effects. A `metadata`
+object carries the image's metadata, which this format has nowhere of its
+own for: `exif` is a base64 TIFF directory as `meta::build_tiff` writes it
+(skipped above 48 KB, so the description stays bounded), and `notes` is an
+array of `{"key","value"}` for the PNG-style text entries.
 
 ## Text shapes
 

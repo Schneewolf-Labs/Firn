@@ -15,6 +15,12 @@ section into the next version.
   nothing.
 
 ### Added
+- The native project format keeps a picture's metadata. It was the last
+  thing Firn held that saving to that format dropped: open a photo, save it
+  as a `.pspimage`, and the camera, the exposure and the place all survived
+  to the reopen. Exif rides in the Firn stash as a base64 TIFF directory and
+  the text notes as key/value pairs; the original ignores both, as it
+  already does the rest of the stash.
 - Help > Check for Updates asks GitHub whether a newer release exists and
   reports it in Help > About. It only ever tells you; it never downloads or
   installs anything. Preferences has an opt-in daily check, off by default
