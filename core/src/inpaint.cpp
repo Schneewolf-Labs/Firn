@@ -144,12 +144,12 @@ int patch_distance(const Level& lv, int ax, int ay, int bx, int by, int r) {
 
 }  // namespace
 
-void content_aware_fill(Image& img, const Mask& region, const Options& opt) {
-    if (img.empty() || region.empty()) return;
+bool content_aware_fill(Image& img, const Mask& region, const Options& opt) {
+    if (img.empty() || region.empty()) return true;
     const int W = img.width(), H = img.height();
-    if (region.width() != W || region.height() != H) return;
+    if (region.width() != W || region.height() != H) return true;
     const raster::Rect box = region.bounds();
-    if (box.empty()) return;
+    if (box.empty()) return true;
 
     const int r = std::max(1, (std::max(3, opt.patch | 1) - 1) / 2);
 
@@ -173,7 +173,7 @@ void content_aware_fill(Image& img, const Mask& region, const Options& opt) {
     }
     long holes = 0;
     for (uint8_t v : fine.hole) holes += v;
-    if (!holes) return;
+    if (!holes) return true;
 
     // Pyramid, coarse enough that the hole is a handful of patches across.
     std::vector<Level> levels{fine};
@@ -191,6 +191,12 @@ void content_aware_fill(Image& img, const Mask& region, const Options& opt) {
 
     std::vector<int> nnf;   // two ints per pixel: the source it copies from
     uint32_t rng = opt.seed ? opt.seed : 1u;
+
+    // For the progress fraction: every level's pass count, added up.
+    float total_passes = 0.0f, done_passes = 0.0f;
+    for (int li = static_cast<int>(levels.size()) - 1; li >= 0; --li)
+        total_passes += static_cast<float>(std::max(1, opt.passes + 4 * li));
+    if (total_passes <= 0.0f) total_passes = 1.0f;
 
     for (int li = static_cast<int>(levels.size()) - 1; li >= 0; --li) {
         Level& lv = levels[li];
@@ -240,6 +246,12 @@ void content_aware_fill(Image& img, const Mask& region, const Options& opt) {
         // they get many more rounds than the expensive fine ones.
         const int passes = std::max(1, opt.passes + 4 * li);
         for (int pass = 0; pass < passes; ++pass) {
+            // Progress is reported per pass, which is the only granularity a
+            // caller can act on without slowing the search down.
+            if (opt.on_progress) {
+                done_passes += 1.0f;
+                if (!opt.on_progress(std::min(1.0f, done_passes / total_passes))) return false;
+            }
             const bool forward = (pass % 2) == 0;
             std::vector<int> dist(static_cast<size_t>(lv.w) * lv.h, INT32_MAX);
             // Search: propagate a neighbor's match, then look randomly
@@ -346,6 +358,7 @@ void content_aware_fill(Image& img, const Mask& region, const Options& opt) {
             for (int c = 0; c < 3; ++c) d[c] = static_cast<uint8_t>(d[c] + (s[c] - d[c]) * m + 0.5f);
             d[3] = static_cast<uint8_t>(std::max<int>(d[3], static_cast<int>(255 * m)));
         }
+    return true;
 }
 
 }  // namespace firn::inpaint

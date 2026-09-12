@@ -49,7 +49,9 @@ Red-eye Removal and Color Replacer all work as brushes, so they respect the
 selection, the pressure response and the mask edit mode.
 
 Edit > Content-Aware Fill rebuilds whatever is selected from the rest of the
-picture by exemplar synthesis, for removing an object outright.
+picture by exemplar synthesis, for removing an object outright. It runs on a worker
+thread behind a progress dialog, so the window keeps drawing and the fill can
+be called off part way; cancelling leaves the picture exactly as it was.
 
 ## Selections
 

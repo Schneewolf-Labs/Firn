@@ -6,6 +6,14 @@ section into the next version.
 
 ## Unreleased
 
+### Changed
+- Content-Aware Fill no longer freezes the window. It runs on a worker
+  thread behind a progress dialog with a Cancel, so the program keeps
+  drawing and responding while it works, and cancelling leaves the picture
+  exactly as it was. Scripts are unaffected: `edit.content_aware_fill`
+  still finishes before it returns, because a script expects the work done
+  when the call comes back.
+
 ### Added
 - Lock transparency, in Layer Properties. The clear parts of a layer stay
   clear, so painting and fills only touch pixels that are already there and

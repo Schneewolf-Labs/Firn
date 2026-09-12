@@ -320,6 +320,16 @@ docs/    notes on the original: command inventory, module mapping, FORMAT.md
   Keep the code portable: no GCC-only flags outside the `if(NOT MSVC)`
   blocks, NOMINMAX is defined project-wide, `main()` is plain (SDL's
   entry point is disabled).
+- **Slow work off the interface thread**: `App::job` (`BackgroundJob.h`) is
+  one operation on a worker, behind a modal that shows progress and offers
+  Cancel. The modal is load-bearing: the document cannot change while the
+  worker reads it, so there is no stale-result case to handle. The worker
+  writes into its own `result` image, which the main thread touches only
+  once the future is ready, and hands it to a command that copies rather
+  than recomputes. Core operations take the cancel as an `on_progress`
+  callback returning false. Actions stay synchronous
+  (`content_aware_fill(false)`) because a script expects the work finished
+  when the call returns.
 - **Content-aware fill** (`core/include/firn/inpaint.h`) synthesizes a
   region from the rest of the image by PatchMatch. Two things it is easy to
   get wrong and that its test pins down: the patch distance must weight

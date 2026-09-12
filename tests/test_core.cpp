@@ -2900,6 +2900,63 @@ static void test_icc() {
     std::remove(png.c_str()); std::remove(jpg.c_str());
 }
 
+// Content-aware fill reports how far along it is and stops when asked, so
+// the interface can run it on a worker thread and still cancel it.
+static void test_inpaint_progress_and_cancel() {
+    // A checkerboard with the hole painted flat red, so a finished fill is
+    // visibly different from the input: the fill reproduces a regular
+    // texture exactly, which is why the hole cannot start as that texture.
+    auto make = [] {
+        Image img(96, 96);
+        for (int y = 0; y < 96; ++y)
+            for (int x = 0; x < 96; ++x) {
+                const uint8_t v = static_cast<uint8_t>(((x / 8 + y / 8) % 2) ? 220 : 40);
+                img.set(x, y, {v, v, v, 255});
+            }
+        for (int y = 36; y < 60; ++y)
+            for (int x = 36; x < 60; ++x) img.set(x, y, {255, 0, 0, 255});
+        return img;
+    };
+    const Mask hole = mask::rectangle(96, 96, 36, 36, 60, 60, false);
+
+    // Progress arrives in order, inside 0..1, and reaches the end.
+    Image img = make();
+    std::vector<float> seen;
+    inpaint::Options opt;
+    opt.max_side = 96;
+    opt.on_progress = [&seen](float p) { seen.push_back(p); return true; };
+    CHECK(inpaint::content_aware_fill(img, hole, opt));
+    CHECK(!seen.empty());
+    for (size_t i = 0; i < seen.size(); ++i) {
+        CHECK(seen[i] >= 0.0f && seen[i] <= 1.0f);
+        if (i) CHECK(seen[i] >= seen[i - 1]);
+    }
+    CHECK(seen.back() > 0.9f);
+    const Image done = img;
+
+    // Stopping early leaves the image exactly as it was, so a cancelled fill
+    // has nothing to undo.
+    Image other = make();
+    const Image untouched = other;
+    int calls = 0;
+    inpaint::Options stop;
+    stop.max_side = 96;
+    stop.on_progress = [&calls](float) { return ++calls < 2; };
+    CHECK(!inpaint::content_aware_fill(other, hole, stop));
+    CHECK(other.size_bytes() == untouched.size_bytes());
+    CHECK(std::memcmp(other.data(), untouched.data(), other.size_bytes()) == 0);
+    // And the run that was allowed to finish did change something.
+    CHECK(std::memcmp(done.data(), untouched.data(), done.size_bytes()) != 0);
+
+    // Without a callback it still works, which is the path every other
+    // caller takes.
+    Image plain = make();
+    inpaint::Options none;
+    none.max_side = 96;
+    CHECK(inpaint::content_aware_fill(plain, hole, none));
+    CHECK(std::memcmp(plain.data(), untouched.data(), plain.size_bytes()) != 0);
+}
+
 // Gradient Map: a pixel's lightness picks a colour along a gradient. It is
 // Firn's own adjustment, so the native container stores it as a placeholder
 // layer plus the stash rather than as one of the original's own blocks.
@@ -3713,6 +3770,7 @@ static void test_metadata() {
 
 int main() {
     test_icc();
+    test_inpaint_progress_and_cancel();
     test_gradient_map();
     test_lock_transparency();
     test_pass_through_groups();

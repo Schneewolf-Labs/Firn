@@ -639,6 +639,7 @@ void App::draw_layer_menu_items(MenuBuilder& m) {
 }
 
 void App::draw_dialogs() {
+    draw_background_job();
     draw_adjust_dialogs();
     draw_text_dialog();
     draw_vector_dialogs();

@@ -157,7 +157,9 @@ std::vector<Action> build() {
         [](App& app, const Value&, bool* ok) {
             std::string e;
             if (!need_raster(app, ok, e) || !need_selection(app, ok, e)) return e;
-            app.content_aware_fill();
+            // Synchronous here: a script expects the fill to be finished when
+            // the call returns. The menu item runs it on a worker thread.
+            app.content_aware_fill(false);
             return ok_json();
         });
 

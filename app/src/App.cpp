@@ -19,6 +19,7 @@
 #include <cstring>
 #include <filesystem>
 
+#include "BackgroundJob.h"
 #include "Clipboard.h"
 #include "imgui.h"
 #include "firn/io.h"
@@ -533,13 +534,66 @@ void App::zoom_to_selection() {
 
 // Selections > Content-Aware Fill: synthesizes the selected area from the
 // rest of the layer, which is how an unwanted object is removed.
-void App::content_aware_fill() {
+void App::content_aware_fill(bool background) {
     if (!doc || !active_is_raster()) { status = "Content-Aware Fill needs a raster layer."; return; }
     if (!doc->has_selection() || !doc->selection().any()) { status = "Content-Aware Fill needs a selection."; return; }
+    if (job) { status = job->name + " is still running."; return; }
     const Mask area = doc->selection();
+    const size_t layer = static_cast<size_t>(active_layer());
+    if (!background) {
+        // Scripts want it finished when the call returns.
+        status = "Filling from the surrounding picture...";
+        run(std::make_unique<AdjustCommand>(layer, "Content-Aware Fill",
+                                            [area](Image& i) { inpaint::content_aware_fill(i, area); }));
+        return;
+    }
+    // Off the interface thread, so the window keeps drawing and the fill can
+    // be called off. The worker owns `result` until its future is ready.
+    job = std::make_unique<BackgroundJob>();
+    job->name = "Content-Aware Fill";
+    job->layer = layer;
+    job->result = doc->layer(layer).pixels;
+    BackgroundJob* j = job.get();
+    j->done = std::async(std::launch::async, [j, area] {
+        inpaint::Options opt;
+        opt.on_progress = [j](float p) {
+            j->progress.store(p, std::memory_order_relaxed);
+            return !j->cancel.load(std::memory_order_relaxed);
+        };
+        return inpaint::content_aware_fill(j->result, area, opt);
+    });
     status = "Filling from the surrounding picture...";
-    run(std::make_unique<AdjustCommand>(active_layer(), "Content-Aware Fill",
-                                        [area](Image& i) { inpaint::content_aware_fill(i, area); }));
+}
+
+void App::draw_background_job() {
+    if (!job) return;
+    if (!job->opened) { ImGui::OpenPopup("Working"); job->opened = true; }
+    const bool ready = job->done.valid() && job->done.wait_for(std::chrono::seconds(0)) == std::future_status::ready;
+    if (ImGui::BeginPopupModal("Working", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings)) {
+        ImGui::TextUnformatted(job->name.c_str());
+        ImGui::ProgressBar(job->progress.load(std::memory_order_relaxed), ImVec2(280, 0));
+        const bool cancelling = job->cancel.load(std::memory_order_relaxed);
+        ImGui::BeginDisabled(cancelling);
+        if (ImGui::Button("Cancel", ImVec2(90, 0))) job->cancel.store(true, std::memory_order_relaxed);
+        ImGui::EndDisabled();
+        if (cancelling) { ImGui::SameLine(); ImGui::TextDisabled("Stopping..."); }
+        if (ready) ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
+    }
+    if (!ready) return;
+
+    const bool finished = job->done.get();
+    const size_t layer = job->layer;
+    if (!finished) status = job->name + " cancelled";
+    else if (!doc || layer >= doc->layer_count() || !doc->layer(layer).is_raster()) status = job->name + ": the layer is gone";
+    else {
+        // The work is done, so the command only has to hand the pixels over;
+        // a redo copies them rather than filling again.
+        run(std::make_unique<AdjustCommand>(layer, job->name,
+                                            [img = std::move(job->result)](Image& i) { i = img; }));
+        status = job->name + " done";
+    }
+    job.reset();
 }
 
 void App::repeat_last_effect() {

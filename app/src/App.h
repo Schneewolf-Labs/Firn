@@ -590,7 +590,7 @@ struct App {
     void copy_merged();          // the composite, not just the active layer
     void paste_into_selection(); // scales the clipboard to the selection and paints it through
     void repeat_last_effect();   // re-applies the last Adjust/Effects dialog with its settings
-    void content_aware_fill();   // rebuilds the selection from the rest of the picture
+    void content_aware_fill(bool background = true);   // rebuilds the selection from the rest of the picture
     void revert();               // reloads the file from disk, dropping every change
     bool show_revert_prompt = false;
     void zoom_to_rect(firn::raster::Rect r);   // fills the view with an image rect
@@ -619,6 +619,10 @@ struct App {
     void layer_merge(int kind);     // 0 down, 1 visible, 2 all
     void layer_view_only(bool current_only);   // hide every other layer, or show all
     void layer_promote_background();
+    // A slow operation on a worker thread; see BackgroundJob.h.
+    std::unique_ptr<struct BackgroundJob> job;
+    bool job_running() const { return job != nullptr; }
+    void draw_background_job();
     const firn::Mask* paint_clip(int layer);
     firn::Mask paint_clip_cache;   // narrowed selection for a protected layer
     bool can_clip_layer() const;

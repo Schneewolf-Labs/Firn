@@ -211,8 +211,8 @@ against the 115 commands its own bundled scripts use.
 ## 16. Beyond the original (2026-09-11)
 
 - [x] Content-Aware Fill (exemplar synthesis, `core/src/inpaint.cpp`)
-- [ ] Run it off the UI thread: a few seconds of frozen window is the worst
-      thing about it today
+- [x] Run it off the UI thread, behind a progress dialog with a Cancel
+      (`app/src/BackgroundJob.h`)
 - [ ] Better structure in large holes: the fill is convincing over texture
       but can leave an edge where it has to invent shape. Onion-peel
       initialization and more search passes are the usual answers
