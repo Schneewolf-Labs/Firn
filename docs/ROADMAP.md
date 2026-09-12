@@ -244,6 +244,25 @@ against the 115 commands its own bundled scripts use.
       point sizes). That is the original's ceiling, not a bug; the stash
       could carry them for Firn's own re-reads if it ever matters
 
+## 20. Blur fidelity (2026-09-12)
+
+- [x] **Decided: keep the true Gaussian.** Three box passes would take a
+      24 MP blur from 2.4 s to about 12 ms now that `box_blur` is a running
+      sum, but they shift the result by about 2 levels on average and 16 at
+      worst, and that changes layer styles, filter layers and unsharp mask
+      as well. The blur should look like the original's, not like whatever
+      is fastest. Do not revisit this as a performance idea.
+- [ ] **What "Radius" means has never been checked against the original.**
+      `raster::gaussian_blur` treats the radius as sigma and takes a
+      3-sigma extent, so radius 8 reaches 24 pixels. Most implementations
+      mean something nearer the extent by "radius", which would make Firn's
+      blur roughly three times as strong as the original's at the same
+      number. The codebase is not even consistent with itself:
+      `mask::feather` uses `sigma = radius / 2`. Settling it needs someone
+      to run Gaussian Blur at a known radius in the original under Wine and
+      compare against Firn at the same setting; it cannot be scripted,
+      because the original has no command line for it.
+
 ## 19. Borrowed from Photoshop (2026-09-11)
 
 Ideas worth having, each written independently from the idea rather than

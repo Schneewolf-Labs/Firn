@@ -338,6 +338,12 @@ docs/    notes on the original: command inventory, module mapping, FORMAT.md
   because they act on the result immediately. `after_saved` is the
   bookkeeping both save paths share. Opening is the safe one: the worker
   builds a document of its own and touches nothing the main thread owns.
+- **Blur fidelity**: `raster::gaussian_blur` is a true Gaussian and stays
+  one. Substituting three box passes is much faster and is deliberately
+  rejected: it changes the result, and with it layer styles, filter layers
+  and unsharp mask (docs/ROADMAP.md, "Blur fidelity"). What the radius
+  parameter means is still unverified against the original, and the
+  codebase disagrees with itself about it.
 - **Content-aware fill** (`core/include/firn/inpaint.h`) synthesizes a
   region from the rest of the image by PatchMatch. Two things it is easy to
   get wrong and that its test pins down: the patch distance must weight
