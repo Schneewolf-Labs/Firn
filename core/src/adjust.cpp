@@ -1,4 +1,5 @@
 #include "firn/adjust.h"
+#include "firn/parallel.h"
 
 #include <algorithm>
 #include <cmath>
@@ -59,25 +60,29 @@ void apply_luts(Image& img, const Lut& r, const Lut& g, const Lut& b) {
 void colorize(Image& img, int hue, int saturation) {
     uint8_t* p = img.data();
     const float s = std::clamp(saturation, 0, 255) / 255.0f;
-    for (size_t i = 0; i < img.size_bytes(); i += 4) {
+    parallel::rows(img.height(), static_cast<size_t>(img.width()) * 20, [&](int y0, int y1) {
+    for (size_t i = static_cast<size_t>(y0) * img.width() * 4; i < static_cast<size_t>(y1) * img.width() * 4; i += 4) {
         HSL c = rgb_to_hsl(p[i], p[i + 1], p[i + 2]);
         c.h = static_cast<float>(hue);
         c.s = s;
         hsl_to_rgb(c, p + i, p + i + 1, p + i + 2);
     }
+    });
 }
 
 void hsl_adjust(Image& img, int hue, int saturation, int lightness) {
     uint8_t* p = img.data();
     const float sat = std::clamp(saturation, -100, 100) / 100.0f;
     const float lig = std::clamp(lightness, -100, 100) / 100.0f;
-    for (size_t i = 0; i < img.size_bytes(); i += 4) {
+    parallel::rows(img.height(), static_cast<size_t>(img.width()) * 24, [&](int y0, int y1) {
+    for (size_t i = static_cast<size_t>(y0) * img.width() * 4; i < static_cast<size_t>(y1) * img.width() * 4; i += 4) {
         HSL c = rgb_to_hsl(p[i], p[i + 1], p[i + 2]);
         c.h += hue;
         c.s = sat >= 0 ? c.s + (1 - c.s) * sat : c.s * (1 + sat);
         c.l = lig >= 0 ? c.l + (1 - c.l) * lig : c.l * (1 + lig);
         hsl_to_rgb(c, p + i, p + i + 1, p + i + 2);
     }
+    });
 }
 
 Lut levels_lut(int in_low, float gamma, int in_high, int out_low, int out_high) {
@@ -176,7 +181,8 @@ Lut curve_lut(const std::vector<std::pair<float, float>>& in) {
 
 void channel_mixer(Image& img, const ChannelMix& mx) {
     uint8_t* p = img.data();
-    for (size_t i = 0; i < img.size_bytes(); i += 4) {
+    parallel::rows(img.height(), static_cast<size_t>(img.width()) * 12, [&](int y0, int y1) {
+    for (size_t i = static_cast<size_t>(y0) * img.width() * 4; i < static_cast<size_t>(y1) * img.width() * 4; i += 4) {
         const float in[3] = {static_cast<float>(p[i]), static_cast<float>(p[i + 1]), static_cast<float>(p[i + 2])};
         uint8_t out[3];
         for (int c = 0; c < 3; ++c) {
@@ -187,6 +193,7 @@ void channel_mixer(Image& img, const ChannelMix& mx) {
         }
         p[i] = out[0]; p[i + 1] = out[1]; p[i + 2] = out[2];
     }
+    });
 }
 
 void color_balance(Image& img, const ColorBalance& cb) {
@@ -225,20 +232,23 @@ void color_balance(Image& img, const ColorBalance& cb) {
 void sepia(Image& img, int amount) {
     const float t = std::clamp(amount, 0, 100) / 100.0f;
     uint8_t* p = img.data();
-    for (size_t i = 0; i < img.size_bytes(); i += 4) {
+    parallel::rows(img.height(), static_cast<size_t>(img.width()) * 16, [&](int y0, int y1) {
+    for (size_t i = static_cast<size_t>(y0) * img.width() * 4; i < static_cast<size_t>(y1) * img.width() * 4; i += 4) {
         const float y = static_cast<float>(luma(p + i));
         const float sr = std::min(255.0f, y * 1.15f), sg = y * 0.95f, sb = y * 0.72f;
         p[i] = clamp8(p[i] + (sr - p[i]) * t);
         p[i + 1] = clamp8(p[i + 1] + (sg - p[i + 1]) * t);
         p[i + 2] = clamp8(p[i + 2] + (sb - p[i + 2]) * t);
     }
+    });
 }
 
 void hue_map(Image& img, const HueMap& m) {
     uint8_t* p = img.data();
     const float sat = std::clamp(m.saturation, -100, 100) / 100.0f;
     const float lig = std::clamp(m.lightness, -100, 100) / 100.0f;
-    for (size_t i = 0; i < img.size_bytes(); i += 4) {
+    parallel::rows(img.height(), static_cast<size_t>(img.width()) * 20, [&](int y0, int y1) {
+    for (size_t i = static_cast<size_t>(y0) * img.width() * 4; i < static_cast<size_t>(y1) * img.width() * 4; i += 4) {
         HSL c = rgb_to_hsl(p[i], p[i + 1], p[i + 2]);
         if (c.s > 0.0f) {
             // Interpolate the shift between the two nearest band centers (0, 36, 72, ...).
@@ -251,6 +261,7 @@ void hue_map(Image& img, const HueMap& m) {
         c.l = lig >= 0 ? c.l + (1 - c.l) * lig : c.l * (1 + lig);
         hsl_to_rgb(c, p + i, p + i + 1, p + i + 2);
     }
+    });
 }
 
 void fade_correction(Image& img, int amount) {

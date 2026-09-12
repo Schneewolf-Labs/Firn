@@ -7,6 +7,13 @@ section into the next version.
 ## Unreleased
 
 ### Changed
+- The Effects menu and the per-pixel adjustments run across cores now. None
+  of them did: three shared pixel passes drive most of the effects, and all
+  three walked the image on one thread. On a 24 megapixel layer the median
+  filter went from 6.7 seconds to 0.8, motion blur from 2.5 to 0.3, and
+  twirl, ripple, spherize, emboss, sharpen and erode all landed between five
+  and eight times faster. Every one of them produces the same bytes as
+  before, checked effect by effect.
 - Windows renders with per-monitor DPI awareness instead of OS bitmap
   stretching, follows DPI changes while running, and rebuilds fonts at the
   requested size. Theme changes no longer compound widget spacing. Startup

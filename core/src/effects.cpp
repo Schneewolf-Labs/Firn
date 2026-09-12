@@ -1,4 +1,5 @@
 #include "firn/effects.h"
+#include "firn/parallel.h"
 #include "effects_util.h"
 
 #include <algorithm>
@@ -67,8 +68,12 @@ void unsharp_mask(Image& img, float radius, int strength, int clipping) {
 
 void median(Image& img, int radius) {
     radius = std::max(1, radius);
-    std::vector<uint8_t> win;
     rgb_pass(img, [&](int x, int y, auto at, float* out) {
+        // The window lives here rather than outside the lambda: rgb_pass
+        // runs rows on several threads, and one shared buffer would be a
+        // race.
+        std::vector<uint8_t> win;
+        win.reserve(static_cast<size_t>(2 * radius + 1) * (2 * radius + 1));
         for (int c = 0; c < 3; ++c) {
             win.clear();
             for (int j = -radius; j <= radius; ++j)
@@ -87,21 +92,23 @@ void motion_blur(Image& img, float angle_degrees, int strength) {
     const Image src = img;
     const int w = img.width(), h = img.height();
     uint8_t* d = img.data();
-    for (int y = 0; y < h; ++y)
-        for (int x = 0; x < w; ++x) {
-            float acc[4] = {0, 0, 0, 0};
-            for (int k = 0; k < n; ++k) {
-                const int sx = std::clamp(static_cast<int>(std::lround(x + dx * k)), 0, w - 1);
-                const int sy = std::clamp(static_cast<int>(std::lround(y + dy * k)), 0, h - 1);
-                const uint8_t* s = src.data() + (static_cast<size_t>(sy) * w + sx) * 4;
-                const float a = s[3] / 255.0f;
-                acc[0] += s[0] * a; acc[1] += s[1] * a; acc[2] += s[2] * a; acc[3] += s[3];
+    parallel::rows(h, static_cast<size_t>(w) * static_cast<size_t>(n), [&](int y0, int y1) {
+        for (int y = y0; y < y1; ++y)
+            for (int x = 0; x < w; ++x) {
+                float acc[4] = {0, 0, 0, 0};
+                for (int k = 0; k < n; ++k) {
+                    const int sx = std::clamp(static_cast<int>(std::lround(x + dx * k)), 0, w - 1);
+                    const int sy = std::clamp(static_cast<int>(std::lround(y + dy * k)), 0, h - 1);
+                    const uint8_t* s = src.data() + (static_cast<size_t>(sy) * w + sx) * 4;
+                    const float a = s[3] / 255.0f;
+                    acc[0] += s[0] * a; acc[1] += s[1] * a; acc[2] += s[2] * a; acc[3] += s[3];
+                }
+                uint8_t* p = d + (static_cast<size_t>(y) * w + x) * 4;
+                const float a = acc[3] / n;
+                for (int c = 0; c < 3; ++c) p[c] = a > 0 ? clamp8(acc[c] / n / (a / 255.0f)) : 0;
+                p[3] = clamp8(a);
             }
-            uint8_t* p = d + (static_cast<size_t>(y) * w + x) * 4;
-            const float a = acc[3] / n;
-            for (int c = 0; c < 3; ++c) p[c] = a > 0 ? clamp8(acc[c] / n / (a / 255.0f)) : 0;
-            p[3] = clamp8(a);
-        }
+    });
 }
 
 void mosaic(Image& img, int bw, int bh) {

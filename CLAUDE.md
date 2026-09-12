@@ -345,6 +345,15 @@ docs/    notes on the original: command inventory, module mapping, FORMAT.md
   matches flat regions and the fill stays flat; and a pyramid level whose
   hole leaves no whole patch of known image must be dropped, not treated as
   a failure of the whole fill.
+- **Pixel loops run across cores** through `firn::parallel::rows`
+  (`core/include/firn/parallel.h`), which runs small jobs inline so short
+  operations pay nothing. Most effects go through three shared passes in
+  `core/src/effects_util.h` (`rgb_pass`, `remap`, `remap_edges`) which are
+  banded by row, so **the function passed to them must not keep state
+  across pixels**: the median filter used to hold one window buffer outside
+  its lambda, which becomes a race the moment the pass is threaded. When
+  changing any of this, prove the output is unchanged rather than assuming
+  it, by hashing each operation's result before and after.
 - Add a test in `tests/test_core.cpp` for every new raster op or command.
 
 ## macOS

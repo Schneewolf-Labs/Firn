@@ -4,6 +4,7 @@
 #include <cstdint>
 
 #include "firn/image.h"
+#include "firn/parallel.h"
 
 // Helpers shared by the effects sources (internal to core).
 namespace firn::effects::detail {
@@ -18,13 +19,18 @@ void rgb_pass(Image& img, Fn fn) {
     const int w = img.width(), h = img.height();
     auto at = [&](int x, int y) { return src.data() + (static_cast<size_t>(std::clamp(y, 0, h - 1)) * w + std::clamp(x, 0, w - 1)) * 4; };
     uint8_t* d = img.data();
-    for (int y = 0; y < h; ++y)
-        for (int x = 0; x < w; ++x) {
-            float out[3];
-            fn(x, y, at, out);
-            uint8_t* p = d + (static_cast<size_t>(y) * w + x) * 4;
-            for (int c = 0; c < 3; ++c) p[c] = clamp8(out[c]);
-        }
+    // Rows are independent: every one reads the untouched source copy and
+    // writes only its own pixels. `fn` must not hold state across pixels,
+    // for the same reason.
+    parallel::rows(h, static_cast<size_t>(w) * 8, [&](int y0, int y1) {
+        for (int y = y0; y < y1; ++y)
+            for (int x = 0; x < w; ++x) {
+                float out[3];
+                fn(x, y, at, out);
+                uint8_t* p = d + (static_cast<size_t>(y) * w + x) * 4;
+                for (int c = 0; c < 3; ++c) p[c] = clamp8(out[c]);
+            }
+    });
 }
 
 
@@ -35,7 +41,8 @@ void remap(Image& img, Map map) {
     const Image src = img;
     const int w = img.width(), h = img.height();
     uint8_t* d = img.data();
-    for (int y = 0; y < h; ++y)
+    parallel::rows(h, static_cast<size_t>(w) * 8, [&](int y0, int y1) {
+    for (int y = y0; y < y1; ++y)
         for (int x = 0; x < w; ++x) {
             float sx, sy;
             map(x + 0.5f, y + 0.5f, sx, sy);
@@ -56,6 +63,7 @@ void remap(Image& img, Map map) {
             for (int c = 0; c < 3; ++c) p[c] = a > 0 ? clamp8(acc[c] / (a / 255.0f)) : 0;
             p[3] = clamp8(a);
         }
+    });
 }
 
 
@@ -75,7 +83,8 @@ void remap_edges(Image& img, const EdgeMode& edge, Map map) {
         else if (px < 0 || py < 0 || px >= w || py >= h) { valid = false; return; }
         s = src.data() + (static_cast<size_t>(py) * w + px) * 4;
     };
-    for (int y = 0; y < h; ++y)
+    parallel::rows(h, static_cast<size_t>(w) * 10, [&](int ry0, int ry1) {
+    for (int y = ry0; y < ry1; ++y)
         for (int x = 0; x < w; ++x) {
             float sx, sy;
             map(x + 0.5f, y + 0.5f, sx, sy);
@@ -100,6 +109,7 @@ void remap_edges(Image& img, const EdgeMode& edge, Map map) {
             for (int c = 0; c < 3; ++c) p[c] = a > 0 ? clamp8(acc[c] / (a / 255.0f)) : 0;
             p[3] = clamp8(a);
         }
+    });
 }
 
 inline float luma_of(const uint8_t* p) { return 0.299f * p[0] + 0.587f * p[1] + 0.114f * p[2]; }
