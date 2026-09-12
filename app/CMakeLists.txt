@@ -25,13 +25,19 @@ add_custom_target(firn_version
   BYPRODUCTS ${FIRN_VERSION_CPP}
   COMMENT "Recording the version and commit")
 
-include(${CMAKE_SOURCE_DIR}/cmake/commands.cmake)
-firn_generate_command_list(${CMAKE_CURRENT_SOURCE_DIR}/src/Script.cpp ${CMAKE_CURRENT_BINARY_DIR}/generated/InheritedCommands.h)
+set(FIRN_COMMANDS_H ${CMAKE_CURRENT_BINARY_DIR}/generated/InheritedCommands.h)
+add_custom_command(
+  OUTPUT ${FIRN_COMMANDS_H}
+  COMMAND ${CMAKE_COMMAND} -DINPUT=${CMAKE_CURRENT_SOURCE_DIR}/src/Script.cpp -DOUTPUT=${FIRN_COMMANDS_H}
+          -P ${CMAKE_SOURCE_DIR}/cmake/commands.cmake
+  DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/Script.cpp ${CMAKE_SOURCE_DIR}/cmake/commands.cmake
+  COMMENT "Reading the inherited command names out of Script.cpp")
 
 # Share the application implementation with headless state/menu regression tests.
 add_library(firn_app OBJECT
   ${FIRN_ICON_CPP}
   ${FIRN_VERSION_CPP}
+  ${FIRN_COMMANDS_H}
   src/ui/About.cpp
   src/ui/Theme.cpp
   src/ui/ThemeEditor.cpp

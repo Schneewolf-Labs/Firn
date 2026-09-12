@@ -12,7 +12,7 @@ machine-readable JSON Schema, one schema per action.
 Replies are JSON. Success is `{"ok":true}` and whatever the action returns;
 a refusal comes back as a message and a non-zero exit from `firn-cli`.
 
-67 actions and 161 inherited command names.
+67 actions and 165 inherited command names.
 
 ## Documents
 
@@ -1195,28 +1195,29 @@ means `NewAdjustmentLayerCurves` and its siblings.
 `BrushStrokes`, `Buttonize`, `Chrome`, `Clarify`, `ClearSelection`, `ColorAdjustBrightnessContrast`,
 `ColorAdjustChannelMixer`, `ColorAdjustColorBalance`, `ColorAdjustCurves`, `ColorAdjustGammaCorrect`, `ColorAdjustHSL`, `ColorAdjustHueMap`,
 `ColorAdjustLevels`, `ColorAdjustThreshold`, `ColorInc16`, `ColorInc256`, `ColoredEdges`, `Colorize`,
-`ContentAwareFill`, `Copy`, `CountImageColors`, `Crop`, `CropToSelection`, `Cut`,
-`DecreaseColorsTo16`, `DecreaseColorsTo16Million`, `DecreaseColorsTo2`, `DecreaseColorsTo256`, `DecreaseColorsToX`, `DeleteLayer`,
-`Despeckle`, `DigitalCameraNoiseRemoval`, `Dilate`, `DropShadow`, `EdgePreservingSmooth`, `Emboss`,
-`EnableOptimizedScriptUndo`, `EnhanceEdges`, `EnhanceEdgesMore`, `Erode`, `FadeCorrection`, `FileClose`,
-`FileOpen`, `FileSave`, `FileSaveAs`, `Fill`, `FindEdges`, `Flip`,
-`FloatSelection`, `GaussianBlur`, `GetMaterial`, `GetRasterSelectionRect`, `GlowingEdges`, `Grayscale`,
-`Greyscale`, `Halftone`, `HistogramAdjustment`, `HistogramEqualize`, `HistogramStretch`, `ImageInfo`,
-`IncreaseColorsTo16Bit`, `IncreaseColorsTo16Million`, `InnerBevel`, `JPEGArtifactRemoval`, `Kaleidoscope`, `LayerArrange`,
-`LayerArrangeMoveDown`, `LayerArrangeMoveIn`, `LayerArrangeMoveOut`, `LayerArrangeMoveUp`, `LayerArrangeToBottom`, `LayerArrangeToTop`,
-`LayerArrangeUngroup`, `LayerConvertToRaster`, `LayerDuplicate`, `LayerMergeAll`, `LayerMergeDown`, `LayerMergeVisible`,
-`LayerPromoteBackground`, `LayerProperties`, `LayerSetVisibility`, `MaskShowAll`, `Median`, `Mirror`,
-`ModifySelection`, `Mosaic`, `MotionBlur`, `Mover`, `MsgBox`, `NegativeImage`,
-`NewAdjustmentLayer*`, `NewFile`, `NewLayerGroup`, `NewMaskLayerHide`, `NewMaskLayerShow`, `NewRasterLayer`,
-`NewVectorLayer`, `OneStepPhotoFix`, `PageCurl`, `PasteAsNewImage`, `PasteAsNewLayer`, `PasteIntoSelection`,
-`Pinch`, `Pixelate`, `Posterize`, `RedoLastUndo`, `Resize`, `ResizeCanvas`,
-`ReturnImageInfo`, `ReturnLayerProperties`, `Ripple`, `Rotate`, `SaltAndPepper`, `SavePalette`,
-`SelectAll`, `SelectContract`, `SelectDocument`, `SelectExpand`, `SelectFeather`, `SelectInvert`,
-`SelectLayer`, `SelectLoadAlpha`, `SelectNone`, `SelectPreviousTool`, `SelectPromote`, `SelectSaveAlpha`,
-`SelectSmooth`, `SelectTool`, `Selection`, `Sepia`, `SetMaterial`, `Sharpen`,
-`SharpenMore`, `ShowGrid`, `ShowGuides`, `Soften`, `SoftenMore`, `Solarize`,
-`Spherize`, `SplitToCMYK`, `SplitToHSL`, `SplitToRGB`, `TextEx`, `Twirl`,
-`UndoLastCmd`, `UnsharpMask`, `UserDefinedFilter`, `Wave`, `Weave`
+`ContentAwareFill`, `ConvertToPath`, `Copy`, `CountImageColors`, `Crop`, `CropToSelection`,
+`Cut`, `DecreaseColorsTo16`, `DecreaseColorsTo16Million`, `DecreaseColorsTo2`, `DecreaseColorsTo256`, `DecreaseColorsToX`,
+`DeleteLayer`, `Despeckle`, `DigitalCameraNoiseRemoval`, `Dilate`, `DropShadow`, `EdgePreservingSmooth`,
+`Emboss`, `EnableOptimizedScriptUndo`, `EnhanceEdges`, `EnhanceEdgesMore`, `Erode`, `ExportTube`,
+`FadeCorrection`, `FileClose`, `FileOpen`, `FileSave`, `FileSaveAs`, `Fill`,
+`FindEdges`, `Flip`, `FloatSelection`, `GaussianBlur`, `GetMaterial`, `GetRasterSelectionRect`,
+`GlowingEdges`, `Grayscale`, `Greyscale`, `Halftone`, `HistogramAdjustment`, `HistogramEqualize`,
+`HistogramStretch`, `ImageInfo`, `IncreaseColorsTo16Bit`, `IncreaseColorsTo16Million`, `InnerBevel`, `JPEGArtifactRemoval`,
+`Kaleidoscope`, `LayerArrange`, `LayerArrangeMoveDown`, `LayerArrangeMoveIn`, `LayerArrangeMoveOut`, `LayerArrangeMoveUp`,
+`LayerArrangeToBottom`, `LayerArrangeToTop`, `LayerArrangeUngroup`, `LayerConvertToRaster`, `LayerDuplicate`, `LayerMergeAll`,
+`LayerMergeDown`, `LayerMergeVisible`, `LayerPromoteBackground`, `LayerProperties`, `LayerSetVisibility`, `MaskShowAll`,
+`Median`, `Mirror`, `ModifySelection`, `Mosaic`, `MotionBlur`, `Mover`,
+`MsgBox`, `NegativeImage`, `NewAdjustmentLayer*`, `NewFile`, `NewLayerGroup`, `NewMaskLayerHide`,
+`NewMaskLayerShow`, `NewRasterLayer`, `NewVectorLayer`, `NodeEditAddPath`, `OneStepPhotoFix`, `PageCurl`,
+`PasteAsNewImage`, `PasteAsNewLayer`, `PasteIntoSelection`, `Pinch`, `Pixelate`, `Posterize`,
+`RedoLastUndo`, `Resize`, `ResizeCanvas`, `ReturnImageInfo`, `ReturnLayerProperties`, `ReturnVectorObjectProperties`,
+`Ripple`, `Rotate`, `SaltAndPepper`, `SavePalette`, `SelectAll`, `SelectContract`,
+`SelectDocument`, `SelectExpand`, `SelectFeather`, `SelectInvert`, `SelectLayer`, `SelectLoadAlpha`,
+`SelectNone`, `SelectPreviousTool`, `SelectPromote`, `SelectSaveAlpha`, `SelectSmooth`, `SelectTool`,
+`Selection`, `Sepia`, `SetMaterial`, `Sharpen`, `SharpenMore`, `ShowGrid`,
+`ShowGuides`, `Soften`, `SoftenMore`, `Solarize`, `Spherize`, `SplitToCMYK`,
+`SplitToHSL`, `SplitToRGB`, `TextEx`, `Twirl`, `UndoLastCmd`, `UnsharpMask`,
+`UserDefinedFilter`, `Wave`, `Weave`
 
 ## Tools
 

@@ -1,6 +1,12 @@
 # The inherited command names live as string comparisons in Script.cpp. This
-# reads them out at build time so `describe` can publish the whole callable
-# surface without anyone maintaining a second list that would drift.
+# reads them out so `describe` can publish the whole callable surface
+# without anyone maintaining a second list that would drift.
+#
+# It runs as a build step (cmake -DINPUT=... -DOUTPUT=... -P), not at
+# configure time: adding a command to Script.cpp has to regenerate the list
+# on the next build, or the program under a stale build directory reports a
+# surface the source no longer has and the API manual check fails only in
+# CI, where the configure is always fresh.
 function(firn_generate_command_list source out)
   file(STRINGS "${source}" lines REGEX "name == \"[A-Za-z0-9_]+\"")
   set(names "")
@@ -27,3 +33,7 @@ function(firn_generate_command_list source out)
     "#pragma once\n\n"
     "inline const char* const kInheritedCommands[] = {\n${body}};\n")
 endfunction()
+
+if(CMAKE_SCRIPT_MODE_FILE AND DEFINED INPUT AND DEFINED OUTPUT)
+  firn_generate_command_list("${INPUT}" "${OUTPUT}")
+endif()
