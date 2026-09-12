@@ -252,16 +252,17 @@ against the 115 commands its own bundled scripts use.
       worst, and that changes layer styles, filter layers and unsharp mask
       as well. The blur should look like the original's, not like whatever
       is fastest. Do not revisit this as a performance idea.
-- [ ] **What "Radius" means has never been checked against the original.**
-      `raster::gaussian_blur` treats the radius as sigma and takes a
-      3-sigma extent, so radius 8 reaches 24 pixels. Most implementations
-      mean something nearer the extent by "radius", which would make Firn's
-      blur roughly three times as strong as the original's at the same
-      number. The codebase is not even consistent with itself:
-      `mask::feather` uses `sigma = radius / 2`. Settling it needs someone
-      to run Gaussian Blur at a known radius in the original under Wine and
-      compare against Firn at the same setting; it cannot be scripted,
-      because the original has no command line for it.
+- [x] **Checked: "Radius" means the same in both.** Measured by blurring a
+      one-pixel impulse at Radius 10 in the original, driven under Wine on a
+      private Xvfb display so nothing touched the real session, and reading
+      the kernel off its canvas. The original's profile is a Gaussian of
+      sigma 8.5 px; Firn's at radius 10 is 9.6 px, and the two never differ
+      by more than 2 levels out of 255 at any offset. So `sigma = radius` is
+      right and no constant needs changing; the small gap is the original's
+      slightly tighter kernel cutoff, not a different meaning.
+- [ ] `mask::feather` uses `sigma = radius / 2` for the same word, which is
+      now known to disagree with the blur. Whether the original's feather
+      disagrees too has not been measured; the method above would settle it.
 
 ## 19. Borrowed from Photoshop (2026-09-11)
 

@@ -341,9 +341,16 @@ docs/    notes on the original: command inventory, module mapping, FORMAT.md
 - **Blur fidelity**: `raster::gaussian_blur` is a true Gaussian and stays
   one. Substituting three box passes is much faster and is deliberately
   rejected: it changes the result, and with it layer styles, filter layers
-  and unsharp mask (docs/ROADMAP.md, "Blur fidelity"). What the radius
-  parameter means is still unverified against the original, and the
-  codebase disagrees with itself about it.
+  and unsharp mask (docs/ROADMAP.md, "Blur fidelity"). `sigma = radius` is
+  verified against the original: an impulse blurred at Radius 10 in both
+  gives profiles within 2 levels of each other.
+- **Measuring the original**: when a port detail is in doubt, run the
+  original under Wine on a private `Xvfb :99` and drive it with
+  python-xlib's XTest. No input reaches the real session, so this does not
+  break the rule about synthetic input, which exists so the program never
+  fights the user for their own pointer. `docs/ROADMAP.md` section 20 has a
+  worked example: an impulse image, a known radius, and the kernel read
+  back off the canvas.
 - **Content-aware fill** (`core/include/firn/inpaint.h`) synthesizes a
   region from the rest of the image by PatchMatch. Two things it is easy to
   get wrong and that its test pins down: the patch distance must weight
