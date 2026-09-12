@@ -7,6 +7,9 @@ section into the next version.
 ## Unreleased
 
 ### Changed
+- Closing the program while a file is being read or written now waits for
+  that to finish rather than racing it, and File > Exit says so instead of
+  stacking prompts over the progress dialog.
 - Opening a file no longer freezes the window. A 24 megapixel project took
   over two seconds to read; it now happens on a worker. The command line,
   scripts and the driver still open synchronously.

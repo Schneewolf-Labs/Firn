@@ -30,7 +30,12 @@ using namespace firn;
 
 static Image mask_to_image(const Mask& m);
 
-App::~App() = default;
+App::~App() {
+    // A worker may still be reading the document or writing a file. Waiting
+    // here rather than relying on member destruction order means a future
+    // reshuffle of App's members cannot turn this into a use-after-free.
+    if (job && job->done.valid()) job->done.wait();
+}
 
 App::App() : tools(make_default_tools()) {
     adjust_layer_state = std::make_unique<AdjustLayerState>();
@@ -240,6 +245,10 @@ void App::close_document(int index, bool force) {
 }
 
 void App::request_quit() {
+    // A worker is reading the document or writing a file. Leaving now would
+    // stack the unsaved-changes prompt on top of the progress modal, and the
+    // wait would happen during teardown instead of somewhere visible.
+    if (job) { status = job->name + " is still running."; return; }
     set_selection_edit(false);
     for (size_t i = 0; i < docs.size(); ++i)
         if (document_modified(static_cast<int>(i))) { pending_quit = true; pending_close = static_cast<int>(i); return; }

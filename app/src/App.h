@@ -627,6 +627,9 @@ struct App {
     void layer_view_only(bool current_only);   // hide every other layer, or show all
     void layer_promote_background();
     // A slow operation on a worker thread; see BackgroundJob.h.
+    // Declared after `doc` on purpose: members are destroyed in reverse, so
+    // the job goes first and its future waits for the worker while the
+    // document it may be reading is still alive.
     std::unique_ptr<struct BackgroundJob> job;
     bool job_running() const { return job != nullptr; }
     void draw_background_job();
