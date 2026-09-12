@@ -20,6 +20,7 @@ const char* Adjustment::kind_name(Kind k) {
         case Kind::Invert: return "Invert";
         case Kind::Threshold: return "Threshold";
         case Kind::Posterize: return "Posterize";
+        case Kind::GradientMap: return "Gradient Map";
         case Kind::GaussianBlur: return "Gaussian Blur";
         case Kind::Average: return "Average";
         case Kind::UnsharpMask: return "Unsharp Mask";
@@ -57,6 +58,19 @@ void Adjustment::apply(Image& img) const {
         case Kind::GaussianBlur: raster::gaussian_blur(img, blur_radius); return;
         case Kind::Average: raster::box_blur(img, average_radius); return;
         case Kind::UnsharpMask: effects::unsharp_mask(img, unsharp_radius, unsharp_strength, unsharp_clipping); return;
+        case Kind::GradientMap: {
+            // Lightness picks a colour along the gradient; alpha is left
+            // alone, so a mapped layer keeps its shape.
+            Color table[256];
+            for (int i = 0; i < 256; ++i) table[i] = gradient.at(i / 255.0f);
+            uint8_t* p = img.data();
+            for (size_t i = 0; i < img.size_bytes(); i += 4) {
+                const int v = (p[i] * 77 + p[i + 1] * 151 + p[i + 2] * 28) >> 8;
+                const Color& c = table[v];
+                p[i] = c.r; p[i + 1] = c.g; p[i + 2] = c.b;
+            }
+            break;
+        }
         case Kind::BrightnessContrast:
             adjust::apply_lut(img, adjust::brightness_contrast_lut(brightness, contrast));
             break;
@@ -177,6 +191,8 @@ json::Value Adjustment::to_json() const {
     mx.set("constant", std::move(cst));
     mx.set("monochrome", json::Value::boolean(mixer.monochrome));
     v.set("mixer", std::move(mx));
+    v.set("gradient", vec::gradient_json(gradient));
+    v.set("gradient_index", json::Value::number(gradient_index));
     v.set("threshold", json::Value::number(threshold));
     v.set("posterize", json::Value::number(posterize));
     v.set("blur_radius", json::Value::number(blur_radius));
@@ -235,6 +251,8 @@ Adjustment Adjustment::from_json(const json::Value& v) {
     const json::Value& cst = mx.get("constant");
     for (int c = 0; c < 3; ++c) a.mixer.constant[c] = static_cast<float>(cst[static_cast<size_t>(c)].as_number(a.mixer.constant[c]));
     a.mixer.monochrome = mx.get("monochrome").as_bool(a.mixer.monochrome);
+    if (v.get("gradient").is_object()) a.gradient = vec::gradient_from_json(v.get("gradient"));
+    a.gradient_index = static_cast<int>(n("gradient_index", a.gradient_index));
     a.threshold = static_cast<int>(n("threshold", a.threshold));
     a.posterize = static_cast<int>(n("posterize", a.posterize));
     a.blur_radius = static_cast<float>(n("blur_radius", a.blur_radius));

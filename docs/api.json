@@ -688,6 +688,10 @@
             "description": "show the layer only where the layer below does",
             "type": "boolean"
           },
+          "lock_alpha": {
+            "description": "protect the clear parts of the layer from painting and fills",
+            "type": "boolean"
+          },
           "name": {
             "description": "",
             "type": "string"

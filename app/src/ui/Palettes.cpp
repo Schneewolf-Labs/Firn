@@ -262,6 +262,11 @@ static void draw_layers(App& app) {
         }
         // A clipped layer shows only where the one below it does; the marker
         // points at the layer it is clipped to.
+        if (L.lock_alpha) {
+            ImGui::TextDisabled("[T]");
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Transparency locked");
+            ImGui::SameLine();
+        }
         if (L.clipped) {
             ImGui::TextDisabled("|_");
             if (ImGui::IsItemHovered()) ImGui::SetTooltip("Clipped to the layer below");

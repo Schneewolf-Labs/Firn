@@ -358,6 +358,33 @@ def test_clipping_masks(f):
     f.do("file.close")
 
 
+def test_lock_transparency(f):
+    section("lock transparency")
+    f.do("file.new", width=40, height=20, color="#ffffff")
+    f.do("layer.new")
+    f.do("draw.rectangle", x=10, y=5, width=20, height=10, fill="#2244aa", target="raster")
+    check(f.layers()[1]["lock_alpha"] is False, "a layer starts unlocked")
+    f.do("layer.properties", lock_alpha=True)
+    check(f.layers()[1]["lock_alpha"] is True, "and can be locked")
+    # The same stroke, with the lock on and off: it must reach the clear part
+    # of the layer only when the lock is off.
+    f.do("tool.color", which="foreground", color="#ff8800")
+    f.do("tool.select", name="Paint Brush")
+    f.do("tool.brush_size", size=30)
+    locked = os.path.join(OUT, "locked.png")
+    f.step("drag_img:2,10:6,10")
+    f.do("file.save_as", path=locked)
+    check(png_pixel(locked, 3, 10)[:3] == (255, 255, 255), "paint stays out of the clear parts")
+    f.do("edit.undo")
+    f.do("layer.properties", lock_alpha=False)
+    check(f.layers()[1]["lock_alpha"] is False, "and it can be unlocked again")
+    unlocked = os.path.join(OUT, "unlocked.png")
+    f.step("drag_img:2,10:6,10")
+    f.do("file.save_as", path=unlocked)
+    check(png_pixel(unlocked, 3, 10)[:3] == (255, 136, 0), "and the same stroke paints there once unlocked")
+    f.do("file.close")
+
+
 def test_pass_through_groups(f):
     section("pass-through groups")
     f.do("file.new", width=16, height=8, color="#c8c8c8")
@@ -584,7 +611,7 @@ def main():
         drive.recv_line(sock)
         f = Firn(sock)
         for case in (test_api_surface, test_documents, test_view, test_layers, test_selection,
-                     test_painting_and_materials, test_edit_actions, test_tools_and_history, test_image_geometry, test_clipping_masks, test_pass_through_groups, test_blend_ranges, test_metadata, test_drawing_api, test_atomic_batches, test_discovery_v2):
+                     test_painting_and_materials, test_edit_actions, test_tools_and_history, test_image_geometry, test_clipping_masks, test_lock_transparency, test_pass_through_groups, test_blend_ranges, test_metadata, test_drawing_api, test_atomic_batches, test_discovery_v2):
             case(f)
         sock.sendall(b"quit\n")
         sock.settimeout(10.0)

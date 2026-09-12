@@ -13,6 +13,7 @@
 using namespace firn;
 
 bool curve_editor(App& app, ImVec2 size);   // Adjust.cpp
+bool gradient_library_combo(App& app, const char* label, int& index, vec::Gradient& g, const vec::Gradient* fallback);   // VectorDialog.cpp
 
 void App::layer_new_adjustment(Adjustment::Kind kind) {
     if (!doc) return;
@@ -104,6 +105,23 @@ bool adjustment_body(App& app, Adjustment& a) {
             ImGui::SetNextItemWidth(220);
             changed |= ImGui::SliderFloat("Constant", &a.mixer.constant[out], -200.0f, 200.0f, "%.0f");
             changed |= ImGui::Checkbox("Monochrome", &a.mixer.monochrome);
+            break;
+        }
+        case Adjustment::Kind::GradientMap: {
+            changed |= gradient_library_combo(app, "Gradient", a.gradient_index, a.gradient, nullptr);
+            // A strip of the gradient, so the choice is visible rather than
+            // only named.
+            const ImVec2 p0 = ImGui::GetCursorScreenPos();
+            const float w = 240.0f, h = 18.0f;
+            ImDrawList* dl = ImGui::GetWindowDrawList();
+            for (int i = 0; i < 64; ++i) {
+                const Color c0 = a.gradient.at(i / 64.0f), c1 = a.gradient.at((i + 1) / 64.0f);
+                const ImU32 u0 = IM_COL32(c0.r, c0.g, c0.b, 255), u1 = IM_COL32(c1.r, c1.g, c1.b, 255);
+                dl->AddRectFilledMultiColor(ImVec2(p0.x + w * i / 64.0f, p0.y), ImVec2(p0.x + w * (i + 1) / 64.0f, p0.y + h), u0, u1, u1, u0);
+            }
+            ImGui::Dummy(ImVec2(w, h));
+            if (ImGui::Checkbox("Reverse", &a.gradient.invert)) changed = true;
+            ImGui::TextDisabled("Lightness picks a color along the gradient.");
             break;
         }
         case Adjustment::Kind::Invert: ImGui::TextDisabled("Inverts the colors of everything below this layer."); break;

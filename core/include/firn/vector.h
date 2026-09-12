@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "firn/image.h"
+#include "firn/json.h"
 #include "firn/mask.h"
 
 // Vector objects, modeled on what the original stores in its vector layers:
@@ -50,6 +51,11 @@ struct Gradient {
     // and for the previews in the material dialog.
     Color at_point(float px, float py, float bx0, float by0, float bx1, float by1) const;
 };
+
+// A gradient as JSON, for the places that store one outside a paint style
+// (an adjustment layer's gradient map, and anything else that follows).
+json::Value gradient_json(const Gradient& g);
+Gradient gradient_from_json(const json::Value& v);
 
 struct PaintStyle {
     enum class Kind : uint16_t { None = 0, Solid = 1, Gradient = 2, Pattern = 3 };

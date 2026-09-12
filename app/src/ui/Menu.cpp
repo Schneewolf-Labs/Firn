@@ -573,7 +573,7 @@ void App::draw_layer_menu_items(MenuBuilder& m) {
     m.item("New Vector Layer", nullptr, has_doc, [=, this] { layer_new_vector(); });
     if (m.begin_menu("New Adjustment Layer", has_doc)) {
         using K = Adjustment::Kind;
-        static const K kinds[] = {K::BrightnessContrast, K::ChannelMixer, K::ColorBalance, K::Curves, K::HSL, K::Invert, K::Levels, K::Posterize, K::Threshold};
+        static const K kinds[] = {K::BrightnessContrast, K::ChannelMixer, K::ColorBalance, K::Curves, K::GradientMap, K::HSL, K::Invert, K::Levels, K::Posterize, K::Threshold};
         for (K k : kinds) m.item(Adjustment::kind_name(k), nullptr, true, [this, k] { layer_new_adjustment(k); });
         m.end_menu();
     }
@@ -906,6 +906,9 @@ void App::draw_dialogs() {
         std::snprintf(name, sizeof(name), "%s", p.name.c_str());
         if (ImGui::InputText("Name", name, sizeof(name))) p.name = name;
         ImGui::Checkbox("Layer is visible", &p.visible);
+        ImGui::Checkbox("Lock transparency", &p.lock_alpha);
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("The clear parts of the layer stay clear: painting and fills\nonly touch pixels that are already there.");
         float op = p.opacity * 100.0f;
         if (ImGui::SliderFloat("Opacity", &op, 0.0f, 100.0f, "%.0f%%")) p.opacity = op / 100.0f;
         const bool is_group_layer = doc && active_layer() >= 0 && doc->layer(active_layer()).type == LayerType::Group;

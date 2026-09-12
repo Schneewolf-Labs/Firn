@@ -90,6 +90,7 @@ void LayerPixelCommand::execute(Document& doc) {
         Image16 work = *L.deep;
         if (apply16(work)) {
             if (doc.has_selection()) raster16::apply_through_mask(work, *L.deep, doc.selection());
+            if (L.lock_alpha) raster16::restore_clear_pixels(work, *L.deep);
             L.set_deep(std::move(work));
             doc.touch();
             return;
@@ -99,6 +100,7 @@ void LayerPixelCommand::execute(Document& doc) {
     Image& img = L.pixels;
     apply(img);
     raster::apply_through_mask(img, before_, doc.selection());
+    if (L.lock_alpha) raster::restore_clear_pixels(img, before_);
     doc.touch();
 }
 

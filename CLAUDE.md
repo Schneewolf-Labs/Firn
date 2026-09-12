@@ -110,6 +110,16 @@ docs/    notes on the original: command inventory, module mapping, FORMAT.md
   whole stack (`Document::State`). A layer's optional `mask` multiplies its
   alpha (or the group's composite) during compositing. Tools and pixel
   commands must check `Layer::is_raster()` / `App::active_is_raster()`.
+- **Lock transparency** (`Layer::lock_alpha`) is the original's
+  "transparency protected" and uses that format's own byte, not the stash.
+  `LayerPixelCommand` puts back every pixel that was clear before the
+  operation (`raster::restore_clear_pixels`), and `App::paint_clip` narrows
+  a tool's clip to the pixels that already exist.
+- **Firn-only adjustments** are kinds >= 50 (`Adjustment::is_firn_only()`);
+  filters are the subset >= 100. The native container writes any of them as
+  an empty placeholder layer plus the stash, which carries the whole
+  `Adjustment::to_json()`, because the original's adjustment blocks cannot
+  express them. Gradient Map (50) is the first non-filter one.
 - **Pass-through groups** (`Layer::pass_through`, `composite_pass_through`):
   the members draw onto a copy of the backdrop so an adjustment or filter
   inside the group reaches what is below it, and the group's opacity and

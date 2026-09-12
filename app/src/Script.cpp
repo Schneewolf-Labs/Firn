@@ -256,6 +256,7 @@ std::string App::do_command(const std::string& name, const Value& p, bool* ok) {
         using K = Adjustment::Kind;
         if (kind == "Levels") a.kind = K::Levels; else if (kind == "Curves") a.kind = K::Curves; else if (kind == "BrightnessContrast") a.kind = K::BrightnessContrast;
         else if (kind == "ColorBalance") a.kind = K::ColorBalance; else if (kind == "HSL") a.kind = K::HSL; else if (kind == "ChannelMixer") a.kind = K::ChannelMixer;
+        else if (kind == "GradientMap") a.kind = K::GradientMap;
         else if (kind == "Invert") a.kind = K::Invert; else if (kind == "Threshold") a.kind = K::Threshold; else if (kind == "Posterize") a.kind = K::Posterize;
         else { *ok = false; return "unknown adjustment layer " + kind; }
         a.brightness = static_cast<int>(p.get("BrightnessContrast.Brightness").as_number(0)); a.contrast = static_cast<int>(p.get("BrightnessContrast.Contrast").as_number(0));

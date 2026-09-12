@@ -42,6 +42,10 @@ struct Layer {
     // group, so an adjustment or filter layer inside it reaches the whole
     // image rather than only its siblings.
     bool pass_through = false;
+    // The original's "transparency protected": the clear parts of the layer
+    // stay clear. Painting adds nothing where there is no alpha, and a
+    // command that fills or adjusts leaves those pixels alone.
+    bool lock_alpha = false;
     // Limits the layer to a range of its own tones, or of the tones below
     // it, without a mask (Layer Properties > Blend Ranges).
     BlendRanges ranges;
@@ -78,6 +82,7 @@ struct LayerProps {
     BlendMode blend = BlendMode::Normal;
     bool clipped = false;
     bool pass_through = false;
+    bool lock_alpha = false;
     BlendRanges ranges;
     bool operator==(const LayerProps&) const = default;
 };

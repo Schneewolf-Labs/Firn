@@ -231,7 +231,7 @@ public:
             default: break;
         }
         layer_ = app.active_layer();
-        stroke_ = std::make_unique<raster::Stroke>(app.paint_pixels(layer_), brush, color, mode, &app.doc->selection());
+        stroke_ = std::make_unique<raster::Stroke>(app.paint_pixels(layer_), brush, color, mode, app.paint_clip(layer_));
         if (mode == raster::StrokeMode::Clone || mode == raster::StrokeMode::Heal) stroke_->set_clone_source(&clone_src_, off_x_, off_y_);
         if (filter) stroke_->set_filter(std::move(filter));
         if (area_filter) stroke_->set_area_filter(std::move(area_filter));
@@ -870,7 +870,7 @@ public:
             const Color color = to_color(fg ? app.fg_color : app.bg_color);
             changed = raster::flood_fill(target, static_cast<int>(std::floor(in.img_x)),
                                          static_cast<int>(std::floor(in.img_y)), color,
-                                         app.tool_state->fill_tolerance, app.tool_state->fill_opacity, &app.doc->selection());
+                                         app.tool_state->fill_tolerance, app.tool_state->fill_opacity, app.paint_clip(app.active_layer()));
         } else {
             // Gradient or pattern: fill the matching region through the material.
             Mask region = mask::magic_wand(target, static_cast<int>(std::floor(in.img_x)), static_cast<int>(std::floor(in.img_y)), app.tool_state->fill_tolerance, true);

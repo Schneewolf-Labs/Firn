@@ -922,6 +922,7 @@ Batch-safe: yes.
 | `visible` | boolean | no |  |  |
 | `clipped` | boolean | no |  | show the layer only where the layer below does |
 | `pass_through` | boolean | no |  | groups only: its members act on the whole image below the group |
+| `lock_alpha` | boolean | no |  | protect the clear parts of the layer from painting and fills |
 
 
 ### `layer.select`

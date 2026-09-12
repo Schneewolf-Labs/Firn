@@ -67,6 +67,17 @@ Layers can be grouped (Layers > New Layer Group) and carry masks (Layers >
 New Mask Layer); press Edit next to a mask to paint on it in grayscale with
 any brush.
 
+Lock transparency in Layer Properties protects the clear parts of a layer.
+Painting and fills then only touch pixels that are already there, so a
+stroke stays inside the shape the layer already covers. This is the
+original's "transparency protected", and it travels in that format's own
+field rather than as a Firn extension.
+
+Layers > New Adjustment Layer > Gradient Map recolors everything below it by
+lightness: the darkest tones take the start of a gradient and the brightest
+the end. Any gradient from the library works, and Reverse flips it. It is
+also an ordinary adjustment layer, so it takes a mask and an opacity.
+
 A group normally composites its members among themselves, so an adjustment
 or filter layer inside it changes only its siblings. Turning on Pass through
 in the group's properties lets the members act on the whole image below the

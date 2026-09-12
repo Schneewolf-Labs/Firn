@@ -368,7 +368,7 @@ static void test_layer_structure_commands() {
     r2.visible = false;
     CommandStack hist;
 
-    hist.run(doc, std::make_unique<LayerPropertiesCommand>(1, doc.props(1), LayerProps{"Renamed", true, 0.5f, BlendMode::Multiply, false, false, {}}));
+    hist.run(doc, std::make_unique<LayerPropertiesCommand>(1, doc.props(1), LayerProps{"Renamed", true, 0.5f, BlendMode::Multiply, false, false, false, {}}));
     CHECK(doc.layer(1).name == "Renamed" && doc.layer(1).opacity == 0.5f && doc.layer(1).blend == BlendMode::Multiply);
     hist.undo(doc);
     CHECK(doc.layer(1).name == "Raster 1" && doc.layer(1).opacity == 1.0f);
@@ -2900,6 +2900,106 @@ static void test_icc() {
     std::remove(png.c_str()); std::remove(jpg.c_str());
 }
 
+// Gradient Map: a pixel's lightness picks a colour along a gradient. It is
+// Firn's own adjustment, so the native container stores it as a placeholder
+// layer plus the stash rather than as one of the original's own blocks.
+static void test_gradient_map() {
+    Adjustment a;
+    a.kind = Adjustment::Kind::GradientMap;
+    a.gradient.colors = {{{255, 0, 0, 255}, 0, 50}, {{0, 0, 255, 255}, 100, 50}};
+    CHECK(a.is_firn_only() && !a.is_filter());
+    CHECK(std::string(Adjustment::kind_name(a.kind)) == "Gradient Map");
+
+    Image img(3, 1);
+    img.set(0, 0, {0, 0, 0, 255});          // black maps to the first stop
+    img.set(1, 0, {255, 255, 255, 255});    // white to the last
+    img.set(2, 0, {0, 0, 0, 0});            // a clear pixel keeps its alpha
+    a.apply(img);
+    CHECK(img.get(0, 0).r == 255 && img.get(0, 0).b == 0);
+    CHECK(img.get(1, 0).b == 255 && img.get(1, 0).r == 0);
+    CHECK(img.get(2, 0).a == 0);
+
+    // As an adjustment layer it recolours what is below it.
+    Document doc(2, 1);
+    Layer& base = doc.add_layer("Base");
+    base.pixels.set(0, 0, {0, 0, 0, 255});
+    base.pixels.set(1, 0, {255, 255, 255, 255});
+    Layer& gm = doc.add_layer("Map");
+    gm.type = LayerType::Adjustment;
+    gm.adjustment = a;
+    doc.touch();
+    const Image flat = doc.composite();
+    CHECK(flat.get(0, 0).r == 255 && flat.get(1, 0).b == 255);
+
+    // The whole adjustment, gradient included, survives both formats.
+    std::string err;
+    std::vector<std::string> warnings;
+    const std::vector<uint8_t> ora = io::save_ora_to_memory(doc);
+    auto back = io::load_ora_from_memory(ora.data(), ora.size(), &err, &warnings);
+    CHECK(back && back->layer_count() == 2);
+    CHECK(back->layer(1).is_adjustment() && back->layer(1).adjustment.kind == Adjustment::Kind::GradientMap);
+    CHECK(back->layer(1).adjustment.gradient.colors.size() == 2);
+    CHECK(back->layer(1).adjustment.gradient.colors[0].color.r == 255);
+    CHECK(back->layer(1).adjustment.gradient.colors[1].color.b == 255);
+
+    const std::vector<uint8_t> psp = io::save_psp_to_memory(doc);
+    auto p2 = io::load_psp_from_memory(psp.data(), psp.size(), &err, &warnings);
+    CHECK(p2 && p2->layer_count() == 2);
+    CHECK(p2->layer(1).is_adjustment() && p2->layer(1).adjustment.kind == Adjustment::Kind::GradientMap);
+    CHECK(p2->layer(1).adjustment.gradient.colors.size() == 2 && p2->layer(1).adjustment.gradient.colors[1].color.b == 255);
+}
+
+// Locking a layer's transparency: the clear parts stay clear, so painting
+// and fills only touch pixels that are already there. This is the
+// original's "transparency protected", and it travels in its own field of
+// the native layer info rather than in Firn's stash.
+static void test_lock_transparency() {
+    Document doc(4, 1);
+    Layer& L = doc.add_layer("L");
+    L.pixels = Image(4, 1, {0, 0, 0, 0});
+    L.pixels.set(0, 0, {10, 20, 30, 255});
+    L.pixels.set(1, 0, {40, 50, 60, 128});   // partly there: still paintable
+
+    // Unlocked, a fill covers the whole layer.
+    CommandStack hist;
+    hist.run(doc, std::make_unique<AdjustCommand>(0, "Fill", [](Image& i) { i.fill({200, 0, 0, 255}); }));
+    CHECK(doc.layer(0).pixels.get(3, 0).a == 255 && doc.layer(0).pixels.get(3, 0).r == 200);
+    hist.undo(doc);
+    CHECK(doc.layer(0).pixels.get(3, 0).a == 0);
+
+    // Locked, the same fill leaves the clear pixels exactly as they were.
+    doc.layer(0).lock_alpha = true;
+    hist.run(doc, std::make_unique<AdjustCommand>(0, "Fill", [](Image& i) { i.fill({200, 0, 0, 255}); }));
+    const Image& px = doc.layer(0).pixels;
+    CHECK(px.get(0, 0).r == 200 && px.get(0, 0).a == 255);   // a pixel that existed is filled
+    CHECK(px.get(1, 0).r == 200);                             // a partly there pixel too
+    CHECK(px.get(3, 0).a == 0);                               // a clear one is untouched
+    CHECK(px.get(2, 0).a == 0);
+    hist.undo(doc);
+    CHECK(doc.layer(0).pixels.get(0, 0).r == 10);
+
+    // It is a layer property, so it is undoable like the rest of them.
+    const LayerProps before = doc.props(0);
+    LayerProps after = before;
+    after.lock_alpha = false;
+    hist.run(doc, std::make_unique<LayerPropertiesCommand>(0, before, after));
+    CHECK(!doc.layer(0).lock_alpha);
+    hist.undo(doc);
+    CHECK(doc.layer(0).lock_alpha);
+
+    // The native container has a field for it, so it round trips there
+    // rather than riding in the Firn stash.
+    std::string err;
+    std::vector<std::string> warnings;
+    const std::vector<uint8_t> psp = io::save_psp_to_memory(doc);
+    auto back = io::load_psp_from_memory(psp.data(), psp.size(), &err, &warnings);
+    CHECK(back && back->layer_count() == 1 && back->layer(0).lock_alpha);
+    // And the project format keeps it too.
+    const std::vector<uint8_t> ora = io::save_ora_to_memory(doc);
+    auto b2 = io::load_ora_from_memory(ora.data(), ora.size(), &err, &warnings);
+    CHECK(b2 && b2->layer_count() == 1 && b2->layer(0).lock_alpha);
+}
+
 // Pass-through groups: the members composite straight onto what is below
 // the group, so an adjustment or filter layer inside it reaches the whole
 // image rather than only its siblings.
@@ -3613,6 +3713,8 @@ static void test_metadata() {
 
 int main() {
     test_icc();
+    test_gradient_map();
+    test_lock_transparency();
     test_pass_through_groups();
     test_blend_ranges();
     test_clipping_masks();

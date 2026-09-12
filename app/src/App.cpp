@@ -1000,6 +1000,28 @@ void App::layer_promote_background() {
 // Clip the active layer to the one below, or release it. A Background layer
 // has nothing under it, and the bottom of a group has nothing in the group
 // to clip to.
+// What a painting tool may touch on this layer: the selection, narrowed to
+// the pixels that already exist when the layer's transparency is protected.
+// The narrowed mask is cached because a stroke asks for it on every press.
+const firn::Mask* App::paint_clip(int layer) {
+    if (!doc) return nullptr;
+    const Mask& sel = doc->selection();
+    if (layer < 0 || static_cast<size_t>(layer) >= doc->layer_count()) return &sel;
+    const Layer& L = doc->layer(static_cast<size_t>(layer));
+    if (!L.lock_alpha || !L.is_raster() || L.pixels.empty()) return &sel;
+    const Image& px = L.pixels;
+    Mask m(px.width(), px.height(), 0);
+    const bool has_sel = doc->has_selection();
+    for (int y = 0; y < px.height(); ++y)
+        for (int x = 0; x < px.width(); ++x) {
+            const uint8_t a = px.get(x, y).a;
+            if (!a) continue;
+            m.at(x, y) = has_sel ? static_cast<uint8_t>(a * sel.at(x, y) / 255) : a;
+        }
+    paint_clip_cache = std::move(m);
+    return &paint_clip_cache;
+}
+
 bool App::can_clip_layer() const {
     const int i = active_layer();
     // The active index can outlive the stack it pointed into, so check it

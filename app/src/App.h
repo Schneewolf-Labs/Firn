@@ -619,6 +619,8 @@ struct App {
     void layer_merge(int kind);     // 0 down, 1 visible, 2 all
     void layer_view_only(bool current_only);   // hide every other layer, or show all
     void layer_promote_background();
+    const firn::Mask* paint_clip(int layer);
+    firn::Mask paint_clip_cache;   // narrowed selection for a protected layer
     bool can_clip_layer() const;
     void layer_toggle_clipped();
     void layer_new_group();

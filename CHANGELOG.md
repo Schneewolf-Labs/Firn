@@ -7,6 +7,17 @@ section into the next version.
 ## Unreleased
 
 ### Added
+- Lock transparency, in Layer Properties. The clear parts of a layer stay
+  clear, so painting and fills only touch pixels that are already there and
+  a stroke stays inside the shape the layer covers. This is the original's
+  "transparency protected" and Firn now writes and reads that format's own
+  field for it, so it round trips rather than riding in an extension.
+- Layers > New Adjustment Layer > Gradient Map recolors everything below it
+  by lightness, the darkest tones taking the start of a gradient and the
+  brightest the end. Any gradient from the library works and Reverse flips
+  it. Firn-only adjustments like this one are written to the native
+  container as placeholder layers plus the stash, which now carries the
+  whole adjustment so a gradient survives.
 - Pass-through groups. A group normally composites its members among
   themselves, so an adjustment or filter layer inside it changes only its
   siblings. Turning on Pass through in the group's properties lets them act

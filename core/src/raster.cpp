@@ -439,6 +439,14 @@ void apply_through_mask(Image& dst, const Image& before, const Mask& mask) {
     }
 }
 
+void restore_clear_pixels(Image& dst, const Image& before) {
+    if (dst.width() != before.width() || dst.height() != before.height()) return;
+    uint8_t* d = dst.data();
+    const uint8_t* b = before.data();
+    for (size_t i = 0; i < dst.size_bytes(); i += 4)
+        if (b[i + 3] == 0) std::memcpy(d + i, b + i, 4);
+}
+
 // --- Whole-image ops ---------------------------------------------------
 
 void grayscale(Image& img) {

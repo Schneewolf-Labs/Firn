@@ -60,7 +60,9 @@ mask disabled u8, invert-mask-on-blend u8, blend range count u16, five
 blend ranges (8 bytes each), then version-dependent extras. Skip by chunk
 length.
 
-Firn has blend ranges of its own (Layer Properties > Blend Ranges) but does
+The "transparency protected" byte of the layer info is Firn's Lock
+transparency, written and read in place, so it round trips with the
+original. Firn has blend ranges of its own (Layer Properties > Blend Ranges) but does
 not write them into that slot. Every sample file carries a count of zero, so
 the layout of a single 8-byte range is unverified, and guessing it risks a
 file the original mis-reads. Firn writes the same default tail every sample
@@ -348,6 +350,10 @@ original shows the text under image information and ignores it. Each
 `kind` (100 Gaussian Blur, 101 Average, 102 Unsharp Mask) and its
 parameters; the layer itself is written as an empty raster placeholder
 the original opens, and the reader turns it back into a filter layer.
+Each `filters` entry also carries the whole adjustment as JSON, which is
+how a Firn-only colour adjustment such as Gradient Map keeps its gradient;
+those layers are written as empty placeholders the same way filter layers
+are, because the original's adjustment blocks cannot express them.
 `clipped` entries name the layers clipped to the one below them, and
 `ranges` entries carry a layer's blend ranges, and `pass_through` names the
 groups whose members act on the whole image below them; the original

@@ -16,6 +16,8 @@
 
 using namespace firn;
 
+bool gradient_library_combo(App& app, const char* label, int& index, firn::vec::Gradient& g, const firn::vec::Gradient* fallback);
+
 namespace {
 
 std::shared_ptr<const Image> load_pattern(const std::string& path) {
@@ -47,29 +49,6 @@ void gradient_strip(const vec::Gradient& g, float width, float height) {
     }
     dl->AddRect(p, ImVec2(p.x + width, p.y + height), IM_COL32(0, 0, 0, 255));
     ImGui::Dummy(ImVec2(width, height));
-}
-
-bool gradient_library_combo(App& app, const char* label, int& index, vec::Gradient& g, const vec::Gradient* fallback) {
-    app.ensure_gradients();
-    bool changed = false;
-    const char* current = index >= 0 && index < static_cast<int>(app.gradient_library.size()) ? app.gradient_library[index].name.c_str()
-                          : fallback ? fallback->name.c_str() : g.name.empty() ? "(object's gradient)" : g.name.c_str();
-    if (ImGui::BeginCombo(label, current)) {
-        if (fallback && ImGui::Selectable(fallback->name.c_str(), index < 0)) { index = -1; g = *fallback; changed = true; }
-        for (size_t i = 0; i < app.gradient_library.size(); ++i) {
-            ImGui::PushID(static_cast<int>(i));
-            if (ImGui::Selectable(app.gradient_library[i].name.c_str(), index == static_cast<int>(i))) {
-                index = static_cast<int>(i);
-                const vec::Gradient keep = g;
-                g = app.gradient_library[i];
-                g.style = keep.style; g.angle = keep.angle; g.repeats = keep.repeats; g.invert = keep.invert; g.center_x = keep.center_x; g.center_y = keep.center_y;
-                changed = true;
-            }
-            ImGui::PopID();
-        }
-        ImGui::EndCombo();
-    }
-    return changed;
 }
 
 bool pattern_library_combo(App& app, const char* label, int& index, std::shared_ptr<const Image>& pattern) {
@@ -147,6 +126,31 @@ bool paint_style_editor(App& app, const char* id, vec::PaintStyle& st, int& grad
 }
 
 }  // namespace
+
+// Shared with the adjustment layer dialog, which uses it for a gradient map.
+bool gradient_library_combo(App& app, const char* label, int& index, vec::Gradient& g, const vec::Gradient* fallback) {
+    app.ensure_gradients();
+    bool changed = false;
+    const char* current = index >= 0 && index < static_cast<int>(app.gradient_library.size()) ? app.gradient_library[index].name.c_str()
+                          : fallback ? fallback->name.c_str() : g.name.empty() ? "(object's gradient)" : g.name.c_str();
+    if (ImGui::BeginCombo(label, current)) {
+        if (fallback && ImGui::Selectable(fallback->name.c_str(), index < 0)) { index = -1; g = *fallback; changed = true; }
+        for (size_t i = 0; i < app.gradient_library.size(); ++i) {
+            ImGui::PushID(static_cast<int>(i));
+            if (ImGui::Selectable(app.gradient_library[i].name.c_str(), index == static_cast<int>(i))) {
+                index = static_cast<int>(i);
+                const vec::Gradient keep = g;
+                g = app.gradient_library[i];
+                g.style = keep.style; g.angle = keep.angle; g.repeats = keep.repeats; g.invert = keep.invert; g.center_x = keep.center_x; g.center_y = keep.center_y;
+                changed = true;
+            }
+            ImGui::PopID();
+        }
+        ImGui::EndCombo();
+    }
+    return changed;
+}
+
 
 // --- Materials palette ------------------------------------------------------------
 

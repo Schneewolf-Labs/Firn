@@ -130,7 +130,7 @@ void Document::rasterize_vector_layer(size_t i) {
 
 LayerProps Document::props(size_t i) const {
     const Layer& L = layer(i);
-    return {L.name, L.visible, L.opacity, L.blend, L.clipped, L.pass_through, L.ranges};
+    return {L.name, L.visible, L.opacity, L.blend, L.clipped, L.pass_through, L.lock_alpha, L.ranges};
 }
 
 void Document::set_props(size_t i, const LayerProps& p) {
@@ -141,6 +141,7 @@ void Document::set_props(size_t i, const LayerProps& p) {
     L.blend = p.blend;
     L.clipped = p.clipped;
     L.pass_through = p.pass_through;
+    L.lock_alpha = p.lock_alpha;
     L.ranges = p.ranges;
     touch();
 }

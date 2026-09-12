@@ -148,6 +148,10 @@ Rect flood_fill(Image& img, int x, int y, Color color, int tolerance, float opac
 // dst = lerp(before, dst, mask/255): keeps `before` where the mask is 0. Used
 // to confine whole-layer commands to the selection.
 void apply_through_mask(Image& dst, const Image& before, const Mask& mask);
+// Puts back every pixel that was fully transparent before the operation,
+// which is what a layer with its transparency protected wants: the clear
+// parts stay clear and nothing paints into them.
+void restore_clear_pixels(Image& dst, const Image& before);
 
 // Composites `color` over `dst` with coverage from `shape` (and `clip`, if any).
 void paint_mask(Image& dst, const Mask& shape, Color color, const Mask* clip = nullptr);

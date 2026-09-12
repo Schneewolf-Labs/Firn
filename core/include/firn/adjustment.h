@@ -7,6 +7,7 @@
 #include "firn/adjust.h"
 #include "firn/image.h"
 #include "firn/json.h"
+#include "firn/vector.h"
 
 // Adjustment layers: a color operation applied to everything composited
 // below the layer (within its group), through the layer's mask and opacity.
@@ -18,6 +19,10 @@ struct Adjustment {
     enum class Kind : uint16_t {
         None = 0, Levels = 1, Curves = 2, BrightnessContrast = 3, ColorBalance = 4,
         HSL = 5, ChannelMixer = 6, Invert = 7, Threshold = 8, Posterize = 9,
+        // Colour adjustments the original does not have (50..99). Like the
+        // filters below they are written to the native container as empty
+        // placeholder layers plus the Firn stash.
+        GradientMap = 50,
         // Filter layers (ours, not the original's): spatial effects applied
         // live to everything below. Saved in the native format as empty
         // placeholder layers plus a stash the original ignores.
@@ -50,6 +55,9 @@ struct Adjustment {
     adjust::ChannelMix mixer;
     int threshold = 128;
     int posterize = 6;
+    // Gradient Map: the pixel's lightness picks a colour along the gradient.
+    vec::Gradient gradient;
+    int gradient_index = -1;      // into the app's gradient library, -1 = its own
     // Filter layers.
     float blur_radius = 5.0f;
     int average_radius = 2;
@@ -57,6 +65,10 @@ struct Adjustment {
     int unsharp_strength = 100, unsharp_clipping = 0;
 
     bool is_filter() const { return static_cast<uint16_t>(kind) >= 100; }
+    // Kinds the original has no equivalent for, which the native container
+    // stores as a placeholder layer plus the stash rather than as one of
+    // its own adjustment blocks.
+    bool is_firn_only() const { return static_cast<uint16_t>(kind) >= 50; }
     // How far (pixels) a filter spreads what lies below; 0 for color kinds.
     int reach() const;
 

@@ -613,7 +613,7 @@ bool read_layer(const Reader& r, const Block& lb, const Header& hdr, const Palet
     const uint8_t type = r.u8(o++);
     const int32_t rect[4] = {r.i32(o), r.i32(o + 4), r.i32(o + 8), r.i32(o + 12)}; o += 16;
     const int32_t saved[4] = {r.i32(o), r.i32(o + 4), r.i32(o + 8), r.i32(o + 12)}; o += 16;
-    const uint8_t opacity = r.u8(o), blend = r.u8(o + 1), visible = r.u8(o + 2);
+    const uint8_t opacity = r.u8(o), blend = r.u8(o + 1), visible = r.u8(o + 2), protect = r.u8(o + 3);
     o += 5;  // opacity, blend, visible, protected, link group
     const int32_t mask_rect[4] = {r.i32(o), r.i32(o + 4), r.i32(o + 8), r.i32(o + 12)}; o += 16;
     const int32_t saved_mask[4] = {r.i32(o), r.i32(o + 4), r.i32(o + 8), r.i32(o + 12)}; o += 16;
@@ -695,6 +695,7 @@ bool read_layer(const Reader& r, const Block& lb, const Header& hdr, const Palet
         L.opacity = opacity / 255.0f;
         L.blend = map_blend(blend);
         L.visible = visible != 0;
+        L.lock_alpha = protect != 0;
         L.expanded = false;   // the palette lists objects only on request
         L.pixels = Image(doc.width(), doc.height(), {0, 0, 0, 0});
         for (const Block& vb : blocks(r, lb.start + chunk, lb.end)) {
@@ -729,6 +730,7 @@ bool read_layer(const Reader& r, const Block& lb, const Header& hdr, const Palet
     L.opacity = opacity / 255.0f;
     L.blend = map_blend(blend);
     L.visible = visible != 0;
+    L.lock_alpha = protect != 0;
     if (sw <= 0 || sh <= 0) return true;  // empty layer
 
     Image tile;
@@ -875,6 +877,8 @@ void apply_firn_stash(const Reader& r, const Block& creator, Document& doc, std:
         a.unsharp_radius = static_cast<float>(f.get("unsharp_radius").as_number(a.unsharp_radius));
         a.unsharp_strength = static_cast<int>(f.get("unsharp_strength").as_number(a.unsharp_strength));
         a.unsharp_clipping = static_cast<int>(f.get("unsharp_clipping").as_number(a.unsharp_clipping));
+        // Files written since the stash carried the whole structure.
+        if (f.get("adjustment").is_object()) a = Adjustment::from_json(f.get("adjustment"));
     }
     const json::Value& styles = v.get("styles");
     for (size_t i = 0; i < styles.size(); ++i) {
@@ -905,7 +909,7 @@ std::string firn_stash(const Document& doc) {
     json::Value filters = json::Value::array();
     for (size_t i = 0; i < doc.layer_count(); ++i) {
         const Layer& L = doc.layer(i);
-        if (!L.is_adjustment() || !L.adjustment.is_filter()) continue;
+        if (!L.is_adjustment() || !L.adjustment.is_firn_only()) continue;
         const Adjustment& a = L.adjustment;
         json::Value f = json::Value::object();
         f.set("layer", json::Value::number(static_cast<double>(i)));
@@ -916,6 +920,9 @@ std::string firn_stash(const Document& doc) {
         f.set("unsharp_radius", json::Value::number(a.unsharp_radius));
         f.set("unsharp_strength", json::Value::number(a.unsharp_strength));
         f.set("unsharp_clipping", json::Value::number(a.unsharp_clipping));
+        // Everything else a kind might need, such as a gradient map's
+        // gradient. Older files carry only the fields above.
+        f.set("adjustment", a.to_json());
         filters.push(std::move(f));
     }
     // Blend ranges are Firn's own for now: the original's layer info has a
@@ -1630,7 +1637,7 @@ std::vector<uint8_t> vector_layer_payload(const Layer& L) {
 // Layer info chunk shared by raster, group and mask layer blocks.
 std::vector<uint8_t> layer_info(const std::string& raw_name, uint8_t type, const int32_t rect[4], const int32_t saved[4],
                                 float opacity, BlendMode blend, bool visible, const int32_t mask_rect[4], const int32_t saved_mask[4],
-                                bool mask_disabled) {
+                                bool mask_disabled, bool protect = false) {
     Writer info;
     std::string name = raw_name.substr(0, 255);
     info.u32(0);  // chunk length, patched below
@@ -1642,7 +1649,7 @@ std::vector<uint8_t> layer_info(const std::string& raw_name, uint8_t type, const
     info.u8(static_cast<int>(std::clamp(opacity, 0.0f, 1.0f) * 255.0f + 0.5f));
     info.u8(static_cast<int>(blend));
     info.u8(visible ? 1 : 0);
-    info.u8(0);  // transparency protected
+    info.u8(protect ? 1 : 0);  // transparency protected
     info.u8(0);  // link group
     for (int i = 0; i < 4; ++i) info.i32(mask_rect[i]);
     for (int i = 0; i < 4; ++i) info.i32(saved_mask[i]);
@@ -1767,7 +1774,7 @@ std::vector<uint8_t> layer_block(const Layer& L, int doc_w, int doc_h, bool deep
     if (saved.empty() && !L.pixels.empty()) saved = {0, 0, 1, 1};
     const int32_t saved_rect[4] = {saved.x0, saved.y0, saved.x1, saved.y1};
     Writer payload;
-    payload.bytes(layer_info(L.name, kLayerRaster, rect, saved_rect, L.opacity, L.blend, L.visible, kZeroRect, kZeroRect, false));
+    payload.bytes(layer_info(L.name, kLayerRaster, rect, saved_rect, L.opacity, L.blend, L.visible, kZeroRect, kZeroRect, false, L.lock_alpha));
     if (!saved.empty() && deep_file) {
         Image16 tile = raster16::crop(L.is_deep() ? *L.deep : to_image16(L.pixels), saved);
         if (!with_alpha) { uint16_t* p = tile.data(); for (size_t i = 3; i < tile.size(); i += 4) p[i] = 65535; }
@@ -1890,8 +1897,8 @@ std::vector<uint8_t> save_psp_to_memory(const Document& doc) {
                 ++i;
                 continue;
             }
-            if (L.is_adjustment() && L.adjustment.is_filter()) {
-                // Our filter layer: an empty raster placeholder the original
+            if (L.is_adjustment() && L.adjustment.is_firn_only()) {
+                // Our own adjustment or filter layer: an empty raster placeholder the original
                 // opens, with the parameters in the stash. A mask rides along
                 // the same way a masked raster layer's does, wrapped in a
                 // group, so it survives the round trip here too.
@@ -1923,7 +1930,7 @@ std::vector<uint8_t> save_psp_to_memory(const Document& doc) {
             }
             if (L.is_vector()) {
                 Writer payload;
-                payload.bytes(layer_info(L.name, kLayerVector, kZeroRect, kZeroRect, L.opacity, L.blend, L.visible, kZeroRect, kZeroRect, false));
+                payload.bytes(layer_info(L.name, kLayerVector, kZeroRect, kZeroRect, L.opacity, L.blend, L.visible, kZeroRect, kZeroRect, false, L.lock_alpha));
                 payload.bytes(vector_layer_payload(L));
                 payload.u32(8); payload.u16(0); payload.u16(0);
                 Writer vb;

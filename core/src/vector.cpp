@@ -13,6 +13,71 @@ namespace {
 uint8_t c8(float v) { return static_cast<uint8_t>(std::clamp(v, 0.0f, 255.0f) + 0.5f); }
 }  // namespace
 
+json::Value gradient_json(const Gradient& g) {
+    json::Value v = json::Value::object();
+    v.set("name", json::Value::string(g.name));
+    v.set("style", json::Value::number(static_cast<int>(g.style)));
+    v.set("angle", json::Value::number(g.angle));
+    v.set("center_x", json::Value::number(g.center_x));
+    v.set("center_y", json::Value::number(g.center_y));
+    v.set("repeats", json::Value::number(g.repeats));
+    v.set("invert", json::Value::boolean(g.invert));
+    json::Value colors = json::Value::array();
+    for (const GradientStop& s : g.colors) {
+        json::Value e = json::Value::array();
+        e.push(json::Value::number(s.color.r)); e.push(json::Value::number(s.color.g));
+        e.push(json::Value::number(s.color.b)); e.push(json::Value::number(s.color.a));
+        e.push(json::Value::number(s.pos)); e.push(json::Value::number(s.mid));
+        colors.push(std::move(e));
+    }
+    v.set("colors", std::move(colors));
+    json::Value ops = json::Value::array();
+    for (const OpacityStop& s : g.opacities) {
+        json::Value e = json::Value::array();
+        e.push(json::Value::number(s.opacity)); e.push(json::Value::number(s.pos)); e.push(json::Value::number(s.mid));
+        ops.push(std::move(e));
+    }
+    v.set("opacities", std::move(ops));
+    return v;
+}
+
+Gradient gradient_from_json(const json::Value& v) {
+    Gradient g;
+    g.name = v.get("name").as_string("");
+    g.style = static_cast<GradientStyle>(static_cast<int>(v.get("style").as_number(0)));
+    g.angle = static_cast<float>(v.get("angle").as_number(0));
+    g.center_x = static_cast<float>(v.get("center_x").as_number(50));
+    g.center_y = static_cast<float>(v.get("center_y").as_number(50));
+    g.repeats = static_cast<int>(v.get("repeats").as_number(0));
+    g.invert = v.get("invert").as_bool(false);
+    const json::Value& colors = v.get("colors");
+    if (colors.is_array() && colors.size() >= 2) {
+        g.colors.clear();
+        for (size_t i = 0; i < colors.size(); ++i) {
+            const json::Value& e = colors[i];
+            GradientStop s;
+            s.color = {static_cast<uint8_t>(e[0].as_number(0)), static_cast<uint8_t>(e[1].as_number(0)),
+                       static_cast<uint8_t>(e[2].as_number(0)), static_cast<uint8_t>(e[3].as_number(255))};
+            s.pos = static_cast<float>(e[4].as_number(0));
+            s.mid = static_cast<float>(e[5].as_number(50));
+            g.colors.push_back(s);
+        }
+    }
+    const json::Value& ops = v.get("opacities");
+    if (ops.is_array() && ops.size() >= 2) {
+        g.opacities.clear();
+        for (size_t i = 0; i < ops.size(); ++i) {
+            const json::Value& e = ops[i];
+            OpacityStop s;
+            s.opacity = static_cast<float>(e[0].as_number(100));
+            s.pos = static_cast<float>(e[1].as_number(0));
+            s.mid = static_cast<float>(e[2].as_number(50));
+            g.opacities.push_back(s);
+        }
+    }
+    return g;
+}
+
 Color Gradient::at(float t) const {
     t = std::clamp(t, 0.0f, 1.0f) * 100.0f;
     Color out{0, 0, 0, 255};

@@ -47,6 +47,7 @@ void mirror_horizontal(Image16& img);
 Image16 shifted(const Image16& src, int dx, int dy);
 // Keeps `before` where the mask is clear (selection clipping).
 void apply_through_mask(Image16& dst, const Image16& before, const Mask& mask);
+void restore_clear_pixels(Image16& dst, const Image16& before);
 // Composite of 16-bit layers with Normal blending (export); other blend
 // modes and non-raster layers fall back to their 8-bit pixels.
 }  // namespace firn::raster16

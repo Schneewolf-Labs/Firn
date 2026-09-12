@@ -325,7 +325,8 @@ std::vector<Action> build() {
     add("layer.properties", "Set the active layer's name, opacity, blend mode, visibility or clipping",
         {{"name", "string", ""}, {"opacity", "number", "percent, 0 to 100"}, {"blend", "string", "blend mode name, as the palette shows it"}, {"visible", "bool", ""},
          {"clipped", "bool", "show the layer only where the layer below does"},
-         {"pass_through", "bool", "groups only: its members act on the whole image below the group"}},
+         {"pass_through", "bool", "groups only: its members act on the whole image below the group"},
+         {"lock_alpha", "bool", "protect the clear parts of the layer from painting and fills"}},
         [](App& app, const Value& p, bool* ok) {
             std::string e;
             if (!need_doc(app, ok, e)) return e;
@@ -335,6 +336,7 @@ std::vector<Action> build() {
             if (p.find("name")) after.name = str(p, "name", after.name.c_str());
             if (p.find("opacity")) after.opacity = std::clamp(fnum(p, "opacity", 100.0f) / 100.0f, 0.0f, 1.0f);
             if (p.find("visible")) after.visible = flag(p, "visible", true);
+            if (p.find("lock_alpha")) after.lock_alpha = flag(p, "lock_alpha", false);
             if (p.find("pass_through")) {
                 if (app.doc->layer(static_cast<size_t>(i)).type != firn::LayerType::Group)
                     return fail(ok, "pass_through is for group layers");

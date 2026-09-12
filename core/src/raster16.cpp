@@ -326,4 +326,12 @@ void apply_through_mask(Image16& dst, const Image16& before, const Mask& mask) {
     }
 }
 
+void restore_clear_pixels(Image16& dst, const Image16& before) {
+    if (dst.width() != before.width() || dst.height() != before.height()) return;
+    uint16_t* d = dst.data();
+    const uint16_t* b = before.data();
+    for (size_t i = 0; i < dst.size(); i += 4)
+        if (b[i + 3] == 0) std::memcpy(d + i, b + i, 4 * sizeof(uint16_t));
+}
+
 }  // namespace firn::raster16
