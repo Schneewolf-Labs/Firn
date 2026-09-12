@@ -244,6 +244,40 @@ against the 115 commands its own bundled scripts use.
       point sizes). That is the original's ceiling, not a bug; the stash
       could carry them for Firn's own re-reads if it ever matters
 
+## 21. v0.5.0 (planned 2026-09-12)
+
+A correctness release rather than a feature one, because it is what puts
+1.0 in reach. Two of the three things named as gating 1.0 are already
+closed: nothing freezes the window, and the OpenRaster claim is verified
+against Krita in both directions. In priority order:
+
+- [ ] **Layer styles scale with the image.** The last open 1.0 gate, and
+      wrong output rather than a missing feature: halve a 400x300 image and
+      a drop shadow keeps its 20 px offset and 8 px blur, so it comes out
+      twice as heavy against the artwork. Mirroring and flipping should
+      turn the shadow's direction for the same reason.
+- [ ] **Settle what a feather radius means.** `mask::feather` uses
+      `sigma = radius / 2` while the blur uses the radius directly, so one
+      of them disagrees with the original. Measurable the way the blur was
+      (section 20), so it is an hour rather than an argument.
+- [ ] **Metadata in the native container.** The only place Firn knowingly
+      drops something it holds. The Firn stash already carries four other
+      kinds of Firn-only data.
+- [ ] **Vector node editing**: Convert to Path, Add Path, node-level edits.
+      Vectors are a headline feature and this is the visible hole in them;
+      four of the original's script commands wait on it. The large item,
+      and the one to cut if the release should come sooner.
+- [ ] Export Picture Tube: Firn reads them and cannot write one.
+- [ ] Keep the camera's embedded thumbnail rather than dropping it.
+
+Deliberately not in this release: smart objects, content-aware scale, the
+history brush, IPTC and XMP. All worth having, none of them standing
+between here and a version to trust.
+
+The gate that is on no list and matters most: nobody has yet done a real
+piece of work in Firn from start to finish. What someone reaches for
+another editor to finish is the actual roadmap.
+
 ## 20. Blur fidelity (2026-09-12)
 
 - [x] **Decided: keep the true Gaussian.** Three box passes would take a
