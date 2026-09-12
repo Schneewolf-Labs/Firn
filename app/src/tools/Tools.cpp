@@ -231,7 +231,7 @@ public:
             default: break;
         }
         layer_ = app.active_layer();
-        stroke_ = std::make_unique<raster::Stroke>(app.paint_pixels(layer_), brush, color, mode, app.paint_clip(layer_));
+        stroke_ = std::make_unique<raster::Stroke>(app.paint_pixels(layer_), brush, color, mode, app.paint_clip(static_cast<int>(layer_)));
         if (mode == raster::StrokeMode::Clone || mode == raster::StrokeMode::Heal) stroke_->set_clone_source(&clone_src_, off_x_, off_y_);
         if (filter) stroke_->set_filter(std::move(filter));
         if (area_filter) stroke_->set_area_filter(std::move(area_filter));
