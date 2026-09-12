@@ -350,6 +350,9 @@ docs/    notes on the original: command inventory, module mapping, FORMAT.md
   and unsharp mask (docs/ROADMAP.md, "Blur fidelity"). `sigma = radius` is
   verified against the original: an impulse blurred at Radius 10 in both
   gives profiles within 2 levels of each other.
+  `mask::feather` uses `sigma = radius / 2` and that is verified too: the
+  two words mean different things and Firn matches the original on both,
+  so do not "fix" the feather to agree with the blur.
 - **Measuring the original**: when a port detail is in doubt, run the
   original under Wine on a private `Xvfb :99` and drive it with
   python-xlib's XTest. No input reaches the real session, so this does not

@@ -6,6 +6,14 @@ section into the next version.
 
 ## Unreleased
 
+### Fixed
+- Layer styles scale when the image is resized. Halving a picture used to
+  leave a full-size drop shadow on it, twice as heavy against the artwork
+  as the one that was drawn. Offsets follow each axis and the radii the
+  average of the two; colours, opacities, the bevel's depth and its light
+  angle are not lengths and do not change. A stroke never scales away to
+  nothing.
+
 ### Added
 - Help > Check for Updates asks GitHub whether a newer release exists and
   reports it in Help > About. It only ever tells you; it never downloads or

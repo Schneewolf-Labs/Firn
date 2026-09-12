@@ -3386,6 +3386,65 @@ static void test_blend_ranges() {
     CHECK(r.source.high1 == 200 && r.source.high0 == 250);
 }
 
+// A layer style is measured in pixels, so resizing the image has to resize
+// the style with it. Otherwise halving a picture leaves a full-size drop
+// shadow on it, twice as heavy against the artwork as the one drawn.
+static void test_layer_style_scales_with_the_image() {
+    Document doc(400, 300);
+    doc.add_layer("Background").background = true;
+    Layer& L = doc.add_layer("Shape");
+    L.pixels = Image(400, 300, {0, 0, 0, 0});
+    for (int y = 100; y < 200; ++y)
+        for (int x = 100; x < 300; ++x) L.pixels.set(x, y, {20, 60, 200, 255});
+    L.style.drop_shadow = true;
+    L.style.shadow_offset_x = 20; L.style.shadow_offset_y = 16; L.style.shadow_blur = 8;
+    L.style.outer_glow = true; L.style.glow_size = 12;
+    L.style.inner_glow = true; L.style.inner_glow_size = 6;
+    L.style.stroke = true; L.style.stroke_width = 4;
+    L.style.bevel = true; L.style.bevel_size = 10; L.style.bevel_depth = 2.0f; L.style.bevel_angle = 315.0f;
+    L.style.shadow_opacity = 0.6f;
+    doc.touch();
+
+    CommandStack hist;
+    hist.run(doc, std::make_unique<ResizeCommand>(200, 150, raster::Filter::Bilinear));
+    const LayerStyle& s = doc.layer(1).style;
+    CHECK(std::abs(s.shadow_offset_x - 10.0f) < 0.01f);
+    CHECK(std::abs(s.shadow_offset_y - 8.0f) < 0.01f);
+    CHECK(std::abs(s.shadow_blur - 4.0f) < 0.01f);
+    CHECK(std::abs(s.glow_size - 6.0f) < 0.01f);
+    CHECK(std::abs(s.inner_glow_size - 3.0f) < 0.01f);
+    CHECK(s.stroke_width == 2);
+    CHECK(std::abs(s.bevel_size - 5.0f) < 0.01f);
+    // A ratio, a direction and an opacity are not lengths.
+    CHECK(std::abs(s.bevel_depth - 2.0f) < 0.01f);
+    CHECK(std::abs(s.bevel_angle - 315.0f) < 0.01f);
+    CHECK(std::abs(s.shadow_opacity - 0.6f) < 0.01f);
+
+    // Undo puts the original sizes back, not scaled-up approximations.
+    hist.undo(doc);
+    const LayerStyle& u = doc.layer(1).style;
+    CHECK(std::abs(u.shadow_offset_x - 20.0f) < 0.01f && std::abs(u.shadow_blur - 8.0f) < 0.01f);
+    CHECK(u.stroke_width == 4);
+
+    // Enlarging scales the other way, and each axis follows its own factor.
+    CommandStack h2;
+    h2.run(doc, std::make_unique<ResizeCommand>(800, 300, raster::Filter::Bilinear));
+    const LayerStyle& w = doc.layer(1).style;
+    CHECK(std::abs(w.shadow_offset_x - 40.0f) < 0.01f);   // 2x wider
+    CHECK(std::abs(w.shadow_offset_y - 16.0f) < 0.01f);   // same height
+
+    // A stroke must not disappear on a big reduction: a hairline is a line.
+    Document tiny(1000, 1000);
+    tiny.add_layer("Background").background = true;
+    Layer& t = tiny.add_layer("S");
+    t.pixels = Image(1000, 1000, {0, 0, 0, 0});
+    t.style.stroke = true;
+    t.style.stroke_width = 3;
+    CommandStack h3;
+    h3.run(tiny, std::make_unique<ResizeCommand>(20, 20, raster::Filter::Bilinear));
+    CHECK(tiny.layer(1).style.stroke_width >= 1);
+}
+
 // Clipping masks: a layer marked clipped shows only where the layer below
 // it does, and the whole unit then blends with that layer's own opacity,
 // blend mode and mask.
@@ -3933,6 +3992,7 @@ int main() {
     test_lock_transparency();
     test_pass_through_groups();
     test_blend_ranges();
+    test_layer_style_scales_with_the_image();
     test_clipping_masks();
     test_openraster_lossless();
     test_openraster_vectors();

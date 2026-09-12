@@ -29,6 +29,12 @@ struct LayerStyle {
     float bevel_size = 5.0f, bevel_depth = 1.0f, bevel_angle = 315.0f;   // depth 0..3, light direction in degrees
 
     bool any() const { return drop_shadow || outer_glow || inner_glow || stroke || bevel; }
+    // Grows or shrinks every length with the image, so a resized picture
+    // keeps the look it had. Offsets follow each axis; the radii are
+    // isotropic and follow the average of the two. Colours, opacities, the
+    // bevel's depth (a ratio) and its light angle (a direction) do not
+    // scale.
+    void scale(float sx, float sy);
     // Pixels the style spreads beyond the layer's own shape.
     int reach() const;
     bool operator==(const LayerStyle& o) const;

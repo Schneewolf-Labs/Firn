@@ -251,15 +251,15 @@ A correctness release rather than a feature one, because it is what puts
 closed: nothing freezes the window, and the OpenRaster claim is verified
 against Krita in both directions. In priority order:
 
-- [ ] **Layer styles scale with the image.** The last open 1.0 gate, and
-      wrong output rather than a missing feature: halve a 400x300 image and
-      a drop shadow keeps its 20 px offset and 8 px blur, so it comes out
-      twice as heavy against the artwork. Mirroring and flipping should
-      turn the shadow's direction for the same reason.
-- [ ] **Settle what a feather radius means.** `mask::feather` uses
-      `sigma = radius / 2` while the blur uses the radius directly, so one
-      of them disagrees with the original. Measurable the way the blur was
-      (section 20), so it is an hour rather than an argument.
+- [x] **Layer styles scale with the image** (`LayerStyle::scale`, applied
+      by `ResizeCommand`). Offsets follow each axis, radii the average of
+      the two; colours, opacities, the bevel's depth and its light angle do
+      not. A stroke never scales below one pixel. Flip and mirror
+      deliberately leave the light direction alone, the way a global light
+      angle behaves.
+- [x] **Settled: the feather radius already matches the original** (see
+      section 20). No change needed; the blur and the feather use different
+      conventions because the words mean different things.
 - [ ] **Metadata in the native container.** The only place Firn knowingly
       drops something it holds. The Firn stash already carries four other
       kinds of Firn-only data.
@@ -294,9 +294,14 @@ another editor to finish is the actual roadmap.
       by more than 2 levels out of 255 at any offset. So `sigma = radius` is
       right and no constant needs changing; the small gap is the original's
       slightly tighter kernel cutoff, not a different meaning.
-- [ ] `mask::feather` uses `sigma = radius / 2` for the same word, which is
-      now known to disagree with the blur. Whether the original's feather
-      disagrees too has not been measured; the method above would settle it.
+- [x] **Checked: the feather radius is right too, and legitimately differs
+      from the blur's.** Measured the same way: a rectangle selected with
+      Feather 20 in the original, deleted, and the edge read off the canvas.
+      The transition from 10% to 90% is 29 px there and 26 px in Firn, so
+      the original's sigma is about half its radius, which is what
+      `mask::feather` already uses. The two words genuinely mean different
+      things, and Firn matches the original on both. The 10% gap is inside
+      what reading a profile off a rendered canvas can resolve.
 
 ## 19. Borrowed from Photoshop (2026-09-11)
 

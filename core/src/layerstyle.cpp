@@ -81,6 +81,20 @@ bool LayerStyle::operator==(const LayerStyle& o) const {
            bevel == o.bevel && bevel_size == o.bevel_size && bevel_depth == o.bevel_depth && bevel_angle == o.bevel_angle;
 }
 
+void LayerStyle::scale(float sx, float sy) {
+    if (sx <= 0.0f || sy <= 0.0f || (sx == 1.0f && sy == 1.0f)) return;
+    const float mean = (sx + sy) * 0.5f;
+    shadow_offset_x *= sx;
+    shadow_offset_y *= sy;
+    shadow_blur *= mean;
+    glow_size *= mean;
+    inner_glow_size *= mean;
+    bevel_size *= mean;
+    // A stroke is whole pixels, and must not vanish on a big reduction:
+    // a hairline is still a line.
+    stroke_width = std::max(1, static_cast<int>(std::lround(stroke_width * mean)));
+}
+
 json::Value LayerStyle::to_json() const {
     json::Value v = json::Value::object();
     v.set("drop_shadow", json::Value::boolean(drop_shadow)); v.set("shadow_color", color_json(shadow_color));

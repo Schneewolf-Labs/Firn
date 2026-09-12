@@ -601,8 +601,13 @@ void CropCommand::transform(const Document::State& in, Document::State& out) {
 void ResizeCommand::transform(const Document::State& in, Document::State& out) {
     out.width = w_;
     out.height = h_;
+    const float sx = in.width > 0 ? static_cast<float>(w_) / in.width : 1.0f;
+    const float sy = in.height > 0 ? static_cast<float>(h_) / in.height : 1.0f;
     for (const Layer& L : in.layers) {
         Layer n = L;
+        // A style is measured in pixels, so it has to grow and shrink with
+        // the image or a halved picture keeps a full-size drop shadow.
+        n.style.scale(sx, sy);
         if (L.is_raster()) n.pixels = raster::resample(L.pixels, w_, h_, filter_);
         if (L.is_deep()) n.deep = std::make_shared<const Image16>(raster16::resample(*L.deep, w_, h_, filter_));
         if (L.has_mask()) { Mask m(w_, h_); raster::resample_mask(L.mask.data(), in.width, in.height, m.data(), w_, h_); n.mask = std::move(m); }
