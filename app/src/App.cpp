@@ -997,6 +997,31 @@ void App::layer_promote_background() {
         run(std::make_unique<PromoteBackgroundCommand>(active_layer()));
 }
 
+// Clip the active layer to the one below, or release it. A Background layer
+// has nothing under it, and the bottom of a group has nothing in the group
+// to clip to.
+bool App::can_clip_layer() const {
+    const int i = active_layer();
+    // The active index can outlive the stack it pointed into, so check it
+    // against the current layer count rather than trusting it.
+    if (!doc || i <= 0 || static_cast<size_t>(i) >= doc->layer_count()) return false;
+    const Layer& L = doc->layer(static_cast<size_t>(i));
+    if (L.background) return false;
+    const Layer& below = doc->layer(static_cast<size_t>(i) - 1);
+    // The layer below must be at the same depth: the first member of a group
+    // sits above the group layer itself, which is not something to clip to.
+    return below.depth == L.depth;
+}
+
+void App::layer_toggle_clipped() {
+    if (!can_clip_layer()) return;
+    const size_t i = static_cast<size_t>(active_layer());
+    LayerProps before = doc->props(i), after = before;
+    after.clipped = !before.clipped;
+    layer_set_props(before, after);
+    status = after.clipped ? "Clipped to the layer below" : "Released from the layer below";
+}
+
 void App::layer_set_props(const LayerProps& before, const LayerProps& after) {
     if (doc && active_layer() >= 0 && !(before == after))
         run(std::make_unique<LayerPropertiesCommand>(active_layer(), before, after));
@@ -1209,6 +1234,7 @@ void App::handle_shortcuts() {
     if (ctrl && ImGui::IsKeyPressed(ImGuiKey_A, false)) select_all();
     if (ctrl && ImGui::IsKeyPressed(ImGuiKey_D, false)) select_none();
     if (ctrl && ImGui::IsKeyPressed(ImGuiKey_F, false)) { if (io.KeyShift) defloat(); else if (doc && doc->has_selection() && !has_floating_layer()) promote_selection_to_layer(true); }
+    if (ctrl && io.KeyAlt && ImGui::IsKeyPressed(ImGuiKey_G, false)) layer_toggle_clipped();
     if (ctrl && io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_M, false)) show_marquee = !show_marquee;
     if (ctrl && io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_C, false)) copy_merged();
     else if (ctrl && ImGui::IsKeyPressed(ImGuiKey_C, false)) copy();

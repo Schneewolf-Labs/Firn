@@ -6,6 +6,17 @@ section into the next version.
 
 ## Unreleased
 
+### Added
+- Clipping masks. A layer can be clipped to the one below it (Layers >
+  Create Clipping Mask, Ctrl+Alt+G) and then shows only where that layer
+  does, so a texture, gradient or tonal correction stays inside one shape
+  without painting a mask for it. Several layers can clip to the same one,
+  the unit blends with the bottom layer's opacity, blend mode and mask, and
+  a clipped adjustment or filter layer affects only what it is clipped to.
+  `layer.properties` takes `clipped`, so it is scriptable like everything
+  else. Projects keep it; the native container keeps it in the Firn stash,
+  where the original ignores it.
+
 ## 0.3.0 (2026-09-11)
 
 ### Added

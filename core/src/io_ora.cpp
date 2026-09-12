@@ -229,6 +229,7 @@ struct OraWriter {
             if (!L.mask_enabled) out += " firn:mask-enabled=\"0\"";
         }
         if (!L.expanded) out += " firn:expanded=\"0\"";
+        if (L.clipped) out += " firn:clipped=\"1\"";
         if (L.style.any()) out += " firn:style=\"" + escape(json::dump(L.style.to_json())) + "\"";
     }
 
@@ -386,6 +387,7 @@ struct OraReader {
             L.mask_enabled = n.attr_or("firn:mask-enabled", "1") != "0";
         }
         L.expanded = n.attr_or("firn:expanded", "1") != "0";
+        L.clipped = n.attr_or("firn:clipped", "0") == "1";
         if (const std::string* st = n.attr("firn:style")) {
             json::Value v;
             if (json::parse(*st, v)) L.style = LayerStyle::from_json(v);

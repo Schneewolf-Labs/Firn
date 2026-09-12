@@ -110,6 +110,15 @@ docs/    notes on the original: command inventory, module mapping, FORMAT.md
   whole stack (`Document::State`). A layer's optional `mask` multiplies its
   alpha (or the group's composite) during compositing. Tools and pixel
   commands must check `Layer::is_raster()` / `App::active_is_raster()`.
+- **Clipping masks** (`Layer::clipped`): a run of clipped layers above a
+  layer is one unit (`Document::clip_end`, `composite_clip_unit`). They are
+  drawn onto the base's pixels, held to its alpha and mask, and the unit
+  blends with the base's own opacity, blend mode and style. Compositing the
+  unit's members passes `top_clips = false` so their own flag is not
+  re-read, and a clipped filter layer takes its source from the unit rather
+  than re-compositing what is below (`apply_filter_layer`'s
+  `source_is_out`). It is Firn's own, so it rides in `firn:clipped` and the
+  native format's stash.
 - **Mask edit mode**: tools never touch `layer.pixels` directly; they use
   `App::paint_pixels(layer)` (the pixels, or a grayscale proxy of the mask
   while editing it), `App::paint_touched(layer)` after live edits, and

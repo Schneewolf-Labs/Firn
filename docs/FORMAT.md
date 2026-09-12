@@ -279,7 +279,8 @@ Dissolve, fall back to `svg:src-over`).
 
 Firn-only data lives in `firn:` attributes and elements that other readers
 ignore: `firn:blend` (the exact blend mode name), `firn:background`,
-`firn:expanded`, `firn:mask` (a gray PNG, plus `firn:mask-enabled`),
+`firn:expanded`, `firn:clipped`, `firn:mask` (a gray PNG, plus
+`firn:mask-enabled`),
 `firn:style` (the layer style as JSON), and `firn:type` = `vector`
 (`firn:objects`, below), `adjustment` (`firn:adjustment`: the native
 adjustment extension bytes) or `filter` (`firn:filter`: JSON parameters).
@@ -339,7 +340,9 @@ original shows the text under image information and ignores it. Each
 `kind` (100 Gaussian Blur, 101 Average, 102 Unsharp Mask) and its
 parameters; the layer itself is written as an empty raster placeholder
 the original opens, and the reader turns it back into a filter layer.
-`styles` entries carry a layer index and a `style` object (the fields of
+`clipped` entries name the layers clipped to the one below them, which the
+original composites normally. `styles` entries carry a layer index and a
+`style` object (the fields of
 `LayerStyle`, colors as `[r, g, b, a]`); the layer is written with its
 plain pixels, so the original shows it without the effects.
 

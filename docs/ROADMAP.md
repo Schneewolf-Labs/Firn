@@ -242,6 +242,29 @@ against the 115 commands its own bundled scripts use.
       point sizes). That is the original's ceiling, not a bug; the stash
       could carry them for Firn's own re-reads if it ever matters
 
+## 19. Borrowed from Photoshop (2026-09-11)
+
+Ideas worth having, each written independently from the idea rather than
+from any implementation, in the order they pay off.
+
+- [x] Clipping masks (`Layer::clipped`, `Document::composite_clip_unit`)
+- [ ] Blend If: per-layer sliders gating where a layer shows by its own or
+      the underlying luminance. Compositing is already per-pixel, so this is
+      a gate in the same loop, and sky replacement falls out of it
+- [ ] Pass-through group mode, so an adjustment layer inside a group can
+      reach what is below the group
+- [ ] Gradient map adjustment: map luminance through a gradient. The
+      gradient model, its stops and the library already exist
+- [ ] History brush: paint back from an earlier history state. The history
+      snapshots already exist
+- [ ] Smart objects: a layer that keeps its source and re-renders transforms
+      and placed images from it. The other half of the non-destructive story
+      that adjustment and filter layers started. A real project
+- [ ] Content-aware scale (seam carving), the sibling of the fill
+- [ ] Vector booleans: unite, subtract, intersect on objects
+- [ ] On-canvas targeted adjustment: drag on the image to move the curve
+      point for the tone under the cursor
+
 ## 17. Restructuring (2026-09-11)
 
 - [x] Phase 1: per-dialog state off `App` (145 members, 11 owners). App.h

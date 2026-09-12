@@ -684,6 +684,10 @@
             "description": "blend mode name, as the palette shows it",
             "type": "string"
           },
+          "clipped": {
+            "description": "show the layer only where the layer below does",
+            "type": "boolean"
+          },
           "name": {
             "description": "",
             "type": "string"
@@ -701,7 +705,7 @@
         "type": "object"
       },
       "name": "layer.properties",
-      "summary": "Set the active layer's name, opacity, blend mode or visibility"
+      "summary": "Set the active layer's name, opacity, blend mode, visibility or clipping"
     },
     {
       "batch_safe": false,

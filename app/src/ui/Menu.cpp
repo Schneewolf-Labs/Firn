@@ -7,6 +7,7 @@
 #include "App.h"
 #include "ui/MenuBuilder.h"
 #include "ui/MenuState.h"
+#include "ui/Shortcut.h"
 #include "firn/adjust.h"
 #include "firn/icc.h"
 #include "firn/io.h"
@@ -598,6 +599,12 @@ void App::draw_layer_menu_items(MenuBuilder& m) {
         else open_layer_properties();
     });
     m.item("Layer Styles...", nullptr, has_any_layer && !is_adjustment, [=, this] { open_layer_styles(layer); });
+    {
+        const bool in_range = has_doc && layer >= 0 && static_cast<size_t>(layer) < doc->layer_count();
+        const bool clipped_now = in_range && doc->layer(layer).clipped;
+        m.item(clipped_now ? "Release Clipping Mask" : "Create Clipping Mask", SC("Ctrl+Alt+G"), can_clip_layer(),
+               [=, this] { layer_toggle_clipped(); }, clipped_now);
+    }
     m.separator();
     if (m.begin_menu("Mask", has_mask)) {
         m.item("Enable Mask", nullptr, true, [=, this] { layer_set_mask(!mask_on ? "Enable Mask" : "Disable Mask", doc->layer(layer).mask, !mask_on); }, mask_on);

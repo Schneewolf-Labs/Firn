@@ -883,6 +883,11 @@ void apply_firn_stash(const Reader& r, const Block& creator, Document& doc, std:
         if (idx < 0) continue;
         doc.layer(idx).style = LayerStyle::from_json(e.get("style"));
     }
+    const json::Value& clipped = v.get("clipped");
+    for (size_t i = 0; i < clipped.size(); ++i) {
+        const int idx = stash_layer(doc, clipped[i], warnings);
+        if (idx >= 0) doc.layer(idx).clipped = true;
+    }
     doc.touch();
 }
 
@@ -903,6 +908,16 @@ std::string firn_stash(const Document& doc) {
         f.set("unsharp_clipping", json::Value::number(a.unsharp_clipping));
         filters.push(std::move(f));
     }
+    // Clipping is Firn's own: the original composites the layer normally.
+    json::Value clipped = json::Value::array();
+    for (size_t i = 0; i < doc.layer_count(); ++i) {
+        const Layer& L = doc.layer(i);
+        if (!L.clipped) continue;
+        json::Value e = json::Value::object();
+        e.set("layer", json::Value::number(static_cast<double>(i)));
+        e.set("name", json::Value::string(L.name));
+        clipped.push(std::move(e));
+    }
     json::Value styles = json::Value::array();
     for (size_t i = 0; i < doc.layer_count(); ++i) {
         const Layer& L = doc.layer(i);
@@ -913,11 +928,12 @@ std::string firn_stash(const Document& doc) {
         e.set("style", L.style.to_json());
         styles.push(std::move(e));
     }
-    if (filters.size() == 0 && styles.size() == 0) return {};
+    if (filters.size() == 0 && styles.size() == 0 && clipped.size() == 0) return {};
     json::Value root = json::Value::object();
     root.set("firn", json::Value::number(1));
     if (filters.size()) root.set("filters", std::move(filters));
     if (styles.size()) root.set("styles", std::move(styles));
+    if (clipped.size()) root.set("clipped", std::move(clipped));
     return json::dump(root);
 }
 

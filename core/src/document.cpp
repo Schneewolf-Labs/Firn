@@ -130,7 +130,7 @@ void Document::rasterize_vector_layer(size_t i) {
 
 LayerProps Document::props(size_t i) const {
     const Layer& L = layer(i);
-    return {L.name, L.visible, L.opacity, L.blend};
+    return {L.name, L.visible, L.opacity, L.blend, L.clipped};
 }
 
 void Document::set_props(size_t i, const LayerProps& p) {
@@ -139,6 +139,7 @@ void Document::set_props(size_t i, const LayerProps& p) {
     L.visible = p.visible;
     L.opacity = p.opacity;
     L.blend = p.blend;
+    L.clipped = p.clipped;
     touch();
 }
 
@@ -246,13 +247,22 @@ void apply_adjustment_layer(Image& out, int ox, int oy, const Layer& L, const ra
 // A filter layer needs what lies below it a little beyond `r` (its reach),
 // so that part of the stack is composited again over the padded rect and
 // filtered there; only `r` is written back, blended by opacity and mask.
-void Document::apply_filter_layer(Image& out, int ox, int oy, size_t from, size_t li, const raster::Rect& r) const {
+void Document::apply_filter_layer(Image& out, int ox, int oy, size_t from, size_t li, const raster::Rect& r, bool source_is_out) const {
     const Layer& L = *layers_[li];
     const int reach = L.adjustment.reach();
     const raster::Rect rp = raster::Rect{r.x0 - reach, r.y0 - reach, r.x1 + reach, r.y1 + reach}.clipped(width_, height_);
     if (rp.empty()) return;
     Image below(rp.x1 - rp.x0, rp.y1 - rp.y0, {0, 0, 0, 0});
-    if (li > from) composite_region(below, rp.x0, rp.y0, from, li - 1, rp);
+    if (source_is_out) {
+        for (int y = rp.y0; y < rp.y1; ++y)
+            for (int x = rp.x0; x < rp.x1; ++x) {
+                const int sx = x - ox, sy = y - oy;
+                if (sx >= 0 && sy >= 0 && sx < out.width() && sy < out.height())
+                    below.set(x - rp.x0, y - rp.y0, out.get(sx, sy));
+            }
+    } else if (li > from) {
+        composite_region(below, rp.x0, rp.y0, from, li - 1, rp);
+    }
     L.adjustment.apply(below);
     const bool masked = L.has_mask() && L.mask_enabled;
     const int w = out.width(), bw = below.width();
@@ -295,10 +305,82 @@ void Document::composite_into(Image& dst, const raster::Rect& rect) const {
     composite_region(dst, 0, 0, 0, layers_.size() - 1, r);
 }
 
-void Document::composite_region(Image& out, int ox, int oy, size_t from, size_t to, const raster::Rect& r) const {
+// Draws a clipping unit: the base layer at `base`, the layers clipped to it
+// in [own_end, ce), and nothing else. The clipped layers are composited onto
+// the base's own pixels and then held to the base's alpha, so they show only
+// where the base does. The unit blends into `out` with the base's opacity,
+// blend mode, mask and style, exactly as the base alone would have.
+void Document::composite_clip_unit(Image& out, int ox, int oy, size_t base, size_t own_end, size_t ce, const raster::Rect& r) const {
+    const Layer& B = *layers_[base];
+    if (!B.visible || B.opacity <= 0.0f) return;
+    const int reach = B.style.any() ? B.style.reach() : 0;
+    const raster::Rect rp = raster::Rect{r.x0 - reach, r.y0 - reach, r.x1 + reach, r.y1 + reach}.clipped(width_, height_);
+    if (rp.empty()) return;
+
+    // The base's own pixels, at full strength: its opacity and blend mode
+    // belong to the finished unit, not to what the clipped layers land on.
+    Image unit(rp.x1 - rp.x0, rp.y1 - rp.y0, {0, 0, 0, 0});
+    if (B.type == LayerType::Group) {
+        if (own_end > base + 1) composite_region(unit, rp.x0, rp.y0, base + 1, own_end - 1, rp);
+    } else if (!B.pixels.empty()) {
+        for (int y = rp.y0; y < rp.y1; ++y)
+            for (int x = rp.x0; x < rp.x1; ++x) unit.set(x - rp.x0, y - rp.y0, B.pixels.get(x, y));
+    }
+    // The base's mask limits the unit's shape too, so the clipped layers stop
+    // where the mask hides the base rather than at its raw alpha.
+    if (B.has_mask() && B.mask_enabled) {
+        for (int y = rp.y0; y < rp.y1; ++y)
+            for (int x = rp.x0; x < rp.x1; ++x) {
+                Color c = unit.get(x - rp.x0, y - rp.y0);
+                c.a = static_cast<uint8_t>(c.a * B.mask.at(x, y) / 255);
+                unit.set(x - rp.x0, y - rp.y0, c);
+            }
+    }
+
+    // Remember the shape, draw the clipped layers onto it, then restore it.
+    std::vector<uint8_t> shape(static_cast<size_t>(unit.width()) * unit.height());
+    for (size_t i = 0; i < shape.size(); ++i) shape[i] = unit.data()[i * 4 + 3];
+    if (ce > own_end) composite_region(unit, rp.x0, rp.y0, own_end, ce - 1, rp, false);
+    for (size_t i = 0; i < shape.size(); ++i) unit.data()[i * 4 + 3] = shape[i];
+
+    // The mask is already in the shape; blending it again would square it.
+    Layer as_base;
+    as_base.opacity = B.opacity;
+    as_base.blend = B.blend;
+    as_base.visible = true;
+    if (reach || B.style.any()) {
+        const Image styled = render_layer_style(unit, rp.x0, rp.y0, B.style, r);
+        blend_layer(out, ox, oy, styled, r.x0, r.y0, as_base, r);
+    } else {
+        blend_layer(out, ox, oy, unit, rp.x0, rp.y0, as_base, r);
+    }
+}
+
+size_t Document::clip_end(size_t base) const {
+    if (base >= layers_.size()) return base;
+    const Layer& B = *layers_[base];
+    size_t i = B.type == LayerType::Group ? group_end(base) : base + 1;
+    while (i < layers_.size() && layers_[i]->clipped && layers_[i]->depth == B.depth)
+        i = layers_[i]->type == LayerType::Group ? group_end(i) : i + 1;
+    return i;
+}
+
+void Document::composite_region(Image& out, int ox, int oy, size_t from, size_t to, const raster::Rect& r, bool top_clips) const {
     size_t li = from;
     while (li <= to && li < layers_.size()) {
         const Layer& L = *layers_[li];
+        // A layer with clipped layers above it forms one unit: they are drawn
+        // onto its pixels, held to its alpha, and the result blends with the
+        // layer's own opacity, blend mode and mask.
+        if (top_clips && !L.clipped) {
+            const size_t ce = clip_end(li);
+            const size_t own_end = L.type == LayerType::Group ? group_end(li) : li + 1;
+            if (ce > own_end && ce <= to + 1) {
+                composite_clip_unit(out, ox, oy, li, own_end, ce, r);
+                li = ce;
+                continue;
+            }
+        }
         if (L.type == LayerType::Group) {
             const size_t end = group_end(li);
             if (L.visible && L.opacity > 0.0f && end > li + 1) {
@@ -320,7 +402,7 @@ void Document::composite_region(Image& out, int ox, int oy, size_t from, size_t 
         }
         if (L.type == LayerType::Adjustment) {
             if (L.visible && L.opacity > 0.0f) {
-                if (L.adjustment.is_filter()) apply_filter_layer(out, ox, oy, from, li, r);
+                if (L.adjustment.is_filter()) apply_filter_layer(out, ox, oy, from, li, r, !top_clips);
                 else apply_adjustment_layer(out, ox, oy, L, r);
             }
             ++li;

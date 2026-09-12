@@ -65,7 +65,14 @@ selection. Selections can be saved into the file and loaded back.
 
 Layers can be grouped (Layers > New Layer Group) and carry masks (Layers >
 New Mask Layer); press Edit next to a mask to paint on it in grayscale with
-any brush. Adjustment layers transform what is composited below them, filter
+any brush.
+
+A layer can also be clipped to the one below it (Layers > Create Clipping
+Mask, or Ctrl+Alt+G): it then shows only where that layer does, which is how
+a texture, a gradient or a tonal correction gets confined to one shape
+without painting a mask. Several layers can clip to the same one, and the
+whole stack blends with the bottom layer's own opacity, blend mode and mask.
+A clipped adjustment or filter layer affects only what it is clipped to. Adjustment layers transform what is composited below them, filter
 layers do the same for spatial effects, and layer styles add drop shadows,
 glows, strokes and bevels that re-render as the layer changes.
 

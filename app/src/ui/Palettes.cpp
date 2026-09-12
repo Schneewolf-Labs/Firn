@@ -260,6 +260,13 @@ static void draw_layers(App& app) {
             if (ImGui::ArrowButton("##exp", L.expanded ? ImGuiDir_Down : ImGuiDir_Right)) L.expanded = !L.expanded;
             ImGui::SameLine();
         }
+        // A clipped layer shows only where the one below it does; the marker
+        // points at the layer it is clipped to.
+        if (L.clipped) {
+            ImGui::TextDisabled("|_");
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Clipped to the layer below");
+            ImGui::SameLine();
+        }
         char label[192];
         std::snprintf(label, sizeof(label), "%s%s%s%s", L.type == LayerType::Group ? "[Group] " : L.is_vector() ? "[Vector] " : L.is_adjustment() ? (L.adjustment.is_filter() ? "[Filter] " : "[Adjust] ") : L.style.any() ? "[fx] " : "", L.name.c_str(),
                       L.blend != BlendMode::Normal ? "  [" : "", L.blend != BlendMode::Normal ? blend_mode_name(L.blend) : "");

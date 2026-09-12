@@ -896,7 +896,7 @@ Takes no parameters.
 
 ### `layer.properties`
 
-Set the active layer's name, opacity, blend mode or visibility.
+Set the active layer's name, opacity, blend mode, visibility or clipping.
 
 Batch-safe: yes.
 
@@ -906,6 +906,7 @@ Batch-safe: yes.
 | `opacity` | number | no |  | percent, 0 to 100 |
 | `blend` | string | no |  | blend mode name, as the palette shows it |
 | `visible` | boolean | no |  |  |
+| `clipped` | boolean | no |  | show the layer only where the layer below does |
 
 
 ### `layer.select`

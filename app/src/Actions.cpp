@@ -322,8 +322,9 @@ std::vector<Action> build() {
             app.layer_merge(what == "all" ? 2 : what == "visible" ? 1 : 0);
             return ok_json();
         });
-    add("layer.properties", "Set the active layer's name, opacity, blend mode or visibility",
-        {{"name", "string", ""}, {"opacity", "number", "percent, 0 to 100"}, {"blend", "string", "blend mode name, as the palette shows it"}, {"visible", "bool", ""}},
+    add("layer.properties", "Set the active layer's name, opacity, blend mode, visibility or clipping",
+        {{"name", "string", ""}, {"opacity", "number", "percent, 0 to 100"}, {"blend", "string", "blend mode name, as the palette shows it"}, {"visible", "bool", ""},
+         {"clipped", "bool", "show the layer only where the layer below does"}},
         [](App& app, const Value& p, bool* ok) {
             std::string e;
             if (!need_doc(app, ok, e)) return e;
@@ -333,6 +334,10 @@ std::vector<Action> build() {
             if (p.find("name")) after.name = str(p, "name", after.name.c_str());
             if (p.find("opacity")) after.opacity = std::clamp(fnum(p, "opacity", 100.0f) / 100.0f, 0.0f, 1.0f);
             if (p.find("visible")) after.visible = flag(p, "visible", true);
+            if (p.find("clipped")) {
+                if (flag(p, "clipped", false) && !app.can_clip_layer()) return fail(ok, "there is no layer below this one to clip to");
+                after.clipped = flag(p, "clipped", false);
+            }
             if (p.find("blend")) {
                 const std::string want = str(p, "blend");
                 for (int b = 0; b < static_cast<int>(firn::BlendMode::Count); ++b)

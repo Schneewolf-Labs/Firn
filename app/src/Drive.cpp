@@ -360,6 +360,7 @@ std::string Driver::state_json(App& app) const {
             e.set("blend", Value::string(firn::blend_mode_name(L.blend)));
             e.set("depth", Value::number(L.depth));
             e.set("mask", Value::boolean(L.has_mask()));
+            e.set("clipped", Value::boolean(L.clipped));
             layers.push(std::move(e));
         }
         d.set("layers", std::move(layers));

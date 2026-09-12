@@ -340,6 +340,24 @@ def test_image_geometry(f):
     check(f.refused("image.resize", width=0), "a nonsense size is refused")
 
 
+def test_clipping_masks(f):
+    section("clipping masks")
+    out = os.path.join(OUT, "clip.png")
+    f.do("file.new", width=40, height=20, color="#00000000")
+    f.do("layer.properties", name="Base")
+    check(f.refused("layer.properties", clipped=True), "the bottom layer has nothing to clip to")
+    f.do("layer.new")
+    f.do("layer.properties", name="Top", clipped=True)
+    check(f.layers()[1]["clipped"] is True, "a layer can be clipped to the one below")
+    f.do("edit.undo")
+    check(f.layers()[1].get("clipped") is False, "and the clip undone")
+    f.do("edit.redo")
+    check(f.layers()[1]["clipped"] is True, "and redone")
+    f.do("layer.properties", clipped=False)
+    check(f.layers()[1].get("clipped") is False, "and released again")
+    f.do("file.close")
+
+
 def test_metadata(f):
     section("metadata")
     out = os.path.join(OUT, "meta.png")
@@ -518,7 +536,7 @@ def main():
         drive.recv_line(sock)
         f = Firn(sock)
         for case in (test_api_surface, test_documents, test_view, test_layers, test_selection,
-                     test_painting_and_materials, test_edit_actions, test_tools_and_history, test_image_geometry, test_metadata, test_drawing_api, test_atomic_batches, test_discovery_v2):
+                     test_painting_and_materials, test_edit_actions, test_tools_and_history, test_image_geometry, test_clipping_masks, test_metadata, test_drawing_api, test_atomic_batches, test_discovery_v2):
             case(f)
         sock.sendall(b"quit\n")
         sock.settimeout(10.0)

@@ -2900,6 +2900,99 @@ static void test_icc() {
     std::remove(png.c_str()); std::remove(jpg.c_str());
 }
 
+// Clipping masks: a layer marked clipped shows only where the layer below
+// it does, and the whole unit then blends with that layer's own opacity,
+// blend mode and mask.
+static void test_clipping_masks() {
+    Document doc(20, 10);
+    Layer& base = doc.add_layer("Base");
+    base.pixels = Image(20, 10, {0, 0, 0, 0});
+    for (int y = 0; y < 10; ++y)
+        for (int x = 0; x < 10; ++x) base.pixels.set(x, y, {255, 0, 0, 255});
+    Layer& top = doc.add_layer("Top");
+    top.pixels = Image(20, 10, {0, 0, 255, 255});
+
+    // Unclipped, the top layer covers everything.
+    Image flat = doc.composite();
+    CHECK(flat.get(5, 5).b == 255 && flat.get(15, 5).b == 255 && flat.get(15, 5).a == 255);
+
+    top.clipped = true;
+    doc.touch();
+    flat = doc.composite();
+    CHECK(flat.get(5, 5).b == 255 && flat.get(5, 5).a == 255);   // over the base it shows
+    CHECK(flat.get(15, 5).a == 0);                                // past the base, nothing
+    CHECK(doc.clip_end(0) == 2);
+
+    // The base's opacity applies to the whole unit, not only to the base.
+    base.opacity = 0.5f;
+    doc.touch();
+    flat = doc.composite();
+    CHECK(flat.get(5, 5).b == 255 && std::abs(flat.get(5, 5).a - 128) <= 1);
+    base.opacity = 1.0f;
+
+    // A clipped layer's own opacity still blends it against the base.
+    top.opacity = 0.5f;
+    doc.touch();
+    flat = doc.composite();
+    CHECK(std::abs(flat.get(5, 5).r - 128) <= 2 && std::abs(flat.get(5, 5).b - 128) <= 2 && flat.get(5, 5).a == 255);
+    top.opacity = 1.0f;
+
+    // The base's mask shapes the unit, so the clipped layer stops where the
+    // mask hides the base rather than at the base's raw alpha.
+    base.mask = mask::rectangle(20, 10, 0, 0, 5, 10, false);
+    doc.touch();
+    flat = doc.composite();
+    CHECK(flat.get(2, 5).a == 255 && flat.get(8, 5).a == 0);
+    base.mask = Mask();
+
+    // Several layers clip to one base, and an unclipped layer ends the run.
+    Layer& third = doc.add_layer("Third");
+    third.pixels = Image(20, 10, {0, 255, 0, 255});
+    third.clipped = true;
+    Layer& free_layer = doc.add_layer("Free");
+    free_layer.pixels = Image(20, 10, {0, 0, 0, 0});
+    for (int y = 0; y < 10; ++y) free_layer.pixels.set(18, y, {255, 255, 0, 255});
+    doc.touch();
+    CHECK(doc.clip_end(0) == 3);
+    flat = doc.composite();
+    CHECK(flat.get(5, 5).g == 255 && flat.get(5, 5).a == 255);    // the top of the run wins
+    CHECK(flat.get(15, 5).a == 0);                                 // still held to the base
+    CHECK(flat.get(18, 5).r == 255 && flat.get(18, 5).g == 255);   // the free layer is unaffected
+
+    // A clipped adjustment layer changes only what it is clipped to.
+    Document d2(4, 2);
+    Layer& b2 = d2.add_layer("B");
+    b2.pixels = Image(4, 2, {0, 0, 0, 0});
+    b2.pixels.set(0, 0, {200, 200, 200, 255});
+    Layer& inv = d2.add_layer("Invert");
+    inv.type = LayerType::Adjustment;
+    inv.adjustment.kind = Adjustment::Kind::Invert;
+    inv.clipped = true;
+    Layer& over = d2.add_layer("Over");
+    over.pixels = Image(4, 2, {0, 0, 0, 0});
+    over.pixels.set(3, 0, {200, 200, 200, 255});
+    d2.touch();
+    const Image f2 = d2.composite();
+    CHECK(f2.get(0, 0).r == 55);    // the clipped adjustment inverted its base
+    CHECK(f2.get(3, 0).r == 200);   // and left the layer above it alone
+
+    // Without the clip, the adjustment reaches everything below it, which is
+    // the behaviour that has to keep working.
+    inv.clipped = false;
+    d2.touch();
+    const Image f3 = d2.composite();
+    CHECK(f3.get(0, 0).r == 55 && f3.get(3, 0).r == 200);
+
+    // Clipping is Firn's own, so the native container carries it in the stash
+    // rather than in a block the original would read.
+    std::string err;
+    std::vector<std::string> warnings;
+    const std::vector<uint8_t> psp = io::save_psp_to_memory(doc);
+    auto back = io::load_psp_from_memory(psp.data(), psp.size(), &err, &warnings);
+    CHECK(back && back->layer_count() == 4);
+    CHECK(back->layer(1).clipped && back->layer(2).clipped && !back->layer(3).clipped);
+}
+
 // The project format is meant to be lossless: everything the document model
 // holds comes back. This sets each field to something that is not its
 // default, so a field the writer forgets shows up as a failure rather than
@@ -2931,6 +3024,7 @@ static void test_openraster_lossless() {
     mem.pixels = Image(40, 30, {0, 0, 0, 0});
     mem.pixels.set(5, 5, {99, 88, 77, 255});
     mem.visible = false;
+    mem.clipped = true;
 
     Layer& deep = doc.add_layer("Deep");
     deep.depth = 1;
@@ -3010,7 +3104,7 @@ static void test_openraster_lossless() {
     CHECK(std::abs(G.opacity - 0.25f) < 0.01f && G.blend == BlendMode::Dissolve);
 
     const Layer& M = b->layer(2);
-    CHECK(M.depth == 1 && !M.visible && M.pixels.get(5, 5).r == 99);
+    CHECK(M.depth == 1 && !M.visible && M.pixels.get(5, 5).r == 99 && M.clipped);
 
     const Layer& D = b->layer(3);
     CHECK(D.depth == 1 && D.is_deep() && D.deep->data()[0] == 1234 && D.deep->data()[1] == 4321 && D.deep->data()[2] == 999);
@@ -3337,6 +3431,7 @@ static void test_metadata() {
 
 int main() {
     test_icc();
+    test_clipping_masks();
     test_openraster_lossless();
     test_openraster_vectors();
     test_psp_vector_compat();
