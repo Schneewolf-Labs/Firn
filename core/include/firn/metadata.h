@@ -68,13 +68,16 @@ Metadata parse_jpeg(const uint8_t* data, size_t size);
 Metadata parse_png(const uint8_t* data, size_t size);
 
 // Serializers. `build_tiff` writes a little-endian TIFF block holding the
-// Exif entries; empty when there are none. The embedded thumbnail of a file
-// Firn read is not carried over, since the picture it showed is stale.
-std::vector<uint8_t> build_tiff(const Metadata& md);
+// Exif entries; empty when there are none. `thumbnail` is a JPEG of the
+// picture as it now stands, written as the second directory (IFD1) the way
+// a camera writes its own. The one a file arrived with is deliberately not
+// carried through: after an edit it would show a picture that is no longer
+// there, which is how cropped-out detail leaks out of a photo.
+std::vector<uint8_t> build_tiff(const Metadata& md, const std::vector<uint8_t>& thumbnail = {});
 // Rewrites a whole file's metadata, returning the new bytes. Existing Exif
 // and text chunks are replaced. Returns the input unchanged when the format
 // has nowhere to put metadata.
-std::vector<uint8_t> apply_jpeg(const std::vector<uint8_t>& file, const Metadata& md);
-std::vector<uint8_t> apply_png(const std::vector<uint8_t>& file, const Metadata& md);
+std::vector<uint8_t> apply_jpeg(const std::vector<uint8_t>& file, const Metadata& md, const std::vector<uint8_t>& thumbnail = {});
+std::vector<uint8_t> apply_png(const std::vector<uint8_t>& file, const Metadata& md, const std::vector<uint8_t>& thumbnail = {});
 
 }  // namespace firn::meta

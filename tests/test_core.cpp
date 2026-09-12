@@ -3691,6 +3691,80 @@ static void test_openraster_lossless() {
 // path before and after and comparing the outline it draws.
 // Firn read picture tubes long before it could write one. A tube is the
 // native format plus one block saying how the image divides into cells.
+// A saved photo carries a thumbnail of what it now shows. The one a file
+// arrived with is not reused: after a crop it would still show what was cut
+// away, which is a real way for detail to leak out of a picture.
+static void test_exif_thumbnail() {
+    Image img(400, 300, {0, 0, 0, 255});
+    for (int y = 0; y < 300; ++y)
+        for (int x = 0; x < 400; ++x)
+            img.set(x, y, {static_cast<uint8_t>(x * 255 / 399), static_cast<uint8_t>(y * 255 / 299), 90, 255});
+
+    const std::vector<uint8_t> thumb = io::exif_thumbnail(img);
+    CHECK(!thumb.empty() && thumb.size() < 60000);
+    CHECK(thumb[0] == 0xFF && thumb[1] == 0xD8);       // a JPEG
+
+    meta::Metadata md;
+    md.set(meta::Group::Image, 0x010F, "A Camera Co");
+    md.set(meta::Group::Exif, 0x829A, "1/125");
+
+    // The thumbnail is IFD1, so parsing the block back must still see the
+    // real entries and must not mistake the thumbnail for one of them.
+    const std::vector<uint8_t> tiff = meta::build_tiff(md, thumb);
+    CHECK(!tiff.empty());
+    const meta::Metadata back = meta::parse_tiff(tiff.data(), tiff.size());
+    CHECK(back.find(meta::Group::Image, 0x010F) && back.find(meta::Group::Image, 0x010F)->text() == "A Camera Co");
+    CHECK(back.find(meta::Group::Exif, 0x829A));
+    CHECK(back.size() == md.size());
+
+    // IFD0's next-directory pointer has to lead to IFD1, and the offset it
+    // names has to land on the thumbnail's own JPEG signature.
+    auto u32 = [&tiff](size_t o) { return static_cast<uint32_t>(tiff[o] | tiff[o + 1] << 8 | tiff[o + 2] << 16 | tiff[o + 3] << 24); };
+    auto u16 = [&tiff](size_t o) { return static_cast<uint16_t>(tiff[o] | tiff[o + 1] << 8); };
+    const uint32_t ifd0 = u32(4);
+    const uint32_t ifd1 = u32(ifd0 + 2 + static_cast<size_t>(u16(ifd0)) * 12);
+    CHECK(ifd1 > 0 && ifd1 + 2 < tiff.size());
+    CHECK(u16(ifd1) == 3);
+    uint32_t at = 0, len = 0;
+    for (int i = 0; i < 3; ++i) {
+        const size_t e = ifd1 + 2 + static_cast<size_t>(i) * 12;
+        if (u16(e) == 0x0201) at = u32(e + 8);
+        if (u16(e) == 0x0202) len = u32(e + 8);
+    }
+    CHECK(at > 0 && len == thumb.size() && at + len <= tiff.size());
+    CHECK(tiff[at] == 0xFF && tiff[at + 1] == 0xD8);
+    CHECK(std::equal(thumb.begin(), thumb.end(), tiff.begin() + at));
+
+    // Through a real file, and gone again when the document has no metadata.
+    Document d(400, 300);
+    Layer& b = d.add_layer("Background");
+    b.background = true;
+    b.pixels = img;
+    d.set_metadata(md);
+    const std::string jpg = tmp_path("firn_test_thumb.jpg");
+    std::string err;
+    CHECK(io::save_document(d, jpg, &err, 90));
+    const meta::Metadata reread = io::read_metadata(jpg);
+    CHECK(reread.find(meta::Group::Image, 0x010F));
+    std::ifstream jf(jpg, std::ios::binary);
+    const std::vector<uint8_t> file((std::istreambuf_iterator<char>(jf)), std::istreambuf_iterator<char>());
+    // The Exif segment, wherever the encoder's own headers left room for it,
+    // carries the thumbnail bytes.
+    size_t app1 = 2;
+    while (app1 + 4 < file.size() && !(file[app1] == 0xFF && file[app1 + 1] == 0xE1))
+        app1 += 2 + (static_cast<size_t>(file[app1 + 2]) << 8 | file[app1 + 3]);
+    CHECK(app1 + 4 < file.size() && file[app1 + 1] == 0xE1);
+    const size_t app1_end = app1 + 2 + (static_cast<size_t>(file[app1 + 2]) << 8 | file[app1 + 3]);
+    CHECK(app1_end <= file.size());
+    const auto seg_begin = file.begin() + static_cast<long>(app1), seg_end = file.begin() + static_cast<long>(app1_end);
+    CHECK(std::search(seg_begin, seg_end, thumb.begin(), thumb.end()) != seg_end);
+    std::remove(jpg.c_str());
+
+    // A thumbnail too big for the 64 KB segment is left out, not truncated.
+    CHECK(meta::build_tiff(md, std::vector<uint8_t>(70000, 0xAB)) == meta::build_tiff(md));
+    CHECK(io::exif_thumbnail(Image(4, 4, {0, 0, 0, 255})).empty());
+}
+
 static void test_picture_tube_export() {
     Document d(64, 48);
     Layer& b = d.add_layer("Background");
@@ -4148,6 +4222,7 @@ int main() {
     test_layer_style_scales_with_the_image();
     test_clipping_masks();
     test_openraster_lossless();
+    test_exif_thumbnail();
     test_picture_tube_export();
     test_path_editing();
     test_openraster_vectors();

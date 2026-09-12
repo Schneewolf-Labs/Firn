@@ -2207,13 +2207,16 @@ bool save_psp(const Document& doc, const std::string& path, std::string* err) {
 bool save_document(const Document& doc, const std::string& path, std::string* err, int jpeg_quality) {
     if (is_ora_extension(path)) return save_ora(doc, path, err);
     if (is_psp_extension(path)) return save_psp(doc, path, err);
+    // The composite doubles as the source of the Exif thumbnail, so it is
+    // flattened once here rather than again inside the metadata writer.
+    const Image flat = doc.composite();
     if (doc.bit_depth() == 16) {
         std::string ext = path.substr(path.find_last_of('.') == std::string::npos ? path.size() : path.find_last_of('.') + 1);
         for (char& c : ext) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
         if (ext == "png")
-            return save_png16(doc.composite16(), path, err) && embed_icc(path, doc.icc(), err) && embed_metadata(path, doc.metadata(), err);
+            return save_png16(doc.composite16(), path, err) && embed_icc(path, doc.icc(), err) && embed_metadata(path, doc.metadata(), err, &flat);
     }
-    return save(doc.composite(), path, err, jpeg_quality) && embed_icc(path, doc.icc(), err) && embed_metadata(path, doc.metadata(), err);
+    return save(flat, path, err, jpeg_quality) && embed_icc(path, doc.icc(), err) && embed_metadata(path, doc.metadata(), err, &flat);
 }
 
 }  // namespace firn::io

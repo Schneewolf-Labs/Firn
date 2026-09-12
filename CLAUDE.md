@@ -318,8 +318,10 @@ docs/    notes on the original: command inventory, module mapping, FORMAT.md
   holds them (part of the undo state); `io::read_metadata` / `embed_metadata`
   do the files, and `MetadataCommand` is the undoable edit. The native
   container has nowhere of its own for metadata, so it rides in the Firn
-  stash (docs/FORMAT.md). The camera's
-  embedded thumbnail is deliberately not carried over. The Metadata tab of
+  stash (docs/FORMAT.md). Saving a JPEG or PNG writes a
+  fresh Exif thumbnail (`io::exif_thumbnail`, IFD1) from the composite; the
+  one the opened file carried is deliberately not reused, since after a crop
+  it would still show what was cut away. The Metadata tab of
   Image > Image Information is in `app/src/ui/Menu.cpp`.
 - **Saved selections** live in `Document::alpha_channels()` and round-trip
   through the native format; the current selection itself is not stored.

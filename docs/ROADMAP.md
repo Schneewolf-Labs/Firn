@@ -273,7 +273,11 @@ against Krita in both directions. In priority order:
 - [x] Export Picture Tube. File > Export > Picture Tube, the
       `file.export_tube` action, and the original's `ExportTube` script
       command, which is what its AutoTuber script calls.
-- [ ] Keep the camera's embedded thumbnail rather than dropping it.
+- [x] Saved photos carry a thumbnail again -- a fresh one, not the camera's.
+      Carrying the original's through would have been worse than dropping
+      it: after a crop it still shows what was cut away, which is a known
+      way for detail to leak out of a picture. Firn writes IFD1 from the
+      composite it just saved, so the thumbnail always matches the file.
 
 Deliberately not in this release: smart objects, content-aware scale, the
 history brush, IPTC and XMP. All worth having, none of them standing

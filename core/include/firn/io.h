@@ -28,7 +28,13 @@ bool embed_icc(const std::string& path, const std::vector<uint8_t>& icc, std::st
 meta::Metadata read_metadata(const std::string& path);
 // Replaces the metadata of an already written PNG or JPEG file in place.
 // Other formats have nowhere to put it and succeed without doing anything.
-bool embed_metadata(const std::string& path, const meta::Metadata& md, std::string* err = nullptr);
+// `thumbnail_of` is the picture as saved: a small JPEG of it goes into the
+// Exif block as the thumbnail directory, the way a camera writes one. Pass
+// nothing and the file gets no thumbnail rather than a stale one.
+bool embed_metadata(const std::string& path, const meta::Metadata& md, std::string* err = nullptr, const Image* thumbnail_of = nullptr);
+// A JPEG small enough to sit in an Exif block, at most 160x120 and keeping
+// the picture's aspect. Empty when the image is too small to be worth one.
+std::vector<uint8_t> exif_thumbnail(const Image& img);
 
 // Firn's own encoding of a vector layer's objects: everything the model
 // holds, including dash arrays, pattern and texture images, per-object

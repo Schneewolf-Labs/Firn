@@ -533,7 +533,7 @@ Metadata parse_png(const uint8_t* data, size_t size) {
     return md;
 }
 
-std::vector<uint8_t> build_tiff(const Metadata& md) {
+std::vector<uint8_t> build_tiff(const Metadata& md, const std::vector<uint8_t>& thumbnail) {
     Dir image, exif, gps, interop;
     for (const Entry& e : md.entries) {
         if (type_size(e.type) == 0 || e.value.empty()) continue;
@@ -553,11 +553,17 @@ std::vector<uint8_t> build_tiff(const Metadata& md) {
     const size_t image_count = image.entries.size() + image_extra;
     const size_t exif_count = exif.entries.size() + exif_extra;
 
+    // The thumbnail directory is three entries: compression, and where the
+    // JPEG sits and how long it is. An Exif APP1 segment is capped at 64 KB
+    // in a JPEG file, so an oversized one is left out rather than truncated.
+    const bool has_thumb = thumbnail.size() > 4 && thumbnail.size() < 60000;
+
     image.offset = 8;
     exif.offset = static_cast<uint32_t>(image.offset + 2 + image_count * 12 + 4);
     gps.offset = static_cast<uint32_t>(exif.offset + (exif_count ? 2 + exif_count * 12 + 4 : 0));
     interop.offset = static_cast<uint32_t>(gps.offset + (gps.entries.empty() ? 0 : 2 + gps.entries.size() * 12 + 4));
-    uint32_t data_at = static_cast<uint32_t>(interop.offset + (interop.entries.empty() ? 0 : 2 + interop.entries.size() * 12 + 4));
+    const uint32_t thumb_offset = static_cast<uint32_t>(interop.offset + (interop.entries.empty() ? 0 : 2 + interop.entries.size() * 12 + 4));
+    uint32_t data_at = static_cast<uint32_t>(thumb_offset + (has_thumb ? 2 + 3 * 12 + 4 : 0));
 
     std::vector<uint8_t> out, pool;
     out.push_back('I');
@@ -585,7 +591,7 @@ std::vector<uint8_t> build_tiff(const Metadata& md) {
     };
 
     // Entries within one directory must be in ascending tag order.
-    auto write_dir = [&](Dir& d, size_t extra_count, const std::function<void(uint16_t)>& pointers) {
+    auto write_dir = [&](Dir& d, size_t extra_count, const std::function<void(uint16_t)>& pointers, uint32_t next = 0) {
         if (d.entries.empty() && extra_count == 0) return;
         std::stable_sort(d.entries.begin(), d.entries.end(), [](const Entry* a, const Entry* b) { return a->tag < b->tag; });
         wr16(out, static_cast<uint16_t>(d.entries.size() + extra_count));
@@ -594,7 +600,7 @@ std::vector<uint8_t> build_tiff(const Metadata& md) {
             put_entry(e->tag, e->type, e->count, e->value);
         }
         pointers(0xFFFF);
-        wr32(out, 0);   // no next directory: the thumbnail is not carried over
+        wr32(out, next);
     };
 
     uint16_t written_pointers = 0;
@@ -605,21 +611,31 @@ std::vector<uint8_t> build_tiff(const Metadata& md) {
         if (!gps.entries.empty()) {
             if (0x8825 < before && !(written_pointers & 2)) { put_pointer(0x8825, gps.offset); written_pointers |= 2; }
         }
-    });
+    }, has_thumb ? thumb_offset : 0);
     write_dir(exif, exif_extra, [&](uint16_t before) {
         if (!interop.entries.empty() && 0xA005 < before && !(written_pointers & 4)) { put_pointer(0xA005, interop.offset); written_pointers |= 4; }
     });
     write_dir(gps, 0, [](uint16_t) {});
     write_dir(interop, 0, [](uint16_t) {});
+    if (has_thumb) {
+        wr16(out, 3);
+        put_entry(0x0103, kShort, 1, {6, 0});   // compression: JPEG
+        const uint32_t at = data_at + static_cast<uint32_t>(pool.size());
+        put_pointer(0x0201, at);                                             // JPEGInterchangeFormat
+        put_pointer(0x0202, static_cast<uint32_t>(thumbnail.size()));        // and its length
+        wr32(out, 0);
+        pool.insert(pool.end(), thumbnail.begin(), thumbnail.end());
+        if (pool.size() & 1) pool.push_back(0);
+    }
 
     out.insert(out.end(), pool.begin(), pool.end());
     return out;
 }
 
-std::vector<uint8_t> apply_jpeg(const std::vector<uint8_t>& file, const Metadata& md) {
+std::vector<uint8_t> apply_jpeg(const std::vector<uint8_t>& file, const Metadata& md, const std::vector<uint8_t>& thumbnail) {
     if (file.size() < 4 || file[0] != 0xFF || file[1] != 0xD8) return file;
     std::vector<uint8_t> app1;
-    if (std::vector<uint8_t> tiff = build_tiff(md); !tiff.empty() && tiff.size() + 8 <= 65535) {
+    if (std::vector<uint8_t> tiff = build_tiff(md, thumbnail); !tiff.empty() && tiff.size() + 8 <= 65535) {
         app1.push_back(0xFF);
         app1.push_back(0xE1);
         const size_t len = tiff.size() + 8;
@@ -656,7 +672,7 @@ std::vector<uint8_t> apply_jpeg(const std::vector<uint8_t>& file, const Metadata
     return out;
 }
 
-std::vector<uint8_t> apply_png(const std::vector<uint8_t>& file, const Metadata& md) {
+std::vector<uint8_t> apply_png(const std::vector<uint8_t>& file, const Metadata& md, const std::vector<uint8_t>& thumbnail) {
     if (file.size() < 8 || file[0] != 0x89 || std::memcmp(file.data() + 1, "PNG", 3) != 0) return file;
     std::vector<uint8_t> out(file.begin(), file.begin() + 8);
     size_t p = 8;
@@ -669,7 +685,7 @@ std::vector<uint8_t> apply_png(const std::vector<uint8_t>& file, const Metadata&
         if (!is_metadata_chunk(type)) {
             out.insert(out.end(), file.begin() + p, file.begin() + p + 12 + len);
             if (!inserted && std::memcmp(type, "IHDR", 4) == 0) {
-                if (std::vector<uint8_t> tiff = build_tiff(md); !tiff.empty()) png_chunk(out, "eXIf", tiff);
+                if (std::vector<uint8_t> tiff = build_tiff(md, thumbnail); !tiff.empty()) png_chunk(out, "eXIf", tiff);
                 for (const Entry& e : md.entries) {
                     if (e.group != Group::Text || e.key.empty() || e.key.size() > 79) continue;
                     std::vector<uint8_t> body(e.key.begin(), e.key.end());

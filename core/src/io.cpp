@@ -294,11 +294,39 @@ meta::Metadata read_metadata(const std::string& path) {
     return {};
 }
 
-bool embed_metadata(const std::string& path, const meta::Metadata& md, std::string* err) {
-    const std::vector<uint8_t> d = read_file(path);
+std::vector<uint8_t> exif_thumbnail(const Image& img) {
+    if (img.width() < 8 || img.height() < 8) return {};
+    // The Exif convention is 160x120; keep the picture's shape inside that.
+    const float scale = std::min(160.0f / static_cast<float>(img.width()), 120.0f / static_cast<float>(img.height()));
+    const int w = std::max(1, static_cast<int>(std::lround(img.width() * std::min(scale, 1.0f))));
+    const int h = std::max(1, static_cast<int>(std::lround(img.height() * std::min(scale, 1.0f))));
+    const Image small = w == img.width() && h == img.height() ? img : raster::resample(img, w, h, raster::Filter::Bilinear);
+    // Flatten onto white: a thumbnail is a JPEG and has no alpha to spend.
+    std::vector<uint8_t> rgb(static_cast<size_t>(w) * h * 3);
+    for (int y = 0; y < h; ++y)
+        for (int x = 0; x < w; ++x) {
+            const Color c = small.get(x, y);
+            const float a = c.a / 255.0f;
+            uint8_t* p = &rgb[(static_cast<size_t>(y) * w + x) * 3];
+            p[0] = static_cast<uint8_t>(std::lround(c.r * a + 255 * (1 - a)));
+            p[1] = static_cast<uint8_t>(std::lround(c.g * a + 255 * (1 - a)));
+            p[2] = static_cast<uint8_t>(std::lround(c.b * a + 255 * (1 - a)));
+        }
     std::vector<uint8_t> out;
-    if (d.size() > 4 && d[0] == 0xFF && d[1] == 0xD8) out = meta::apply_jpeg(d, md);
-    else if (d.size() > 8 && d[0] == 0x89 && d[1] == 'P') out = meta::apply_png(d, md);
+    stbi_write_jpg_to_func([](void* ctx, void* data, int size) {
+        auto* v = static_cast<std::vector<uint8_t>*>(ctx);
+        const uint8_t* b = static_cast<const uint8_t*>(data);
+        v->insert(v->end(), b, b + size);
+    }, &out, w, h, 3, rgb.data(), 70);
+    return out.size() < 60000 ? out : std::vector<uint8_t>{};
+}
+
+bool embed_metadata(const std::string& path, const meta::Metadata& md, std::string* err, const Image* thumbnail_of) {
+    const std::vector<uint8_t> d = read_file(path);
+    const std::vector<uint8_t> thumb = thumbnail_of ? exif_thumbnail(*thumbnail_of) : std::vector<uint8_t>{};
+    std::vector<uint8_t> out;
+    if (d.size() > 4 && d[0] == 0xFF && d[1] == 0xD8) out = meta::apply_jpeg(d, md, thumb);
+    else if (d.size() > 8 && d[0] == 0x89 && d[1] == 'P') out = meta::apply_png(d, md, thumb);
     else return true;   // nowhere to put it, and nothing was lost
     if (out == d) return true;
     if (write_file(path, out)) return true;

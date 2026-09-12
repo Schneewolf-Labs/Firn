@@ -15,6 +15,11 @@ section into the next version.
   nothing.
 
 ### Added
+- Saved JPEGs and PNGs carry an Exif thumbnail again, so a photo edited in
+  Firn shows a preview in file browsers and on cameras. It is generated
+  from the picture as saved rather than carried over from the file that was
+  opened: a camera's own thumbnail survives a crop and goes on showing what
+  was cut away, which is a known way for detail to leak out of a photo.
 - File > Export > Picture Tube writes one. Firn has read tubes since it
   had a tube tool and could never make one; now an image divided into a
   grid of equal cells becomes a .psptube, with the placement and selection
