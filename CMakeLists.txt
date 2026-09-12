@@ -6,12 +6,15 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
-if(NOT CMAKE_BUILD_TYPE)
+if(NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE RelWithDebInfo CACHE STRING "" FORCE)
 endif()
 
 option(FIRN_BUILD_APP   "Build the Dear ImGui desktop app" ON)
 option(FIRN_BUILD_TESTS "Build core tests" ON)
+
+include(GNUInstallDirs)
+include(${CMAKE_SOURCE_DIR}/cmake/runtime.cmake)
 
 if(MSVC)
   add_compile_options(/W3 /utf-8)
@@ -42,10 +45,20 @@ endif()
 # Installation: `cmake --install build` (default prefix /usr/local; add
 # --prefix ~/.local for a per-user install). Installs the app, the converter,
 # a desktop entry and the icon.
-include(GNUInstallDirs)
+install(TARGETS firn-convert firn-cli RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+install(FILES README.md CHANGELOG.md LICENSE DESTINATION ${CMAKE_INSTALL_DOCDIR})
+if(WIN32)
+  install(FILES $<TARGET_RUNTIME_DLLS:firn-convert> $<TARGET_RUNTIME_DLLS:firn-cli>
+    DESTINATION ${CMAKE_INSTALL_BINDIR})
+  # Ship the redistributable release CRT beside the executables so the ZIP
+  # also runs on machines without Visual Studio or the VC++ redistributable.
+  if(MSVC)
+    set(CMAKE_INSTALL_SYSTEM_RUNTIME_DESTINATION ${CMAKE_INSTALL_BINDIR})
+    include(InstallRequiredSystemLibraries)
+  endif()
+endif()
 if(FIRN_BUILD_APP)
   install(TARGETS firn RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
-  install(TARGETS firn-convert RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
   if(NOT WIN32)
     install(FILES assets/firn.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
     foreach(size 48 128 256)
@@ -55,7 +68,6 @@ if(FIRN_BUILD_APP)
     # The DLLs the app links (SDL2 from vcpkg) go next to the executables.
     install(FILES $<TARGET_RUNTIME_DLLS:firn> DESTINATION ${CMAKE_INSTALL_BINDIR})
   endif()
-  install(FILES README.md CHANGELOG.md LICENSE DESTINATION ${CMAKE_INSTALL_DOCDIR})
 endif()
 
 # Archives for releases: `cpack -G TGZ` (Linux, macOS) or `cpack -G ZIP` (Windows)

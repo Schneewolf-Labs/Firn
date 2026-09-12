@@ -294,6 +294,7 @@ std::string Driver::state_text(App& app) const {
     std::ostringstream o;
     o << "tool=\"" << app.tool().name() << "\"";
     o << " docs=" << app.docs.size() << " windows=" << (app.image_windows ? 1 : 0);
+    o << " font_density=" << app.font_density;
     o << " pen=" << (app.pen.present ? 1 : 0) << " pressure=" << app.pen.pressure << " ui_scale=" << app.ui_scale << " auto_scale=" << app.auto_ui_scale << " font=\"" << (app.font_current_path.empty() ? "sans" : app.font_current_path == "builtin" ? "builtin" : app.font_current_path.substr(app.font_current_path.find_last_of("/\\") + 1)) << "\" font_size=" << app.font_current_size;
     if (app.doc) {
         o << " title=\"" << app.doc_title << "\" modified=" << (app.modified() ? 1 : 0);

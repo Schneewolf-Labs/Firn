@@ -110,9 +110,7 @@ if(WIN32)
   endif()
   # Put SDL2.dll beside the built exe so it runs from the build tree. vcpkg's
   # toolchain does this itself; SDL's own VC package (SDL2_DIR) does not.
-  add_custom_command(TARGET firn POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_RUNTIME_DLLS:firn> $<TARGET_FILE_DIR:firn>
-    COMMAND_EXPAND_LISTS)
+  firn_copy_runtime_dlls(firn)
 endif()
 
 # Keep the CLI-friendly executable path, and also produce a discoverable

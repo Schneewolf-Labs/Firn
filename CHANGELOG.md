@@ -7,6 +7,15 @@ section into the next version.
 ## Unreleased
 
 ### Changed
+- Windows renders with per-monitor DPI awareness instead of OS bitmap
+  stretching, follows DPI changes while running, and rebuilds fonts at the
+  requested size. Theme changes no longer compound widget spacing. Startup
+  uses Segoe UI without scanning every font, and full canvas refreshes reuse
+  the GPU texture when the image dimensions have not changed.
+- Windows builds have a PowerShell build/test/package command that finds a
+  compatible CMake even when PATH points to an older version. ZIP packages
+  include the MSVC runtime; command-line-only installs include both tools,
+  and runtime DLL copying also handles static builds.
 - Box blur is between 6 and 84 times faster, and its cost no longer grows
   with the radius: it keeps a running sum instead of re-adding the whole
   window at every pixel, and spreads across cores like the other spatial

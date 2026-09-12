@@ -29,6 +29,21 @@ locally.
 
 ### Windows
 
+For a build, unit tests and a portable ZIP in one command, run:
+
+```powershell
+.\scripts\build-windows.ps1 -Package
+# Or select dependencies and a separate build directory explicitly:
+.\scripts\build-windows.ps1 -BuildDir 'build-windows' -SDL2Dir 'build-deps/SDL2-2.32.10/cmake' -Package
+```
+
+The script finds CMake 3.22+ on PATH or in Visual Studio, and uses the
+matching CTest and CPack. It reuses an existing build's dependencies; for a
+new build it finds a single SDL VC package under `build-deps/`, or uses
+`VCPKG_INSTALLATION_ROOT`. You can also pass `-ToolchainFile` explicitly.
+Install SDL2 first when using vcpkg. Use `-Jobs` to limit build parallelism
+and `-Configuration Debug` for debugging (without `-Package`).
+
 Use Visual Studio 2022 (the CMake it bundles is new enough) and either
 vcpkg (`vcpkg install sdl2:x64-windows`, then pass its toolchain file as CI
 does) or SDL's own `SDL2-devel-<version>-VC.zip` from the SDL releases page,
@@ -41,13 +56,22 @@ ctest --test-dir build -C Release --output-on-failure
 build\app\Release\firn.exe samples\luca.jpg
 ```
 
-The build copies `SDL2.dll` next to `firn.exe`. The test suites below run
+The build copies runtime DLLs next to the executables that need them. The
+ZIP includes SDL2 and the release MSVC runtime, so recipients do not need
+Visual Studio installed. Extract the whole archive and run `bin/firn.exe`.
+The test suites below run
 here too (`python scripts\app_tests.py build`); they find the programs under
 `Release\`. On Windows `FIRN_DRIVE` names a small address file rather than a
 Unix socket, because Python there cannot open one: the app listens on a
 loopback port and writes that port and a random token into the file, and
 clients present the token first (`app/src/DriveAddress.h`). `drive.py` and
 `firn-cli` handle this for you.
+
+The Windows app uses per-monitor DPI awareness, rasterizes text at the
+current scale, and follows display scaling changes while running. Preferences
+can override the automatic UI scale; `FIRN_UI_SCALE` overrides the detected
+display scale for testing. The app suite checks font sizes and framebuffer
+pixels at 100%, 125%, 150% and 200%, including a return to 100%.
 
 ## Install
 

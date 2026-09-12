@@ -10,6 +10,7 @@
 #include <SDL_opengl.h>
 #ifdef _WIN32
 #include <windows.h>  // SDL_opengl.h needs it first on Windows; NOMINMAX is set project-wide
+#include <SDL_syswm.h>
 #endif
 
 #include "App.h"
@@ -27,6 +28,34 @@
 
 // Set in one place so the About box, window title, and docs stay in sync.
 static const char* kAppTitle = "Firn";
+
+#ifdef _WIN32
+static float window_ui_scale(SDL_Window* window) {
+    SDL_SysWMinfo info;
+    SDL_VERSION(&info.version);
+    // Resolve dynamically to retain the SDL fallback on older Windows.
+    using GetDpi = UINT (WINAPI*)(HWND);
+    static const auto get_dpi = reinterpret_cast<GetDpi>(GetProcAddress(GetModuleHandleW(L"user32.dll"), "GetDpiForWindow"));
+    if (get_dpi && SDL_GetWindowWMInfo(window, &info)) {
+        const UINT dpi = get_dpi(info.info.win.window);
+        if (dpi) return static_cast<float>(dpi) / 96.0f;
+    }
+    float dpi = 96.0f;
+    return SDL_GetDisplayDPI(SDL_GetWindowDisplayIndex(window), &dpi, nullptr, nullptr) == 0 ? dpi / 96.0f : 1.0f;
+}
+#endif
+
+static void update_pixel_density(App& app, SDL_Window* window) {
+    int ww = 0, wh = 0, dw = 0, dh = 0;
+    SDL_GetWindowSize(window, &ww, &wh);
+    SDL_GL_GetDrawableSize(window, &dw, &dh);
+    if (ww <= 0 || dw <= 0) return;
+    const float density = static_cast<float>(dw) / static_cast<float>(ww);
+    if (std::abs(app.font_density - density) > 0.01f) {
+        app.font_density = density;
+        app.font_pending = true;
+    }
+}
 
 // Default workspace, applied only when no imgui.ini layout exists:
 //   Tools strip | Tool Options across the top, Image center | Materials/Overview
@@ -84,6 +113,12 @@ int main(int argc, char** argv) {
     // quit request, and a modified document would sit on the unsaved-changes
     // prompt instead of the process ending.
     SDL_SetHint(SDL_HINT_NO_SIGNAL_HANDLERS, "1");
+#ifdef _WIN32
+    // Keep SDL/input/ImGui coordinates in physical pixels. Windows must not
+    // bitmap-stretch the framebuffer; Firn scales and rasterizes its own UI.
+    SDL_SetHint(SDL_HINT_WINDOWS_DPI_AWARENESS, "permonitorv2");
+    SDL_SetHint(SDL_HINT_WINDOWS_DPI_SCALING, "0");
+#endif
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) != 0) {
         std::fprintf(stderr, "SDL_Init: %s\n", SDL_GetError());
         return 1;
@@ -124,7 +159,13 @@ int main(int argc, char** argv) {
     set_window_icon(window);
     SDL_EventState(SDL_DROPFILE, SDL_ENABLE);
     SDL_GLContext gl_context = SDL_GL_CreateContext(window);
-    SDL_GL_MakeCurrent(window, gl_context);
+    if (!gl_context || SDL_GL_MakeCurrent(window, gl_context) != 0) {
+        std::fprintf(stderr, "OpenGL context: %s\n", SDL_GetError());
+        if (gl_context) SDL_GL_DeleteContext(gl_context);
+        SDL_DestroyWindow(window);
+        SDL_Quit();
+        return 1;
+    }
     SDL_GL_SetSwapInterval(1);
 
     IMGUI_CHECKVERSION();
@@ -136,8 +177,10 @@ int main(int argc, char** argv) {
     io.IniFilename = ini_path.c_str();
     ImGui::StyleColorsDark();
 
-    ImGui_ImplSDL2_InitForOpenGL(window, gl_context);
-    ImGui_ImplOpenGL3_Init(glsl_version);
+    if (!ImGui_ImplSDL2_InitForOpenGL(window, gl_context) || !ImGui_ImplOpenGL3_Init(glsl_version)) {
+        std::fprintf(stderr, "Unable to initialize the UI renderer\n");
+        return 1;
+    }
 
     App app;
     // Pixel density (the drawable/window ratio: Retina, Wayland buffer scale)
@@ -145,13 +188,7 @@ int main(int argc, char** argv) {
     // a real macOS or Wayland app does not get bigger UI just because the
     // display is high-density, only crisper text. Set before the UI-scale
     // block below so a font rebuild it triggers already has the right value.
-    {
-        int ww = 1, wh = 1, dw = 1, dh = 1;
-        SDL_GetWindowSize(window, &ww, &wh);
-        SDL_GL_GetDrawableSize(window, &dw, &dh);
-        const float density = ww > 0 ? static_cast<float>(dw) / static_cast<float>(ww) : 1.0f;
-        if (density > 1.01f) { app.font_density = density; app.font_pending = true; }
-    }
+    update_pixel_density(app, window);
     // UI scale: an explicit "make text and widgets bigger" desktop
     // preference, which is a different thing from pixel density above. X11
     // and Windows expose this as a DPI percentage; macOS and Wayland have no
@@ -160,7 +197,9 @@ int main(int argc, char** argv) {
     // Preferences > UI scale asks for more.
     {
         float scale = 1.0f;
-#if !defined(__APPLE__)
+#if defined(_WIN32)
+        scale = window_ui_scale(window);
+#elif !defined(__APPLE__)
         const char* driver = SDL_GetCurrentVideoDriver();
         const bool x11 = driver && std::strcmp(driver, "x11") == 0;
         float ddpi = 0.0f;
@@ -221,6 +260,10 @@ int main(int argc, char** argv) {
             continue;
         }
 
+        update_pixel_density(app, window);
+#ifdef _WIN32
+        if (!std::getenv("FIRN_UI_SCALE")) app.set_auto_ui_scale(window_ui_scale(window));
+#endif
         app.apply_pending_font();
         ImGui_ImplOpenGL3_NewFrame();
         native_pointer::before_backend();

@@ -1,6 +1,8 @@
 // Theme switching, the font atlas rebuild, and the Theme Editor window
 // (Preferences > Edit Themes...): colors, shape, text, save / import / export.
 #include <algorithm>
+#include <cmath>
+#include <cstdlib>
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
@@ -59,12 +61,23 @@ void App::apply_theme_values(const Theme& t) {
 }
 
 void App::set_auto_ui_scale(float s) {
-    auto_ui_scale = std::clamp(s, 1.0f, 4.0f);
+    s = std::isfinite(s) ? std::clamp(s, 1.0f, 4.0f) : 1.0f;
+    if (std::abs(auto_ui_scale - s) < 0.01f) return;
+    auto_ui_scale = s;
     apply_theme(config.theme);
 }
 
 // Default UI face when a theme asks for text at a size but names no font.
 std::string App::default_ui_font() {
+#ifdef _WIN32
+    // The UI does not need to enumerate and parse every installed font.
+    // Leave the full catalog lazy until the text tool actually needs it.
+    if (const char* windows = std::getenv("WINDIR")) {
+        const auto path = fs::path(windows) / "Fonts" / "segoeui.ttf";
+        std::error_code ec;
+        if (fs::is_regular_file(path, ec)) return path.string();
+    }
+#endif
     ensure_fonts();
     static const char* const prefs[] = {"DejaVu Sans", "Liberation Sans", "Noto Sans", "Arial", "Segoe UI", "Ubuntu", "Cantarell"};
     for (const char* fam : prefs)
@@ -73,8 +86,8 @@ std::string App::default_ui_font() {
     return fonts.empty() ? "" : fonts.front().path;
 }
 
-// Runs between frames (before NewFrame): rebuilds the font atlas for a new
-// font or size. An empty path means the built-in 13 px bitmap font, scaled.
+// Rebuild between frames, rasterizing at the requested size rather than
+// enlarging a low-resolution atlas with FontGlobalScale.
 void App::apply_pending_font() {
     if (!font_pending) return;
     font_pending = false;
@@ -86,14 +99,13 @@ void App::apply_pending_font() {
     // the logical (point) size the rest of the style is built around.
     ImFontConfig cfg;
     cfg.RasterizerDensity = font_density;
+    cfg.SizePixels = std::max(6.0f, font_pending_size);
     ImFont* loaded = nullptr;
     if (path != "builtin" && !path.empty() && fs::exists(path)) loaded = io.Fonts->AddFontFromFileTTF(path.c_str(), std::max(6.0f, font_pending_size), &cfg);
     if (!loaded) {
         io.Fonts->AddFontDefault(&cfg);
-        io.FontGlobalScale = std::abs(font_pending_size - 13.0f) < 0.01f ? 1.0f : font_pending_size / 13.0f;
-    } else {
-        io.FontGlobalScale = 1.0f;
     }
+    io.FontGlobalScale = 1.0f;
     io.Fonts->Build();
     ImGui_ImplOpenGL3_DestroyFontsTexture();  // NewFrame creates the texture again
     font_current_path = font_pending_path;
@@ -107,9 +119,14 @@ void App::open_theme_editor() {
     theme_editor_state->theme_edit_from = theme_editor_state->theme_edit.name;
     std::snprintf(theme_editor_state->theme_name_buf, sizeof(theme_editor_state->theme_name_buf), "%s", theme_editor_state->theme_edit.name.c_str());
     theme_editor_state->theme_editor_before = theme_editor_state->theme_edit;
+    // Capture the current preview in logical units so Cancel does not scale
+    // an already-scaled style a second time.
+    const ImGuiStyle live_style = ImGui::GetStyle();
+    ImGui::GetStyle().ScaleAllSizes(1.0f / ui_scale);
     theme_editor_state->theme_editor_before.capture_style();
+    ImGui::GetStyle() = live_style;
     theme_editor_state->theme_editor_before.font_path = font_current_path;
-    theme_editor_state->theme_editor_before.font_size = font_current_size;
+    theme_editor_state->theme_editor_before.font_size = font_current_size / ui_scale;
     show_theme_editor = true;
 }
 
@@ -293,8 +310,8 @@ void App::draw_theme_editor() {
         // Colors and shape preview immediately; the font waits for the slider release.
         t.apply_style();
         if (std::abs(ui_scale - 1.0f) > 0.01f) ImGui::GetStyle().ScaleAllSizes(ui_scale);
-        if (!ImGui::IsAnyItemActive() && (t.font_path != font_current_path || std::abs(t.font_size - font_current_size) > 0.01f)) apply_theme_values(t);
-    } else if (!ImGui::IsAnyItemActive() && (t.font_path != font_current_path || std::abs(t.font_size - font_current_size) > 0.01f)) {
+        if (!ImGui::IsAnyItemActive() && (t.font_path != font_current_path || std::abs(t.font_size * ui_scale - font_current_size) > 0.01f)) apply_theme_values(t);
+    } else if (!ImGui::IsAnyItemActive() && (t.font_path != font_current_path || std::abs(t.font_size * ui_scale - font_current_size) > 0.01f)) {
         apply_theme_values(t);
     }
 

@@ -54,6 +54,9 @@ Theme from_imgui(const char* name, void (*fn)(ImGuiStyle*)) {
 
 void Theme::apply_style() const {
     ImGuiStyle& st = ImGui::GetStyle();
+    // ScaleAllSizes touches more fields than a theme stores. Start from the
+    // unscaled defaults each time, otherwise those fields grow on every apply.
+    st = ImGuiStyle();
     for (int i = 0; i < ImGuiCol_COUNT; ++i) st.Colors[i] = colors[i];
     st.WindowRounding = window_rounding; st.FrameRounding = frame_rounding; st.TabRounding = tab_rounding; st.GrabRounding = grab_rounding; st.PopupRounding = popup_rounding;
     st.WindowBorderSize = window_border; st.FrameBorderSize = frame_border; st.ScrollbarSize = scrollbar_size;

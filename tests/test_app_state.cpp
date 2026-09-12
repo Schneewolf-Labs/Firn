@@ -105,6 +105,25 @@ static void untouched_selection_redo(const std::filesystem::path&) {
     check(app.mask_proxy.width()==8, "disabling layer mask destroyed selection proxy");
     app.redo(); check(app.doc->layer(0).pixels.get(0,0).g==0, "leaving untouched selection mode discarded redo");
 }
+static void ui_scaling(const std::filesystem::path&) {
+    App app;
+    app.config.ui_scale = 0;
+    app.set_auto_ui_scale(2.0f);
+    const ImGuiStyle scaled = ImGui::GetStyle();
+    for (int i = 0; i < 20; ++i) app.apply_theme(app.config.theme);
+    check(ImGui::GetStyle().IndentSpacing == scaled.IndentSpacing, "theme application compounded indentation");
+    check(ImGui::GetStyle().GrabMinSize == scaled.GrabMinSize, "theme application compounded grab size");
+    check(ImGui::GetStyle().CellPadding.x == scaled.CellPadding.x, "theme application compounded table padding");
+    app.set_auto_ui_scale(1.0f);
+    check(app.ui_scale == 1.0f, "returning to a 100% monitor did not restore scale");
+    check(ImGui::GetStyle().IndentSpacing == ImGuiStyle().IndentSpacing, "unscaled style did not recover");
+    app.config.ui_scale = 1.5f;
+    app.set_auto_ui_scale(2.0f);
+    check(app.ui_scale == 1.5f, "monitor change ignored the user's scale override");
+    app.font_pending = false;
+    app.set_auto_ui_scale(2.0f);
+    check(!app.font_pending, "unchanged DPI queued a font rebuild");
+}
 int main(int argc, char** argv) {
     const auto dir=std::filesystem::temp_directory_path()/("firn-state-test-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
     std::filesystem::create_directories(dir);
@@ -116,6 +135,7 @@ int main(int argc, char** argv) {
     ImGui::CreateContext();
     int failures=0;
     const std::map<std::string,void(*)(const std::filesystem::path&)> tests={
+        {"ui_scaling",ui_scaling},
         {"dirty_branch",dirty_branch},{"dirty_trim",dirty_trim},{"switch_selection",switch_selection},{"close_mask",close_mask},{"deferred_menu",deferred_menu},{"trim_redo",trim_redo},{"parked_saved_state",parked_saved_state},{"pending_selection_save",pending_selection_save},{"pending_selection_close",pending_selection_close},{"context_flatten",context_flatten},{"untouched_selection_redo",untouched_selection_redo}};
     for (const auto& [name,test] : tests) {
         if (argc>1 && name!=argv[1]) continue;

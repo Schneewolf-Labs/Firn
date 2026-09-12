@@ -1330,6 +1330,7 @@ void App::sync_canvas_texture() {
         return;
     }
 
+    const bool reuse_texture = canvas_tex && composite_cache.width() == doc->width() && composite_cache.height() == doc->height();
     composite_cache = doc->composite();
     if (display_needs_transform()) { display_cache = composite_cache; display_transform->apply(display_cache); }
     const Image& composite = display_needs_transform() ? display_cache : composite_cache;
@@ -1344,8 +1345,11 @@ void App::sync_canvas_texture() {
         glBindTexture(GL_TEXTURE_2D, canvas_tex);
     }
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, composite.width(), composite.height(), 0,
-                 GL_RGBA, GL_UNSIGNED_BYTE, composite.data());
+    if (reuse_texture)
+        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, composite.width(), composite.height(), GL_RGBA, GL_UNSIGNED_BYTE, composite.data());
+    else
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, composite.width(), composite.height(), 0,
+                     GL_RGBA, GL_UNSIGNED_BYTE, composite.data());
     canvas_tex_revision = doc->revision();
 }
 

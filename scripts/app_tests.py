@@ -11,7 +11,7 @@ refactor that changes behaviour fails here rather than in someone's hands.
 
 Needs a display (a real one or Xvfb) and no other Firn using the socket.
 """
-import json, os, struct, subprocess, sys, tempfile, zlib
+import json, os, re, struct, subprocess, sys, tempfile, zlib
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import drive  # noqa: E402
@@ -613,6 +613,30 @@ def test_discovery_v2(f):
             f.do("file.close")
 
 
+def test_ui_scaling(f):
+    section("UI scaling and framebuffer rendering")
+    def value(state, name):
+        return float(re.search(r'(?:^| )' + name + r'=([^ ]+)', state).group(1))
+    f.do("file.new", width=96, height=96, color="#204080")
+    f.step("set:ui_scale:1", "wait:3", "mv:0:0")
+    base_font = value(f.send("state"), "font_size")
+    for scale in (1, 1.25, 1.5, 2, 1):
+        f.step(f"set:ui_scale:{scale}", "wait:3")
+        f.do("view.zoom", mode="actual")
+        state = f.send("state")
+        check(abs(value(state, "ui_scale") - scale) < 0.01, f"UI uses {scale * 100:g}% scale")
+        check(abs(value(state, "font_size") - base_font * scale) < 0.1, "font is rebuilt at the requested size")
+        origin = re.search(r' origin=([^, ]+),([^ ]+)', state)
+        x, y = map(float, origin.groups())
+        density = value(state, "font_density")
+        shot = os.path.join(OUT, f"scale-{scale}.png")
+        f.step("shot:" + shot)
+        check(png_pixel(shot, int((x + 48) * density), int((y + 48) * density))[:3] == (32, 64, 128),
+              "canvas framebuffer contains the expected pixels after scaling")
+    f.step("set:ui_scale:0", "wait:3")
+    f.do("file.close")
+
+
 def main():
     os.environ.setdefault("FIRN_WINDOW", "1280x800")
     firn = drive.binary(BUILD, "app", "firn")
@@ -628,7 +652,7 @@ def main():
         sock.sendall(b"wait 30\n")
         drive.recv_line(sock)
         f = Firn(sock)
-        for case in (test_api_surface, test_documents, test_view, test_layers, test_selection,
+        for case in (test_ui_scaling, test_api_surface, test_documents, test_view, test_layers, test_selection,
                      test_painting_and_materials, test_edit_actions, test_tools_and_history, test_image_geometry, test_clipping_masks, test_background_work, test_lock_transparency, test_pass_through_groups, test_blend_ranges, test_metadata, test_drawing_api, test_atomic_batches, test_discovery_v2):
             case(f)
         sock.sendall(b"quit\n")
