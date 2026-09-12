@@ -6,6 +6,8 @@ section into the next version.
 
 ## Unreleased
 
+## 0.4.0 (2026-09-12)
+
 ### Fixed
 - A use-after-free reading the native format. The stored-composite reader
   kept a pointer to a block inside a temporary that the loop it came from
