@@ -921,6 +921,7 @@ Batch-safe: yes.
 | `blend` | string | no |  | blend mode name, as the palette shows it |
 | `visible` | boolean | no |  |  |
 | `clipped` | boolean | no |  | show the layer only where the layer below does |
+| `pass_through` | boolean | no |  | groups only: its members act on the whole image below the group |
 
 
 ### `layer.select`

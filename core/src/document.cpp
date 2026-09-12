@@ -130,7 +130,7 @@ void Document::rasterize_vector_layer(size_t i) {
 
 LayerProps Document::props(size_t i) const {
     const Layer& L = layer(i);
-    return {L.name, L.visible, L.opacity, L.blend, L.clipped, L.ranges};
+    return {L.name, L.visible, L.opacity, L.blend, L.clipped, L.pass_through, L.ranges};
 }
 
 void Document::set_props(size_t i, const LayerProps& p) {
@@ -140,6 +140,7 @@ void Document::set_props(size_t i, const LayerProps& p) {
     L.opacity = p.opacity;
     L.blend = p.blend;
     L.clipped = p.clipped;
+    L.pass_through = p.pass_through;
     L.ranges = p.ranges;
     touch();
 }
@@ -352,7 +353,7 @@ void Document::composite_clip_unit(Image& out, int ox, int oy, size_t base, size
     // Remember the shape, draw the clipped layers onto it, then restore it.
     std::vector<uint8_t> shape(static_cast<size_t>(unit.width()) * unit.height());
     for (size_t i = 0; i < shape.size(); ++i) shape[i] = unit.data()[i * 4 + 3];
-    if (ce > own_end) composite_region(unit, rp.x0, rp.y0, own_end, ce - 1, rp, false);
+    if (ce > own_end) composite_region(unit, rp.x0, rp.y0, own_end, ce - 1, rp, {false, true});
     for (size_t i = 0; i < shape.size(); ++i) unit.data()[i * 4 + 3] = shape[i];
 
     // The mask is already in the shape; blending it again would square it.
@@ -368,6 +369,43 @@ void Document::composite_clip_unit(Image& out, int ox, int oy, size_t base, size
     }
 }
 
+// Draws a pass-through group: its members composite straight onto what is
+// already in `out`, so an adjustment or filter layer inside the group reaches
+// the whole image below it rather than only its siblings. The group's own
+// opacity and mask then say how much of that change survives, by mixing the
+// changed image back over the original. A pass-through group has no shape of
+// its own, so its blend mode and layer style do not apply.
+void Document::composite_pass_through(Image& out, int ox, int oy, size_t group, size_t end, const raster::Rect& r) const {
+    const Layer& G = *layers_[group];
+    if (!G.visible || G.opacity <= 0.0f || end <= group + 1 || r.empty()) return;
+
+    // Work on a copy of the image so far, so the members can read and change
+    // what is below the group.
+    Image changed(r.x1 - r.x0, r.y1 - r.y0, {0, 0, 0, 0});
+    for (int y = r.y0; y < r.y1; ++y)
+        for (int x = r.x0; x < r.x1; ++x) {
+            const int sx = x - ox, sy = y - oy;
+            if (sx >= 0 && sy >= 0 && sx < out.width() && sy < out.height())
+                changed.set(x - r.x0, y - r.y0, out.get(sx, sy));
+        }
+    composite_region(changed, r.x0, r.y0, group + 1, end - 1, r, {true, true});
+
+    const bool masked = G.has_mask() && G.mask_enabled;
+    const float go = std::clamp(G.opacity, 0.0f, 1.0f);
+    for (int y = r.y0; y < r.y1; ++y)
+        for (int x = r.x0; x < r.x1; ++x) {
+            float f = go;
+            if (masked) f *= G.mask.at(x, y) / 255.0f;
+            if (f <= 0.0f) continue;
+            const int dx = x - ox, dy = y - oy;
+            if (dx < 0 || dy < 0 || dx >= out.width() || dy >= out.height()) continue;
+            uint8_t* d = out.data() + (static_cast<size_t>(dy) * out.width() + dx) * 4;
+            const uint8_t* c = changed.data() + (static_cast<size_t>(y - r.y0) * changed.width() + (x - r.x0)) * 4;
+            if (f >= 1.0f) { std::memcpy(d, c, 4); continue; }
+            for (int k = 0; k < 4; ++k) d[k] = static_cast<uint8_t>(d[k] + (c[k] - d[k]) * f + 0.5f);
+        }
+}
+
 size_t Document::clip_end(size_t base) const {
     if (base >= layers_.size()) return base;
     const Layer& B = *layers_[base];
@@ -377,14 +415,14 @@ size_t Document::clip_end(size_t base) const {
     return i;
 }
 
-void Document::composite_region(Image& out, int ox, int oy, size_t from, size_t to, const raster::Rect& r, bool top_clips) const {
+void Document::composite_region(Image& out, int ox, int oy, size_t from, size_t to, const raster::Rect& r, CompositeOpts opts) const {
     size_t li = from;
     while (li <= to && li < layers_.size()) {
         const Layer& L = *layers_[li];
         // A layer with clipped layers above it forms one unit: they are drawn
         // onto its pixels, held to its alpha, and the result blends with the
         // layer's own opacity, blend mode and mask.
-        if (top_clips && !L.clipped) {
+        if (opts.top_clips && !L.clipped) {
             const size_t ce = clip_end(li);
             const size_t own_end = L.type == LayerType::Group ? group_end(li) : li + 1;
             if (ce > own_end && ce <= to + 1) {
@@ -395,6 +433,11 @@ void Document::composite_region(Image& out, int ox, int oy, size_t from, size_t 
         }
         if (L.type == LayerType::Group) {
             const size_t end = group_end(li);
+            if (L.pass_through) {
+                composite_pass_through(out, ox, oy, li, end, r);
+                li = end;
+                continue;
+            }
             if (L.visible && L.opacity > 0.0f && end > li + 1) {
                 // A styled group needs its members beyond `r` as well, so the
                 // style has the shape its shadow and glow grow from.
@@ -414,7 +457,7 @@ void Document::composite_region(Image& out, int ox, int oy, size_t from, size_t 
         }
         if (L.type == LayerType::Adjustment) {
             if (L.visible && L.opacity > 0.0f) {
-                if (L.adjustment.is_filter()) apply_filter_layer(out, ox, oy, from, li, r, !top_clips);
+                if (L.adjustment.is_filter()) apply_filter_layer(out, ox, oy, from, li, r, opts.filters_from_out);
                 else apply_adjustment_layer(out, ox, oy, L, r);
             }
             ++li;

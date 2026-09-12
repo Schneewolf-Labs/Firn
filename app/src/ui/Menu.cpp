@@ -908,8 +908,16 @@ void App::draw_dialogs() {
         ImGui::Checkbox("Layer is visible", &p.visible);
         float op = p.opacity * 100.0f;
         if (ImGui::SliderFloat("Opacity", &op, 0.0f, 100.0f, "%.0f%%")) p.opacity = op / 100.0f;
+        const bool is_group_layer = doc && active_layer() >= 0 && doc->layer(active_layer()).type == LayerType::Group;
+        if (is_group_layer) {
+            ImGui::Checkbox("Pass through", &p.pass_through);
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Adjustment and filter layers inside the group act on the whole image below it.\nThe group's blend mode and layer style do not apply while this is on.");
+        }
+        ImGui::BeginDisabled(is_group_layer && p.pass_through);
         ImGui::SetNextItemWidth(160);
         blend_combo("Blend mode", p.blend);
+        ImGui::EndDisabled();
         if (ImGui::CollapsingHeader("Blend Ranges")) {
             ImGui::TextDisabled("Limit the layer to a range of tones instead of painting a mask.");
             ImGui::SetNextItemWidth(160);

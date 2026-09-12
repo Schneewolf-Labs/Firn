@@ -197,6 +197,10 @@ against the 115 commands its own bundled scripts use.
 - [x] File > Revert, View > Zoom to Selection, rename a layer in place
 - [x] Script commands: 69 of 115 implemented, now 96
 - [x] Edge Preserving Smooth
+- [ ] Lock transparency, the original's per-layer "transparency protected":
+      painting adds no alpha where the layer is already clear, so a stroke
+      stays inside what the layer already covers. The native layer info has
+      the flag and Firn writes a hardcoded 0 (`io_psp.cpp`)
 - [ ] Export Picture Tube (we read tubes but cannot make one)
 - [ ] Duplicate Window: two views of one image at different zooms. Needs
       shared document ownership; App and DocState each own theirs outright
@@ -254,8 +258,7 @@ from any implementation, in the order they pay off.
 - [ ] Write blend ranges into the original's own slot, once the 8-byte
       layout is learned by setting one in the original under Wine and
       diffing the layer info chunk
-- [ ] Pass-through group mode, so an adjustment layer inside a group can
-      reach what is below the group
+- [x] Pass-through group mode (`Layer::pass_through`)
 - [ ] Gradient map adjustment: map luminance through a gradient. The
       gradient model, its stops and the library already exist
 - [ ] History brush: paint back from an earlier history state. The history

@@ -67,6 +67,14 @@ Layers can be grouped (Layers > New Layer Group) and carry masks (Layers >
 New Mask Layer); press Edit next to a mask to paint on it in grayscale with
 any brush.
 
+A group normally composites its members among themselves, so an adjustment
+or filter layer inside it changes only its siblings. Turning on Pass through
+in the group's properties lets the members act on the whole image below the
+group instead, which is how one group can hold a stack of corrections that
+apply to everything. The group's opacity and mask still say how much of that
+change reaches the image; its blend mode and layer style do not apply, since
+a pass-through group has no shape of its own.
+
 Layer Properties has Blend Ranges, which limits a layer to a range of tones
 rather than a shape: either its own tones, or the tones of what is under it.
 Each range has four stops. Below the first the layer is hidden, by the second

@@ -38,6 +38,10 @@ struct Layer {
     // shows only where that layer has alpha, and the whole unit then blends
     // with the layer below's own opacity, blend mode and mask.
     bool clipped = false;
+    // Groups only: the members composite straight onto what is below the
+    // group, so an adjustment or filter layer inside it reaches the whole
+    // image rather than only its siblings.
+    bool pass_through = false;
     // Limits the layer to a range of its own tones, or of the tones below
     // it, without a mask (Layer Properties > Blend Ranges).
     BlendRanges ranges;
@@ -73,8 +77,20 @@ struct LayerProps {
     float opacity = 1.0f;
     BlendMode blend = BlendMode::Normal;
     bool clipped = false;
+    bool pass_through = false;
     BlendRanges ranges;
     bool operator==(const LayerProps&) const = default;
+};
+
+// How a range of layers is drawn into a buffer that is not simply the image
+// so far. `top_clips` false ignores the range's own clipped flags, which is
+// how the members of a clipping unit are drawn once the unit itself has been
+// recognised. `filters_from_out` makes a filter layer work on what the
+// buffer already holds instead of re-compositing the layers below it, which
+// is what a filter inside a clipping unit or a pass-through group needs.
+struct CompositeOpts {
+    bool top_clips = true;
+    bool filters_from_out = false;
 };
 
 // The single source of truth. The UI and scripts both read this and
@@ -189,11 +205,9 @@ public:
 private:
     // Composites layers [from, to] over `r` (document coordinates) into
     // `out`, whose pixel (0, 0) sits at document (ox, oy).
-    // `top_clips` false composites the range's own layers ignoring their
-    // clipped flag, which is how the members of a clipping unit are drawn
-    // once the unit itself has been recognised.
-    void composite_region(Image& out, int ox, int oy, size_t from, size_t to, const raster::Rect& r, bool top_clips = true) const;
+    void composite_region(Image& out, int ox, int oy, size_t from, size_t to, const raster::Rect& r, CompositeOpts opts = CompositeOpts()) const;
     void composite_clip_unit(Image& out, int ox, int oy, size_t base, size_t own_end, size_t ce, const raster::Rect& r) const;
+    void composite_pass_through(Image& out, int ox, int oy, size_t group, size_t end, const raster::Rect& r) const;
     // `source_is_out` takes what the filter works on from `out` itself
     // rather than re-compositing the layers below, which is what a filter
     // clipped to a layer needs: its subject is the clipping unit so far.

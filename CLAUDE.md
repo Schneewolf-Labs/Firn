@@ -110,6 +110,13 @@ docs/    notes on the original: command inventory, module mapping, FORMAT.md
   whole stack (`Document::State`). A layer's optional `mask` multiplies its
   alpha (or the group's composite) during compositing. Tools and pixel
   commands must check `Layer::is_raster()` / `App::active_is_raster()`.
+- **Pass-through groups** (`Layer::pass_through`, `composite_pass_through`):
+  the members draw onto a copy of the backdrop so an adjustment or filter
+  inside the group reaches what is below it, and the group's opacity and
+  mask then mix that copy back over the original. Its blend mode and style
+  do not apply: there is no isolated shape to apply them to. Filters inside
+  need `CompositeOpts::filters_from_out` so they work on the buffer rather
+  than re-compositing from the group's first member.
 - **Blend ranges** (`Layer::ranges`, `BlendRanges` in `blend.h`) limit a
   layer to a range of its own tones or of the tones below it. `blend_rows`
   turns them into a coverage factor that multiplies the source alpha, the

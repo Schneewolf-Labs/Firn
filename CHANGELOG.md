@@ -7,6 +7,14 @@ section into the next version.
 ## Unreleased
 
 ### Added
+- Pass-through groups. A group normally composites its members among
+  themselves, so an adjustment or filter layer inside it changes only its
+  siblings. Turning on Pass through in the group's properties lets them act
+  on the whole image below the group, which is how one group holds a stack
+  of corrections that apply to everything. The group's opacity and mask
+  still control how much of the change lands; its blend mode and layer
+  style do not apply, having no shape of their own to act on.
+  `layer.properties` takes `pass_through`, and both formats keep it.
 - Blend ranges (Layer Properties > Blend Ranges). A layer can be limited to
   a range of tones instead of a shape: its own tones, or the tones of what
   is under it. Four stops per range give a hard or a soft edge, and the

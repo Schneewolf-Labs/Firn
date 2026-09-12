@@ -893,6 +893,11 @@ void apply_firn_stash(const Reader& r, const Block& creator, Document& doc, std:
         const int idx = stash_layer(doc, ranges[i], warnings);
         if (idx >= 0) doc.layer(idx).ranges = blend_ranges_from_json(ranges[i].get("ranges"));
     }
+    const json::Value& pass_through = v.get("pass_through");
+    for (size_t i = 0; i < pass_through.size(); ++i) {
+        const int idx = stash_layer(doc, pass_through[i], warnings);
+        if (idx >= 0) doc.layer(idx).pass_through = true;
+    }
     doc.touch();
 }
 
@@ -928,6 +933,15 @@ std::string firn_stash(const Document& doc) {
         ranges.push(std::move(e));
     }
     // Clipping is Firn's own: the original composites the layer normally.
+    json::Value pass_through = json::Value::array();
+    for (size_t i = 0; i < doc.layer_count(); ++i) {
+        const Layer& L = doc.layer(i);
+        if (!L.pass_through) continue;
+        json::Value e = json::Value::object();
+        e.set("layer", json::Value::number(static_cast<double>(i)));
+        e.set("name", json::Value::string(L.name));
+        pass_through.push(std::move(e));
+    }
     json::Value clipped = json::Value::array();
     for (size_t i = 0; i < doc.layer_count(); ++i) {
         const Layer& L = doc.layer(i);
@@ -947,13 +961,14 @@ std::string firn_stash(const Document& doc) {
         e.set("style", L.style.to_json());
         styles.push(std::move(e));
     }
-    if (filters.size() == 0 && styles.size() == 0 && clipped.size() == 0 && ranges.size() == 0) return {};
+    if (filters.size() == 0 && styles.size() == 0 && clipped.size() == 0 && ranges.size() == 0 && pass_through.size() == 0) return {};
     json::Value root = json::Value::object();
     root.set("firn", json::Value::number(1));
     if (filters.size()) root.set("filters", std::move(filters));
     if (styles.size()) root.set("styles", std::move(styles));
     if (clipped.size()) root.set("clipped", std::move(clipped));
     if (ranges.size()) root.set("ranges", std::move(ranges));
+    if (pass_through.size()) root.set("pass_through", std::move(pass_through));
     return json::dump(root);
 }
 

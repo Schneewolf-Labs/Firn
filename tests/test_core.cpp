@@ -368,7 +368,7 @@ static void test_layer_structure_commands() {
     r2.visible = false;
     CommandStack hist;
 
-    hist.run(doc, std::make_unique<LayerPropertiesCommand>(1, doc.props(1), LayerProps{"Renamed", true, 0.5f, BlendMode::Multiply, false, {}}));
+    hist.run(doc, std::make_unique<LayerPropertiesCommand>(1, doc.props(1), LayerProps{"Renamed", true, 0.5f, BlendMode::Multiply, false, false, {}}));
     CHECK(doc.layer(1).name == "Renamed" && doc.layer(1).opacity == 0.5f && doc.layer(1).blend == BlendMode::Multiply);
     hist.undo(doc);
     CHECK(doc.layer(1).name == "Raster 1" && doc.layer(1).opacity == 1.0f);
@@ -2900,6 +2900,92 @@ static void test_icc() {
     std::remove(png.c_str()); std::remove(jpg.c_str());
 }
 
+// Pass-through groups: the members composite straight onto what is below
+// the group, so an adjustment or filter layer inside it reaches the whole
+// image rather than only its siblings.
+static void test_pass_through_groups() {
+    auto build = [](bool pass) {
+        auto doc = std::make_unique<Document>(4, 1);
+        Layer& bottom = doc->add_layer("Bottom");
+        bottom.pixels = Image(4, 1, {200, 200, 200, 255});
+        Layer& g = doc->add_layer("Group");
+        g.type = LayerType::Group;
+        g.pass_through = pass;
+        Layer& inner = doc->add_layer("Inner");
+        inner.depth = 1;
+        inner.pixels = Image(4, 1, {0, 0, 0, 0});
+        inner.pixels.set(0, 0, {50, 50, 50, 255});
+        Layer& inv = doc->add_layer("Invert");
+        inv.depth = 1;
+        inv.type = LayerType::Adjustment;
+        inv.adjustment.kind = Adjustment::Kind::Invert;
+        doc->touch();
+        return doc;
+    };
+
+    // Isolated, the adjustment stops at the group's own members.
+    auto iso = build(false);
+    Image f = iso->composite();
+    CHECK(f.get(0, 0).r == 205);   // the member was inverted
+    CHECK(f.get(2, 0).r == 200);   // what is below the group was not
+
+    // Pass-through, it reaches the layer below the group as well.
+    auto pt = build(true);
+    f = pt->composite();
+    CHECK(f.get(0, 0).r == 205);
+    CHECK(f.get(2, 0).r == 55);
+
+    // The group's opacity mixes the change back over the original.
+    auto half = build(true);
+    half->layer(1).opacity = 0.5f;
+    half->touch();
+    f = half->composite();
+    CHECK(std::abs(f.get(2, 0).r - 128) <= 2);
+
+    // Its mask says where the change lands.
+    auto masked = build(true);
+    masked->layer(1).mask = mask::rectangle(4, 1, 0, 0, 2, 1, false);
+    masked->touch();
+    f = masked->composite();
+    CHECK(f.get(1, 0).r == 55 && f.get(3, 0).r == 200);
+
+    // A hidden group changes nothing.
+    auto hidden = build(true);
+    hidden->layer(1).visible = false;
+    hidden->touch();
+    f = hidden->composite();
+    CHECK(f.get(2, 0).r == 200 && f.get(0, 0).r == 200);
+
+    // A filter inside one has to see what is below the group, not an empty
+    // buffer, which is the part that is easy to get wrong.
+    Document blur(8, 1);
+    Layer& base = blur.add_layer("Base");
+    base.pixels = Image(8, 1, {0, 0, 0, 255});
+    for (int x = 4; x < 8; ++x) base.pixels.set(x, 0, {255, 255, 255, 255});
+    Layer& bg = blur.add_layer("G");
+    bg.type = LayerType::Group;
+    bg.pass_through = true;
+    Layer& bl = blur.add_layer("Blur");
+    bl.depth = 1;
+    bl.type = LayerType::Adjustment;
+    bl.adjustment.kind = Adjustment::Kind::GaussianBlur;
+    bl.adjustment.blur_radius = 2.0f;
+    blur.touch();
+    const Image b = blur.composite();
+    CHECK(b.get(3, 0).r > 20 && b.get(3, 0).r < 235);   // a ramp, not the hard edge
+    CHECK(b.get(4, 0).r > 20 && b.get(4, 0).r < 235);
+
+    // Both formats keep the flag.
+    std::string err;
+    std::vector<std::string> warnings;
+    const std::vector<uint8_t> ora = io::save_ora_to_memory(*pt);
+    auto back = io::load_ora_from_memory(ora.data(), ora.size(), &err, &warnings);
+    CHECK(back && back->layer_count() == 4 && back->layer(1).pass_through);
+    const std::vector<uint8_t> psp = io::save_psp_to_memory(*pt);
+    auto p2 = io::load_psp_from_memory(psp.data(), psp.size(), &err, &warnings);
+    CHECK(p2 && p2->layer_count() == 4 && p2->layer(1).pass_through);
+}
+
 // Blend ranges: a layer limited to a range of its own tones, or of the
 // tones beneath it, without painting a mask.
 static void test_blend_ranges() {
@@ -3105,6 +3191,7 @@ static void test_openraster_lossless() {
     grp.mask_enabled = false;
     grp.opacity = 0.25f;
     grp.blend = BlendMode::Dissolve;   // no SVG operator: restored from firn:blend
+    grp.pass_through = true;
 
     Layer& mem = doc.add_layer("Mem");
     mem.depth = 1;
@@ -3191,7 +3278,7 @@ static void test_openraster_lossless() {
     CHECK(s.bevel && std::abs(s.bevel_size - 4) < 0.01f && std::abs(s.bevel_depth - 2.5f) < 0.01f && std::abs(s.bevel_angle - 200) < 0.01f);
 
     const Layer& G = b->layer(1);
-    CHECK(G.type == LayerType::Group && !G.expanded);
+    CHECK(G.type == LayerType::Group && !G.expanded && G.pass_through);
     CHECK(G.has_mask() && G.mask.at(3, 3) == 255 && G.mask.at(30, 3) == 0 && !G.mask_enabled);
     CHECK(std::abs(G.opacity - 0.25f) < 0.01f && G.blend == BlendMode::Dissolve);
 
@@ -3526,6 +3613,7 @@ static void test_metadata() {
 
 int main() {
     test_icc();
+    test_pass_through_groups();
     test_blend_ranges();
     test_clipping_masks();
     test_openraster_lossless();

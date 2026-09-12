@@ -696,6 +696,10 @@
             "description": "percent, 0 to 100",
             "type": "number"
           },
+          "pass_through": {
+            "description": "groups only: its members act on the whole image below the group",
+            "type": "boolean"
+          },
           "visible": {
             "description": "",
             "type": "boolean"

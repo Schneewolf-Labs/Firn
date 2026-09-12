@@ -358,6 +358,30 @@ def test_clipping_masks(f):
     f.do("file.close")
 
 
+def test_pass_through_groups(f):
+    section("pass-through groups")
+    f.do("file.new", width=16, height=8, color="#c8c8c8")
+    f.do("layer.new")
+    f.do("layer.new_group")
+    groups = [l for l in f.layers() if l["type"] == "group"]
+    check(len(groups) == 1, "a group can be made")
+    check(groups[0].get("pass_through") is False, "and starts isolated")
+    # The group layer has to be the active one to toggle it.
+    idx = next(i for i, l in enumerate(f.layers()) if l["type"] == "group")
+    f.do("layer.select", index=idx)
+    f.do("layer.properties", pass_through=True)
+    check(f.layers()[idx]["pass_through"] is True, "a group can pass through")
+    f.do("edit.undo")
+    check(f.layers()[idx]["pass_through"] is False, "and the change undone")
+    f.do("edit.redo")
+    check(f.layers()[idx]["pass_through"] is True, "and redone")
+    # Only groups have it.
+    other = next(i for i, l in enumerate(f.layers()) if l["type"] != "group")
+    f.do("layer.select", index=other)
+    check(f.refused("layer.properties", pass_through=True), "an ordinary layer refuses it")
+    f.do("file.close")
+
+
 def test_blend_ranges(f):
     section("blend ranges")
     f.do("file.new", width=32, height=16, color="#404040")
@@ -560,7 +584,7 @@ def main():
         drive.recv_line(sock)
         f = Firn(sock)
         for case in (test_api_surface, test_documents, test_view, test_layers, test_selection,
-                     test_painting_and_materials, test_edit_actions, test_tools_and_history, test_image_geometry, test_clipping_masks, test_blend_ranges, test_metadata, test_drawing_api, test_atomic_batches, test_discovery_v2):
+                     test_painting_and_materials, test_edit_actions, test_tools_and_history, test_image_geometry, test_clipping_masks, test_pass_through_groups, test_blend_ranges, test_metadata, test_drawing_api, test_atomic_batches, test_discovery_v2):
             case(f)
         sock.sendall(b"quit\n")
         sock.settimeout(10.0)
