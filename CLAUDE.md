@@ -382,6 +382,15 @@ docs/    notes on the original: command inventory, module mapping, FORMAT.md
   Between them they have found a use-after-free in the native reader, an
   unbounded allocation from a corrupted size field, and a data race in the
   PNG writer, none of which any test noticed on its own.
+  `scripts/memory_audit.py` drives the running program through repeated
+  open/close, edit/undo and save/reopen cycles and watches its resident
+  size, because LeakSanitizer only sees memory that became *unreachable*
+  and an editor's real failure is memory that stays reachable and grows.
+  Audited 2026-09-12: cycles flat, history plateaus at `undo_memory_mb`
+  (1024 per document), documents fully released. A few MB of creep across
+  many rounds is glibc holding freed pages, not a leak; the sanitizer
+  reported the same fixed 256 bytes from a graphics driver whether 1 or 36
+  documents had been opened.
   `test_parsers_survive_broken_files` feeds every byte-level parser
   truncations, corrupted headers and noise; it is cheap and belongs in the
   ordinary run, but it only catches memory errors when built with the

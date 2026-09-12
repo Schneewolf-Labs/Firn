@@ -108,6 +108,7 @@ menu category driving a document model, with tools and palettes on top. See
 | `python3 scripts/cli_tests.py` | CLI JSON files, launch/reuse, and socket isolation |
 | `python3 scripts/app_tests.py` | the action API, one assertion per behavior |
 | `python3 scripts/gen_api_docs.py --check` | the generated API manual is current |
+| `python3 scripts/memory_audit.py` | memory is given back (slow, run by hand) |
 
 CI runs these suites on Linux, Windows (under Mesa's software OpenGL) and
 macOS; the manual check runs on Linux. Every
