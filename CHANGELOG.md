@@ -7,6 +7,15 @@ section into the next version.
 ## Unreleased
 
 ### Fixed
+- A use-after-free reading the native format. The stored-composite reader
+  kept a pointer to a block inside a temporary that the loop it came from
+  had already destroyed, so it read freed memory on every file that has a
+  composite bank. AddressSanitizer found it; the format corpus had been
+  passing over it for weeks.
+- A corrupted file could exhaust memory. The channel reader took its image
+  size straight from the file without a bound, so one flipped byte in a
+  20 KB file had it asking for 2.3 GB. Sizes are now checked the way the
+  full reader already checked them.
 - Firn asks for eight bits a colour channel now. It never did: SDL's
   defaults are three, three and two bits, which most drivers quietly exceed
   and a software renderer does not. On such a setup every colour was

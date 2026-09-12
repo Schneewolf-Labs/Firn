@@ -131,6 +131,15 @@ inline uint8_t sample8(int v) { return static_cast<uint8_t>((v + 128) / 257); }
 // 16-bit samples are kept when `deep` is given (48-bit files).
 bool read_channels(const Reader& r, const std::vector<Block>& subs, uint16_t comp, uint16_t depth,
                    const Palette* pal, bool gray, int w, int h, Image& out, std::string& err, Image16* deep = nullptr) {
+    // The size comes straight out of the file, so a corrupted or hostile one
+    // can ask for an enormous buffer here. One flipped byte in a 20 KB file
+    // had this allocating 2.3 GB. 268 megapixels is past any real image and
+    // still bounded.
+    if (w <= 0 || h <= 0 || w > 65536 || h > 65536 ||
+        static_cast<size_t>(w) * static_cast<size_t>(h) > (size_t(1) << 28)) {
+        err = "bad channel size";
+        return false;
+    }
     out = Image(w, h, {0, 0, 0, 255});
     if (deep && depth == 48) *deep = Image16(w, h, 0, 0, 0, 65535);
     else deep = nullptr;
@@ -1275,7 +1284,9 @@ std::optional<Image> load_psp_stored_composite(const uint8_t* data, size_t size)
     Header hdr;
     Palette pal;
     bool have_palette = false;
-    const Block* bank = nullptr;
+    // By value: the vector this loop walks is a temporary, so a pointer
+    // into it dangles the moment the loop ends.
+    std::optional<Block> bank;
     for (const Block& b : blocks(r, 36, size)) {
         if (b.id == kImageBlock && r.ok(b.start, 42)) {
             hdr.width = r.i32(b.start + 4); hdr.height = r.i32(b.start + 8);
@@ -1290,9 +1301,12 @@ std::optional<Image> load_psp_stored_composite(const uint8_t* data, size_t size)
                 }
                 have_palette = true;
             }
-        } else if (b.id == kCompositeBankBlock) bank = &b;
+        } else if (b.id == kCompositeBankBlock) bank = b;
     }
-    if (!bank || hdr.width <= 0) return std::nullopt;
+    // Same bounds as the full reader. Without them a single corrupted byte
+    // in the size field asks for gigabytes: a 20 KB file with one byte
+    // changed made this allocate 2.3 GB before giving up.
+    if (!bank || hdr.width <= 0 || hdr.height <= 0 || hdr.width > 65536 || hdr.height > 65536) return std::nullopt;
     Document tmp(hdr.width, hdr.height);
     std::string err;
     if (!read_composite(r, *bank, hdr, have_palette ? &pal : nullptr, tmp, err, /*allow_jpeg=*/false) || tmp.layer_count() == 0) return std::nullopt;

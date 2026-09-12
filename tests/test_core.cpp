@@ -2900,6 +2900,109 @@ static void test_icc() {
     std::remove(png.c_str()); std::remove(jpg.c_str());
 }
 
+// Every parser that reads a file has to survive a broken one. These are
+// not hypothetical inputs: a truncated download, a half-written file after
+// a crash, or a file from another program all land here, and the reader is
+// the only thing between them and the rest of the program.
+//
+// The heap-use-after-free this pins down was real: load_psp_stored_composite
+// kept a pointer to a block inside the vector a range-for was walking, and
+// that vector was a temporary, so the pointer dangled as soon as the loop
+// ended. It only showed up under a sanitizer, which is why this suite is
+// worth running that way.
+static void test_parsers_survive_broken_files() {
+    std::string err;
+    std::vector<std::string> warnings;
+
+    // A real file of each kind to cut up.
+    Document doc(24, 16);
+    Layer& bg = doc.add_layer("Background");
+    bg.background = true;
+    bg.pixels.fill({120, 90, 60, 255});
+    Layer& top = doc.add_layer("Top");
+    top.pixels = Image(24, 16, {0, 0, 0, 0});
+    top.pixels.set(4, 4, {255, 0, 0, 255});
+    const std::vector<uint8_t> psp = io::save_psp_to_memory(doc);
+    const std::vector<uint8_t> ora = io::save_ora_to_memory(doc);
+    const std::vector<uint8_t> png = io::encode_png(bg.pixels);
+    CHECK(!psp.empty() && !ora.empty() && !png.empty());
+
+    auto poke_every_parser = [&](const uint8_t* d, size_t n) {
+        (void)io::load_psp_from_memory(d, n, &err, &warnings);
+        (void)io::load_ora_from_memory(d, n, &err, &warnings);
+        (void)io::load_psp_stored_composite(d, n);
+        (void)meta::parse_jpeg(d, n);
+        (void)meta::parse_png(d, n);
+        (void)meta::parse_tiff(d, n);
+        std::vector<vec::Object> objs;
+        (void)io::decode_objects(d, n, objs);
+        (void)io::vector_objects_from_bytes(d, n, objs);
+        zip::Archive ar;
+        (void)zip::read(d, n, ar, &err);
+        (void)io::load_memory(d, n, &err);
+    };
+
+    // Truncated at every length, which is where offset and length fields
+    // point past the end.
+    for (const std::vector<uint8_t>* src : {&psp, &ora, &png}) {
+        for (size_t cut = 0; cut <= src->size(); cut += std::max<size_t>(1, src->size() / 12))
+            poke_every_parser(src->data(), cut);
+        poke_every_parser(src->data(), src->size() - 1);
+    }
+    // Nothing at all, and one byte.
+    poke_every_parser(nullptr, 0);
+    { const uint8_t one = 0x89; poke_every_parser(&one, 1); }
+
+    // Corruption inside the headers, where the lengths live. Deterministic
+    // so a failure can be reproduced from the seed alone.
+    uint32_t rng = 20260912u;
+    auto next = [&rng] { rng = rng * 1664525u + 1013904223u; return rng >> 8; };
+    for (const std::vector<uint8_t>* src : {&psp, &ora, &png}) {
+        for (int i = 0; i < 40; ++i) {
+            std::vector<uint8_t> d = *src;
+            const size_t span = std::min<size_t>(d.size(), 512);
+            d[next() % span] = static_cast<uint8_t>(next());
+            poke_every_parser(d.data(), d.size());
+        }
+    }
+    // A valid signature in front of noise: the shape that gets furthest in
+    // before something goes wrong.
+    for (const std::vector<uint8_t>* src : {&psp, &ora, &png}) {
+        std::vector<uint8_t> d = *src;
+        for (size_t k = std::min<size_t>(d.size(), 32); k < d.size(); ++k) d[k] = static_cast<uint8_t>(next());
+        poke_every_parser(d.data(), d.size());
+    }
+
+    // A file must not be able to ask for an unreasonable buffer. One flipped
+    // byte in the composite's size field used to make this allocate 2.3 GB
+    // for a 20 KB file, which is a denial of service on opening a bad
+    // download. The reader refuses instead.
+    {
+        std::vector<uint8_t> huge = psp;
+        // Walk the size fields and try each as an absurd dimension.
+        int refused = 0, attempts = 0;
+        for (size_t at = 0; at + 4 <= std::min<size_t>(huge.size(), 600); ++at) {
+            huge = psp;
+            huge[at] = 0xBA;
+            huge[at + 1] = 0xBA;
+            ++attempts;
+            // Not a crash and not a gigabyte: the only outcomes allowed are
+            // an image of a sane size, or nothing.
+            const std::optional<Image> got = io::load_psp_stored_composite(huge.data(), huge.size());
+            if (!got) ++refused;
+            else CHECK(static_cast<size_t>(got->width()) * got->height() <= (size_t(1) << 28));
+        }
+        CHECK(attempts > 100 && refused > 0);
+    }
+
+    // Getting here without a crash is the test. A good file must still read.
+    auto back = io::load_psp_from_memory(psp.data(), psp.size(), &err, &warnings);
+    CHECK(back && back->layer_count() == 2);
+    auto back2 = io::load_ora_from_memory(ora.data(), ora.size(), &err, &warnings);
+    CHECK(back2 && back2->layer_count() == 2);
+    CHECK(io::load_psp_stored_composite(psp.data(), psp.size()).has_value());
+}
+
 // Box blur: a running sum, so the cost does not grow with the radius. The
 // window always holds 2r+1 samples with out-of-range ones clamped to the
 // edge, which is what pins the result: these expectations are the averages
@@ -3823,6 +3926,7 @@ static void test_metadata() {
 
 int main() {
     test_icc();
+    test_parsers_survive_broken_files();
     test_box_blur();
     test_inpaint_progress_and_cancel();
     test_gradient_map();

@@ -375,6 +375,17 @@ docs/    notes on the original: command inventory, module mapping, FORMAT.md
   `setarch $(uname -m) -R ./build-tsan/tests/test_core`. It found the one
   race that was there: `encode_png` set stb's global compression level per
   image while the project writer encoded layers in parallel.
+- **Run the suites under sanitizers when touching anything that parses a
+  file or spawns a thread.** Both builds are worth keeping around:
+  `-fsanitize=address,undefined` for the readers, and
+  `-fsanitize=thread` (with `setarch $(uname -m) -R`) for the workers.
+  Between them they have found a use-after-free in the native reader, an
+  unbounded allocation from a corrupted size field, and a data race in the
+  PNG writer, none of which any test noticed on its own.
+  `test_parsers_survive_broken_files` feeds every byte-level parser
+  truncations, corrupted headers and noise; it is cheap and belongs in the
+  ordinary run, but it only catches memory errors when built with the
+  sanitizer.
 - Add a test in `tests/test_core.cpp` for every new raster op or command.
 
 ## macOS
