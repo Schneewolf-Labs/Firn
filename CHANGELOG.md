@@ -15,6 +15,13 @@ section into the next version.
   nothing.
 
 ### Added
+- File > Export > Picture Tube writes one. Firn has read tubes since it
+  had a tube tool and could never make one; now an image divided into a
+  grid of equal cells becomes a .psptube, with the placement and selection
+  modes the tool honors. The dialog refuses a grid the image does not
+  divide by, because uneven cells would make the tool stamp slivers of
+  their neighbors. Also the `file.export_tube` action and the original's
+  `ExportTube` script command, which is what its AutoTuber script calls.
 - Vector node editing is finished. A path can be broken at a node, joined
   back to another open path, reversed, and closed or opened, from the Pen
   tool's Edit Nodes mode or Objects > Edit Node. Objects > Convert to Path

@@ -997,6 +997,20 @@ void App::ensure_tubes() {
     if (!tubes.empty() && tube_index < 0) load_tube(0);
 }
 
+bool App::export_tube(const std::string& path, const io::TubeInfo& info) {
+    if (!doc) { status = "Export Picture Tube: no image open."; return false; }
+    std::string err;
+    if (!io::save_psp_tube(*doc, info, path, &err)) { status = "Export Picture Tube: " + err; return false; }
+    // A tube written into a folder Firn scans should show up in the tool
+    // without a restart.
+    tubes_loaded = false;
+    tubes.clear();
+    tube_index = -1;
+    tube_loaded_path.clear();
+    status = "Exported " + std::to_string(info.total) + " cell" + (info.total == 1 ? "" : "s") + " to " + path;
+    return true;
+}
+
 bool App::load_tube(int index) {
     if (index < 0 || index >= static_cast<int>(tubes.size())) return false;
     std::string err;

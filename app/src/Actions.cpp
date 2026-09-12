@@ -121,6 +121,33 @@ std::vector<Action> build() {
             app.pending_jpeg_path.clear();
             return saved ? ok_json() : fail(ok, app.status);
         });
+    add("file.export_tube", "Write the image as a picture tube sheet",
+        {{"path", "string", "where to write the .psptube", true},
+         {"columns", "number", "Cells across; the width must divide by it", false, nullptr, "1"},
+         {"rows", "number", "Cells down; the height must divide by it", false, nullptr, "1"},
+         {"cells", "number", "How many of the grid's cells hold artwork", false, nullptr, "columns x rows"},
+         {"step", "number", "Stamp spacing in pixels", false, nullptr, "the cell size"},
+         {"placement", "string", "How stamps are spaced along the stroke", false, "random,continuous", "random"},
+         {"selection", "string", "Which cell each stamp takes", false, "random,incremental,angular,pressure,velocity", "random"}},
+        [](App& app, const Value& p, bool* ok) {
+            std::string e;
+            if (!need_doc(app, ok, e)) return e;
+            const std::string path = str(p, "path");
+            if (path.empty()) return fail(ok, "file.export_tube needs a path");
+            firn::io::TubeInfo t;
+            t.columns = std::clamp(num(p, "columns", 1), 1, 1000);
+            t.rows = std::clamp(num(p, "rows", 1), 1, 1000);
+            t.total = std::clamp(num(p, "cells", t.columns * t.rows), 1, t.columns * t.rows);
+            t.step = std::clamp(num(p, "step", std::max(app.doc->width() / t.columns, app.doc->height() / t.rows)), 1, 10000);
+            const std::string placement = p.get("placement").as_string("random");
+            const std::string selection = p.get("selection").as_string("random");
+            t.placement = placement == "continuous" ? 2 : 1;
+            static const char* kSelections[] = {"random", "incremental", "angular", "pressure", "velocity"};
+            t.selection = 1;
+            for (int i = 0; i < 5; ++i) if (selection == kSelections[i]) t.selection = i + 1;
+            if (!app.export_tube(path, t)) return fail(ok, app.status);
+            return ok_json();
+        });
     add("file.close", "Close the current image, discarding changes", {},
         [](App& app, const Value&, bool* ok) {
             std::string e;

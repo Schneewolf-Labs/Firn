@@ -554,6 +554,7 @@ void Driver::before_frame(App& app, SDL_Window* window) {
                 if (n == "material_dialog") app.open_material_dialog(v < 2);   // 1 foreground, 2 background
                 else if (n == "theme_editor") app.open_theme_editor();
                 else if (n == "shortcuts_dialog") app.show_shortcuts_dialog = true;
+                else if (n == "tube_export_dialog") app.show_tube_export_dialog = true;
                 else if (n == "brush_size") app.brush.size = v;
                 else if (n == "smooth_mode") app.smooth_mode = static_cast<int>(v);
                 else if (n == "smooth_amount") app.smooth_amount = v;

@@ -2,6 +2,7 @@
 // State of Menu.cpp: nothing else reads it, so it lives
 // here rather than on App, which 32 translation units include.
 #include "firn/adjust.h"
+#include "firn/io_psp.h"
 #include "firn/metadata.h"
 #include "firn/raster.h"
 #include "firn/vector.h"
@@ -20,4 +21,7 @@ struct MenuState {
     char meta_value[1024] = {0};
     char meta_new_key[80] = {0};
     bool meta_loaded = false;           // meta_edit matches the document
+    // File > Export > Picture Tube: the cell grid and how the tool places them.
+    firn::io::TubeInfo tube_export{};
+    bool tube_export_ready = false;     // the grid has been sized to this image
 };

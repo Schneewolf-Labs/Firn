@@ -146,6 +146,10 @@ void App::draw_menu(MenuBuilder& m) {
         m.item("Save", "Ctrl+S", has_doc, [=, this] { save(); });
         m.item("Save As...", "Ctrl+Shift+S", has_doc, [=, this] { request_save_as(); });
         m.item("Revert", nullptr, has_doc && !doc_path.empty(), [=, this] { if (modified()) show_revert_prompt = true; else revert(); });
+        if (m.begin_menu("Export", has_doc)) {
+            m.item("Picture Tube...", nullptr, true, [=, this] { menu_state->tube_export_ready = false; show_tube_export_dialog = true; });
+            m.end_menu();
+        }
         m.separator();
         m.item("Preferences...", nullptr, true, [=, this] { menu_state->prefs_edit = config; menu_state->prefs_scale_before = config.ui_scale; show_prefs_dialog = true; });
         m.separator();
@@ -675,6 +679,7 @@ void App::draw_dialogs() {
         else if (file_op == PendingFileOp::SavePdf) print_to_pdf(file_dialog.path(), false);
         else if (file_op == PendingFileOp::ImportTheme) import_theme(file_dialog.path());
         else if (file_op == PendingFileOp::ExportTheme) export_theme(file_dialog.path());
+        else if (file_op == PendingFileOp::ExportTube) export_tube(file_dialog.path(), menu_state->tube_export);
         else if (file_op == PendingFileOp::LoadProfile) {
             std::ifstream pf(file_dialog.path(), std::ios::binary);
             std::vector<uint8_t> bytes((std::istreambuf_iterator<char>(pf)), std::istreambuf_iterator<char>());
@@ -686,6 +691,8 @@ void App::draw_dialogs() {
         else if (file_op == PendingFileOp::SaveSwatches) { std::string e; if (!io::save_palette(swatches, file_dialog.path(), &e)) status = "Swatches: " + e; }
         file_op = PendingFileOp::None;
     }
+
+    draw_tube_export_dialog();
 
     if (show_new_dialog) { ImGui::OpenPopup("New Image"); show_new_dialog = false; }
     if (show_print_dialog) { ImGui::OpenPopup("Print"); show_print_dialog = false; }
@@ -1066,4 +1073,67 @@ void App::draw_dialogs() {
         if (ImGui::Button("Cancel")) ImGui::CloseCurrentPopup();
         ImGui::EndPopup();
     }
+}
+
+// File > Export > Picture Tube. A tube is the image divided into a grid of
+// equal cells, so the grid is offered as divisors of the image rather than
+// as free numbers: a cell size that does not tile the image exactly would
+// make the tool stamp slivers of its neighbours.
+void App::draw_tube_export_dialog() {
+    if (show_tube_export_dialog) { ImGui::OpenPopup("Export Picture Tube"); show_tube_export_dialog = false; }
+    if (!ImGui::BeginPopupModal("Export Picture Tube", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) return;
+    if (!doc) { ImGui::CloseCurrentPopup(); ImGui::EndPopup(); return; }
+    io::TubeInfo& t = menu_state->tube_export;
+    if (!menu_state->tube_export_ready) {
+        menu_state->tube_export_ready = true;
+        t = io::TubeInfo{};
+        t.columns = t.rows = t.total = 1;
+        t.step = std::max(doc->width(), doc->height());
+        t.placement = 1;
+        t.selection = 1;
+    }
+    ImGui::Text("Image %d x %d", doc->width(), doc->height());
+    bool grid_changed = false;
+    ImGui::SetNextItemWidth(120);
+    grid_changed |= ImGui::InputInt("Cells across", &t.columns);
+    ImGui::SetNextItemWidth(120);
+    grid_changed |= ImGui::InputInt("Cells down", &t.rows);
+    t.columns = std::clamp(t.columns, 1, std::max(1, doc->width()));
+    t.rows = std::clamp(t.rows, 1, std::max(1, doc->height()));
+    const bool fits = doc->width() % t.columns == 0 && doc->height() % t.rows == 0;
+    if (grid_changed) {
+        t.total = t.columns * t.rows;
+        if (fits) t.step = std::max(doc->width() / t.columns, doc->height() / t.rows);
+    }
+    if (fits) ImGui::TextDisabled("Cell size %d x %d", doc->width() / t.columns, doc->height() / t.rows);
+    else ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.4f, 1.0f), "%d x %d does not divide into %d x %d cells.", doc->width(), doc->height(), t.columns, t.rows);
+    ImGui::SetNextItemWidth(120);
+    ImGui::InputInt("Cells used", &t.total);
+    t.total = std::clamp(t.total, 1, t.columns * t.rows);
+    ImGui::SetNextItemWidth(120);
+    ImGui::InputInt("Step (pixels)", &t.step);
+    t.step = std::clamp(t.step, 1, 10000);
+    int placement = t.placement == 2 ? 1 : 0;
+    ImGui::SetNextItemWidth(160);
+    if (ImGui::Combo("Placement", &placement, "Random\0Continuous\0")) t.placement = placement == 1 ? 2 : 1;
+    int selection = std::clamp(t.selection - 1, 0, 4);
+    ImGui::SetNextItemWidth(160);
+    if (ImGui::Combo("Selection", &selection, "Random\0Incremental\0Angular\0Pressure\0Velocity\0")) t.selection = selection + 1;
+    ImGui::Separator();
+    ImGui::BeginDisabled(!fits);
+    const bool save = ImGui::Button("Save As...", ImVec2(100, 0));
+    ImGui::EndDisabled();
+    ImGui::SameLine();
+    const bool cancel = ImGui::Button("Cancel", ImVec2(100, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape, false);
+    if (save) {
+        std::string name = doc_path.empty() ? std::string("Tube") : doc_path;
+        if (const size_t sl = name.find_last_of("/\\"); sl != std::string::npos) name = name.substr(sl + 1);
+        if (const size_t dot = name.rfind('.'); dot != std::string::npos) name = name.substr(0, dot);
+        file_op = PendingFileOp::ExportTube;
+        file_dialog.open(FileDialog::Mode::Save, "Export Picture Tube", {"psptube"}, name + ".psptube");
+        ImGui::CloseCurrentPopup();
+    } else if (cancel) {
+        ImGui::CloseCurrentPopup();
+    }
+    ImGui::EndPopup();
 }

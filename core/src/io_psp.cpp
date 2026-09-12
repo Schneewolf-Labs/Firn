@@ -2161,6 +2161,39 @@ bool adjustment_from_bytes(const uint8_t* data, size_t size, Adjustment& out) {
     return true;
 }
 
+std::vector<uint8_t> save_psp_tube_to_memory(const Document& doc, const TubeInfo& info) {
+    std::vector<uint8_t> data = save_psp_to_memory(doc);
+    // Appending is enough: the tube block is a top level block like any
+    // other and the original looks for it wherever it sits.
+    Writer t;
+    t.u32(30); t.u16(0);
+    t.i32(info.step); t.i32(info.columns); t.i32(info.rows); t.i32(info.total);
+    t.i32(info.placement); t.i32(info.selection);
+    Writer b;
+    b.block(kTubeBlock, t.out);
+    data.insert(data.end(), b.out.begin(), b.out.end());
+    return data;
+}
+
+bool save_psp_tube(const Document& doc, const TubeInfo& info, const std::string& path, std::string* err) {
+    if (info.columns < 1 || info.rows < 1 || info.columns > 1000 || info.rows > 1000) {
+        if (err) *err = "a tube needs between 1 and 1000 columns and rows";
+        return false;
+    }
+    if (doc.width() % info.columns || doc.height() % info.rows) {
+        if (err) *err = "the image must divide evenly into the cell grid: " + std::to_string(doc.width()) + "x" +
+                        std::to_string(doc.height()) + " is not a multiple of " + std::to_string(info.columns) + "x" + std::to_string(info.rows);
+        return false;
+    }
+    const std::vector<uint8_t> data = save_psp_tube_to_memory(doc, info);
+    std::ofstream f(path, std::ios::binary);
+    if (!f || !f.write(reinterpret_cast<const char*>(data.data()), static_cast<std::streamsize>(data.size()))) {
+        if (err) *err = "cannot write " + path;
+        return false;
+    }
+    return true;
+}
+
 bool save_psp(const Document& doc, const std::string& path, std::string* err) {
     const std::vector<uint8_t> data = save_psp_to_memory(doc);
     std::ofstream f(path, std::ios::binary);

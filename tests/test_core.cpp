@@ -3689,6 +3689,46 @@ static void test_openraster_lossless() {
 // Break, join and reverse: the structural half of node editing. What they
 // must not do is move the curve, so each one is checked by flattening the
 // path before and after and comparing the outline it draws.
+// Firn read picture tubes long before it could write one. A tube is the
+// native format plus one block saying how the image divides into cells.
+static void test_picture_tube_export() {
+    Document d(64, 48);
+    Layer& b = d.add_layer("Background");
+    b.background = true;
+    b.pixels.fill({255, 255, 255, 0});
+    for (int y = 0; y < 48; ++y)
+        for (int x = 0; x < 64; ++x)
+            b.pixels.set(x, y, {static_cast<uint8_t>(x / 16 * 60), static_cast<uint8_t>(y / 16 * 80), 40, 255});
+
+    io::TubeInfo t;
+    t.step = 20; t.columns = 4; t.rows = 3; t.total = 12; t.placement = 2; t.selection = 3;
+    const std::string path = tmp_path("firn_test.psptube");
+    std::string err;
+    CHECK(io::save_psp_tube(d, t, path, &err));
+
+    const std::optional<io::TubeInfo> got = io::load_psp_tube_info(path);
+    CHECK(got.has_value());
+    CHECK(got->step == 20 && got->columns == 4 && got->rows == 3);
+    CHECK(got->total == 12 && got->placement == 2 && got->selection == 3);
+
+    // The pixels have to survive too, or the tube has no cells to stamp.
+    std::vector<std::string> warn;
+    auto back = io::load_document(path, &err, &warn);
+    CHECK(back && back->width() == 64 && back->height() == 48);
+    auto same = [](Color a, Color c) { return a.r == c.r && a.g == c.g && a.b == c.b && a.a == c.a; };
+    CHECK(same(back->composite().get(8, 8), b.pixels.get(8, 8)));
+    CHECK(same(back->composite().get(56, 40), b.pixels.get(56, 40)));
+
+    // A grid the image does not divide by would give cells of uneven size.
+    io::TubeInfo bad = t;
+    bad.columns = 5;
+    CHECK(!io::save_psp_tube(d, bad, tmp_path("firn_test_bad.psptube"), &err));
+    CHECK(err.find("divide evenly") != std::string::npos);
+    bad = t; bad.rows = 0;
+    CHECK(!io::save_psp_tube(d, bad, tmp_path("firn_test_bad.psptube"), &err));
+    std::remove(path.c_str());
+}
+
 static void test_path_editing() {
     // The points a path flattens to, rounded and sorted, so the same outline
     // walked from a different node or in the other direction compares equal.
@@ -4108,6 +4148,7 @@ int main() {
     test_layer_style_scales_with_the_image();
     test_clipping_masks();
     test_openraster_lossless();
+    test_picture_tube_export();
     test_path_editing();
     test_openraster_vectors();
     test_psp_vector_compat();

@@ -610,6 +610,34 @@ def test_node_editing(f):
     f.do("file.close")
 
 
+def test_tube_export(f):
+    section("picture tube export")
+    tube=os.path.join(OUT,"exported.psptube")
+    f.do("file.new",width=120,height=80,color="#ffffff")
+    f.do("draw.rectangle",x=5,y=5,width=20,height=20,fill="#cc4422")
+    check(f.refused("file.export_tube",path=tube,columns=7,rows=2),"a grid the image does not divide by is refused")
+    check(not os.path.exists(tube),"a refused export writes nothing")
+    f.do("file.export_tube",path=tube,columns=3,rows=2,cells=5,step=30,placement="continuous",selection="incremental")
+    check(os.path.exists(tube),"the tube file is written")
+    f.do("file.close")
+    f.do("file.open",path=tube)
+    back=os.path.join(OUT,"tube_back.png")
+    f.do("file.save_as",path=back)
+    check(png_size(back)==(120,80),"the tube reopens at its own size")
+    check(png_pixel(back,10,10)[:3]==(204,68,34),"the tube's artwork survives the round trip")
+    # The original's AutoTuber script writes a tube this way.
+    f.do("file.new",width=60,height=60,color="#ffffff")
+    f.do("draw.rectangle",x=0,y=0,width=30,height=30,fill="#2288dd")
+    reply=f.send('do ExportTube ' + json.dumps({"FileName":"firn_test_tube","NumberOfCellsAcross":2,"NumberOfCellsDown":2,
+                                                "TotalNumberOfCells":4,"StepSize":30,"PlacementMode":"Random","SelectionMode":"Incremental"},separators=(',',':')))
+    written=json.loads(reply).get("Path","")
+    check(written.endswith("firn_test_tube.psptube") and os.path.exists(written),"ExportTube writes into the tube folder Firn scans")
+    if os.path.exists(written):
+        os.remove(written)
+    f.do("file.close")
+    f.do("file.close")
+
+
 def test_atomic_batches(f):
     section("atomic batches")
     out=os.path.join(OUT,"batch.png")
@@ -731,7 +759,7 @@ def main():
         drive.recv_line(sock)
         f = Firn(sock)
         for case in (test_ui_scaling, test_api_surface, test_documents, test_view, test_layers, test_selection,
-                     test_painting_and_materials, test_edit_actions, test_tools_and_history, test_image_geometry, test_clipping_masks, test_background_work, test_lock_transparency, test_pass_through_groups, test_blend_ranges, test_metadata, test_drawing_api, test_node_editing, test_atomic_batches, test_discovery_v2):
+                     test_painting_and_materials, test_edit_actions, test_tools_and_history, test_image_geometry, test_clipping_masks, test_background_work, test_lock_transparency, test_pass_through_groups, test_blend_ranges, test_metadata, test_drawing_api, test_node_editing, test_tube_export, test_atomic_batches, test_discovery_v2):
             case(f)
         sock.sendall(b"quit\n")
         sock.settimeout(10.0)

@@ -191,9 +191,10 @@ struct App {
 
     // Dialog state
     FileDialog file_dialog;
-    enum class PendingFileOp { None, Open, SaveAs, LoadSelection, SaveSelection, LoadPalette, SavePalette, SavePdf, LoadSwatches, SaveSwatches, LoadProfile, ImportTheme, ExportTheme };
+    enum class PendingFileOp { None, Open, SaveAs, LoadSelection, SaveSelection, LoadPalette, SavePalette, SavePdf, LoadSwatches, SaveSwatches, LoadProfile, ImportTheme, ExportTheme, ExportTube };
     PendingFileOp file_op = PendingFileOp::None;
     bool show_new_dialog = false;
+    bool show_tube_export_dialog = false;
     // Adjustment / effect dialogs with live preview (ui/Adjust.cpp)
     enum class Adj { None, BrightnessContrast, Curves, Gamma, Levels, Threshold, ChannelMixer, Colorize, HSL,
                      Average, Gaussian, Posterize, Solarize, UnsharpMask, Median, MotionBlur, Mosaic, AddNoise, DropShadow,
@@ -558,6 +559,10 @@ struct App {
     firn::io::TubeInfo tube_info;
     std::string tube_loaded_path;
     void ensure_tubes();
+    // File > Export > Picture Tube. Writes the current image as a tube sheet
+    // with the given cell grid; the status line carries the refusal.
+    bool export_tube(const std::string& path, const firn::io::TubeInfo& info);
+    void draw_tube_export_dialog();
     bool load_tube(int index);
     // Text tool
     std::vector<firn::text::FontInfo> fonts;

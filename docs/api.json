@@ -83,6 +83,65 @@
       "batch_safe": false,
       "input_schema": {
         "additionalProperties": false,
+        "properties": {
+          "cells": {
+            "description": "How many of the grid's cells hold artwork",
+            "type": "number",
+            "x-default-description": "columns x rows"
+          },
+          "columns": {
+            "default": 1,
+            "description": "Cells across; the width must divide by it",
+            "type": "number"
+          },
+          "path": {
+            "description": "where to write the .psptube",
+            "type": "string"
+          },
+          "placement": {
+            "default": "random",
+            "description": "How stamps are spaced along the stroke",
+            "enum": [
+              "random",
+              "continuous"
+            ],
+            "type": "string"
+          },
+          "rows": {
+            "default": 1,
+            "description": "Cells down; the height must divide by it",
+            "type": "number"
+          },
+          "selection": {
+            "default": "random",
+            "description": "Which cell each stamp takes",
+            "enum": [
+              "random",
+              "incremental",
+              "angular",
+              "pressure",
+              "velocity"
+            ],
+            "type": "string"
+          },
+          "step": {
+            "description": "Stamp spacing in pixels",
+            "type": "number",
+            "x-default-description": "the cell size"
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "type": "object"
+      },
+      "name": "file.export_tube",
+      "summary": "Write the image as a picture tube sheet"
+    },
+    {
+      "batch_safe": false,
+      "input_schema": {
+        "additionalProperties": false,
         "properties": {},
         "required": [],
         "type": "object"

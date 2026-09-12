@@ -12,7 +12,7 @@ machine-readable JSON Schema, one schema per action.
 Replies are JSON. Success is `{"ok":true}` and whatever the action returns;
 a refusal comes back as a message and a non-zero exit from `firn-cli`.
 
-66 actions and 161 inherited command names.
+67 actions and 161 inherited command names.
 
 ## Documents
 
@@ -23,6 +23,23 @@ Close the current image, discarding changes.
 Batch-safe: no.
 
 Takes no parameters.
+
+
+### `file.export_tube`
+
+Write the image as a picture tube sheet.
+
+Batch-safe: no.
+
+| parameter | type | required | default | meaning |
+|---|---|---|---|---|
+| `path` | string | yes |  | where to write the .psptube |
+| `columns` | number | no | `1` | Cells across; the width must divide by it |
+| `rows` | number | no | `1` | Cells down; the height must divide by it |
+| `cells` | number | no | columns x rows | How many of the grid's cells hold artwork |
+| `step` | number | no | the cell size | Stamp spacing in pixels |
+| `placement` | string (random, continuous) | no | `"random"` | How stamps are spaced along the stroke |
+| `selection` | string (random, incremental, angular, pressure, velocity) | no | `"random"` | Which cell each stamp takes |
 
 
 ### `file.new`

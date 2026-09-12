@@ -212,7 +212,9 @@ docs/    notes on the original: command inventory, module mapping, FORMAT.md
   gradients, styled lines, patterns) are scanned lazily by `App::ensure_*`
   from `~/.config/firn/{tubes,brushes,textures,shapes,gradients,lines,patterns}`,
   the `FIRN_*_DIRS` env vars, the Preferences folders, and the gitignored
-  sample folders under `WindowsInstall/` in a development build.
+  sample folders under `WindowsInstall/` in a development build. Tubes are
+  the one kind Firn also writes (`io::save_psp_tube`, File > Export >
+  Picture Tube).
 - **Vector layers** (`LayerType::Vector`) hold `vec::Object`s
   (`core/include/firn/vector.h`) and a rendered pixel cache. Every edit goes
   through `VectorEditCommand` (before/after object lists); tools mutate

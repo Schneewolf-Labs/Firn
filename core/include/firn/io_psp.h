@@ -69,6 +69,11 @@ struct TubeInfo {
 };
 std::optional<TubeInfo> load_psp_tube_info(const uint8_t* data, size_t size);
 std::optional<TubeInfo> load_psp_tube_info(const std::string& path);
+// Writes a .PspTube: the document as the native format plus the tube block.
+// The image is the cell grid, so its size must divide evenly by columns and
+// rows; false with `err` set when it does not.
+bool save_psp_tube(const Document& doc, const TubeInfo& info, const std::string& path, std::string* err = nullptr);
+std::vector<uint8_t> save_psp_tube_to_memory(const Document& doc, const TubeInfo& info);
 
 // The full-size composite the original stored in the file, if it has one
 // in channel (non-JPEG) form. Used by tests to check our compositing.

@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <filesystem>
 #include <functional>
 #include <map>
 #include <memory>
@@ -391,6 +392,33 @@ std::string App::do_command(const std::string& name, const Value& p, bool* ok) {
     if (name == "ClearSelection") { if (auto e = need_doc(); !e.empty()) return e; clear_selection(); return json::dump(result_ok()); }
     if (name == "PasteAsNewLayer") { if (auto e = need_doc(); !e.empty()) return e; paste_as_new_layer(); return json::dump(result_ok()); }
     if (name == "PasteAsNewImage") { paste_as_new_image(); return json::dump(result_ok()); }
+
+    if (name == "ExportTube") {
+        if (auto e = need_doc(); !e.empty()) return e;
+        // FileName is a bare name: the original writes into its own tube
+        // folder, so this writes into the one Firn scans.
+        io::TubeInfo t;
+        t.columns = std::clamp(static_cast<int>(num("NumberOfCellsAcross", 1)), 1, 1000);
+        t.rows = std::clamp(static_cast<int>(num("NumberOfCellsDown", 1)), 1, 1000);
+        t.total = std::clamp(static_cast<int>(num("TotalNumberOfCells", t.columns * t.rows)), 1, t.columns * t.rows);
+        t.step = std::clamp(static_cast<int>(num("StepSize", std::max(doc->width() / t.columns, doc->height() / t.rows))), 1, 10000);
+        t.placement = p.get("PlacementMode").as_string("Random") == "Continuous" ? 2 : 1;
+        static const char* kModes[] = {"Random", "Incremental", "Angular", "Pressure", "Velocity"};
+        const std::string sel = p.get("SelectionMode").as_string("Random");
+        t.selection = 1;
+        for (int i = 0; i < 5; ++i) if (sel == kModes[i]) t.selection = i + 1;
+        std::string file = p.get("FileName").as_string("Tube");
+        if (file.size() < 9 || file.compare(file.size() - 8, 8, ".psptube") != 0) file += ".psptube";
+        std::error_code ec;
+        const std::filesystem::path dir = std::filesystem::path(Config::directory()) / "tubes";
+        std::filesystem::create_directories(dir, ec);
+        const std::string path = (dir / file).string();
+        if (!p.get("OverwriteIfExists").as_bool(true) && std::filesystem::exists(path, ec)) return "ExportTube: " + path + " already exists";
+        if (!export_tube(path, t)) return status;
+        Value r = result_ok();
+        r.set("Path", Value::string(path));
+        return json::dump(r);
+    }
 
     // --- vector objects ---
     // The original's own scripts convert shapes and text to paths, read the

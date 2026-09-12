@@ -270,7 +270,9 @@ against Krita in both directions. In priority order:
       `ConvertToPath`, `ReturnVectorObjectProperties` and `NodeEditAddPath`
       now run, which is what the original's VectorMergeSelected script is
       built out of.
-- [ ] Export Picture Tube: Firn reads them and cannot write one.
+- [x] Export Picture Tube. File > Export > Picture Tube, the
+      `file.export_tube` action, and the original's `ExportTube` script
+      command, which is what its AutoTuber script calls.
 - [ ] Keep the camera's embedded thumbnail rather than dropping it.
 
 Deliberately not in this release: smart objects, content-aware scale, the
