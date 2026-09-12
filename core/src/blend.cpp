@@ -1,9 +1,54 @@
 #include "firn/blend.h"
 
+#include "firn/json.h"
+
 #include <algorithm>
 #include <cmath>
 
 namespace firn {
+
+namespace {
+json::Value range_json(const BlendRange& r) {
+    json::Value a = json::Value::array();
+    for (uint8_t v : {r.low0, r.low1, r.high1, r.high0}) a.push(json::Value::number(v));
+    return a;
+}
+BlendRange range_from(const json::Value& v, const BlendRange& def) {
+    if (!v.is_array() || v.size() < 4) return def;
+    BlendRange r;
+    r.low0 = static_cast<uint8_t>(std::clamp(static_cast<int>(v[0].as_number(0)), 0, 255));
+    r.low1 = static_cast<uint8_t>(std::clamp(static_cast<int>(v[1].as_number(0)), 0, 255));
+    r.high1 = static_cast<uint8_t>(std::clamp(static_cast<int>(v[2].as_number(255)), 0, 255));
+    r.high0 = static_cast<uint8_t>(std::clamp(static_cast<int>(v[3].as_number(255)), 0, 255));
+    return r;
+}
+}  // namespace
+
+json::Value blend_ranges_json(const BlendRanges& b) {
+    json::Value v = json::Value::object();
+    v.set("channel", json::Value::number(static_cast<int>(b.channel)));
+    v.set("source", range_json(b.source));
+    v.set("under", range_json(b.under));
+    return v;
+}
+
+BlendRanges blend_ranges_from_json(const json::Value& v) {
+    BlendRanges b;
+    b.channel = static_cast<BlendRanges::Channel>(std::clamp(static_cast<int>(v.get("channel").as_number(0)), 0, 3));
+    b.source = range_from(v.get("source"), b.source);
+    b.under = range_from(v.get("under"), b.under);
+    return b;
+}
+
+const char* blend_channel_name(BlendRanges::Channel c) {
+    switch (c) {
+        case BlendRanges::Channel::Red: return "Red";
+        case BlendRanges::Channel::Green: return "Green";
+        case BlendRanges::Channel::Blue: return "Blue";
+        default: break;
+    }
+    return "Gray";
+}
 
 const char* blend_mode_name(BlendMode m) {
     static const char* names[] = {"Normal", "Darken", "Lighten", "Hue", "Saturation", "Color", "Luminance",

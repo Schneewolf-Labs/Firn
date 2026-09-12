@@ -12,7 +12,7 @@ machine-readable JSON Schema, one schema per action.
 Replies are JSON. Success is `{"ok":true}` and whatever the action returns;
 a refusal comes back as a message and a non-zero exit from `firn-cli`.
 
-56 actions and 161 inherited command names.
+57 actions and 161 inherited command names.
 
 ## Documents
 
@@ -815,6 +815,20 @@ Batch-safe: no.
 | parameter | type | required | default | meaning |
 |---|---|---|---|---|
 | `steps` | number | no | `1` | positive is up |
+
+
+### `layer.blend_ranges`
+
+Limit the active layer to a range of tones, its own or the ones below it.
+
+Batch-safe: no.
+
+| parameter | type | required | default | meaning |
+|---|---|---|---|---|
+| `channel` | string (gray, red, green, blue) | no | `"gray"` | which value the stops are read from |
+| `this_layer` | string | no |  | four stops in 0..255, as "low0 low1 high1 high0": hidden, fading in, fading out, hidden |
+| `underlying` | string | no |  | the same four stops, read from what is composited below |
+| `reset` | boolean | no | `false` | put both ranges back to the full 0..255 |
 
 
 ### `layer.delete`

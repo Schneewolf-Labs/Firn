@@ -67,6 +67,15 @@ Layers can be grouped (Layers > New Layer Group) and carry masks (Layers >
 New Mask Layer); press Edit next to a mask to paint on it in grayscale with
 any brush.
 
+Layer Properties has Blend Ranges, which limits a layer to a range of tones
+rather than a shape: either its own tones, or the tones of what is under it.
+Each range has four stops. Below the first the layer is hidden, by the second
+it is fully shown, and past the third it fades back out to hidden at the
+fourth, so leaving a pair together gives a hard edge and moving them apart a
+soft one. The stops can read lightness or a single channel. Dropping a warm
+wash over a photograph and setting the underlying range to show it only in
+the highlights takes a few seconds and no mask at all.
+
 A layer can also be clipped to the one below it (Layers > Create Clipping
 Mask, or Ctrl+Alt+G): it then shows only where that layer does, which is how
 a texture, a gradient or a tonal correction gets confined to one shape

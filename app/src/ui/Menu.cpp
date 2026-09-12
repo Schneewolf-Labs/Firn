@@ -910,6 +910,38 @@ void App::draw_dialogs() {
         if (ImGui::SliderFloat("Opacity", &op, 0.0f, 100.0f, "%.0f%%")) p.opacity = op / 100.0f;
         ImGui::SetNextItemWidth(160);
         blend_combo("Blend mode", p.blend);
+        if (ImGui::CollapsingHeader("Blend Ranges")) {
+            ImGui::TextDisabled("Limit the layer to a range of tones instead of painting a mask.");
+            ImGui::SetNextItemWidth(160);
+            if (ImGui::BeginCombo("Channel", blend_channel_name(p.ranges.channel))) {
+                for (int c = 0; c < 4; ++c) {
+                    const auto ch = static_cast<BlendRanges::Channel>(c);
+                    if (ImGui::Selectable(blend_channel_name(ch), p.ranges.channel == ch)) p.ranges.channel = ch;
+                }
+                ImGui::EndCombo();
+            }
+            // Four stops per range: hidden below the first, fully shown from
+            // the second to the third, hidden again past the fourth. Stops
+            // stay in order so a range never turns inside out.
+            auto range_row = [](const char* label, const char* tip, BlendRange& r) {
+                int v[4] = {r.low0, r.low1, r.high1, r.high0};
+                ImGui::SetNextItemWidth(260);
+                const bool changed = ImGui::DragInt4(label, v, 1.0f, 0, 255);
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s\nHidden, fading in, fading out, hidden.", tip);
+                if (changed) {
+                    for (int& x : v) x = std::clamp(x, 0, 255);
+                    for (int i = 1; i < 4; ++i) v[i] = std::max(v[i], v[i - 1]);
+                    r.low0 = static_cast<uint8_t>(v[0]); r.low1 = static_cast<uint8_t>(v[1]);
+                    r.high1 = static_cast<uint8_t>(v[2]); r.high0 = static_cast<uint8_t>(v[3]);
+                }
+                return changed;
+            };
+            range_row("This layer", "Which of this layer's own tones show.", p.ranges.source);
+            range_row("Underlying", "Which tones underneath let this layer show.", p.ranges.under);
+            ImGui::BeginDisabled(p.ranges.identity());
+            if (ImGui::Button("Reset Ranges")) p.ranges = BlendRanges{};
+            ImGui::EndDisabled();
+        }
         if (ImGui::Button("OK") || enter()) {
             if (doc && active_layer() >= 0) layer_set_props(doc->props(active_layer()), p);
             ImGui::CloseCurrentPopup();

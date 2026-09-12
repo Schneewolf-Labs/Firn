@@ -358,6 +358,30 @@ def test_clipping_masks(f):
     f.do("file.close")
 
 
+def test_blend_ranges(f):
+    section("blend ranges")
+    f.do("file.new", width=32, height=16, color="#404040")
+    f.do("layer.new")
+    check(f.layers()[1].get("blend_ranges") is None, "a new layer has no ranges")
+    f.do("layer.blend_ranges", underlying="64 64 255 255")
+    r = f.layers()[1].get("blend_ranges")
+    check(r is not None and r["under"] == [64, 64, 255, 255], "a range can be set from a script")
+    check(r["source"] == [0, 0, 255, 255], "and leaves the other one alone")
+    f.do("layer.blend_ranges", channel="blue", this_layer="10 20 200 250")
+    r = f.layers()[1]["blend_ranges"]
+    check(r["channel"] == 3, "the channel can be chosen")
+    check(r["source"] == [10, 20, 200, 250], "and the layer's own range set")
+    check(r["under"] == [64, 64, 255, 255], "without disturbing the first")
+    # Stops out of order are sorted rather than accepted as an inside-out range.
+    f.do("layer.blend_ranges", this_layer="200 10 30 20")
+    check(f.layers()[1]["blend_ranges"]["source"] == [200, 200, 200, 200], "stops are kept in order")
+    check(f.refused("layer.blend_ranges", this_layer="10 20"), "a range needs four numbers")
+    f.do("edit.undo")
+    f.do("layer.blend_ranges", reset=True)
+    check(f.layers()[1].get("blend_ranges") is None, "and they can be reset")
+    f.do("file.close")
+
+
 def test_metadata(f):
     section("metadata")
     out = os.path.join(OUT, "meta.png")
@@ -536,7 +560,7 @@ def main():
         drive.recv_line(sock)
         f = Firn(sock)
         for case in (test_api_surface, test_documents, test_view, test_layers, test_selection,
-                     test_painting_and_materials, test_edit_actions, test_tools_and_history, test_image_geometry, test_clipping_masks, test_metadata, test_drawing_api, test_atomic_batches, test_discovery_v2):
+                     test_painting_and_materials, test_edit_actions, test_tools_and_history, test_image_geometry, test_clipping_masks, test_blend_ranges, test_metadata, test_drawing_api, test_atomic_batches, test_discovery_v2):
             case(f)
         sock.sendall(b"quit\n")
         sock.settimeout(10.0)

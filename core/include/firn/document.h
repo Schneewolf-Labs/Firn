@@ -38,6 +38,9 @@ struct Layer {
     // shows only where that layer has alpha, and the whole unit then blends
     // with the layer below's own opacity, blend mode and mask.
     bool clipped = false;
+    // Limits the layer to a range of its own tones, or of the tones below
+    // it, without a mask (Layer Properties > Blend Ranges).
+    BlendRanges ranges;
     Image pixels;           // empty for groups; the rendered cache for vector layers
     // 16-bit layers keep their true pixels here; `pixels` is derived from it
     // for display. Shared between snapshots, so never modify in place:
@@ -70,6 +73,7 @@ struct LayerProps {
     float opacity = 1.0f;
     BlendMode blend = BlendMode::Normal;
     bool clipped = false;
+    BlendRanges ranges;
     bool operator==(const LayerProps&) const = default;
 };
 

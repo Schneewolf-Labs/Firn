@@ -248,9 +248,12 @@ Ideas worth having, each written independently from the idea rather than
 from any implementation, in the order they pay off.
 
 - [x] Clipping masks (`Layer::clipped`, `Document::composite_clip_unit`)
-- [ ] Blend If: per-layer sliders gating where a layer shows by its own or
-      the underlying luminance. Compositing is already per-pixel, so this is
-      a gate in the same loop, and sky replacement falls out of it
+- [x] Blend ranges, which turned out to be the original's feature too: its
+      layer info has a slot for five of them, though no sample uses it, so
+      Firn keeps its own in the stash (docs/FORMAT.md)
+- [ ] Write blend ranges into the original's own slot, once the 8-byte
+      layout is learned by setting one in the original under Wine and
+      diffing the layer info chunk
 - [ ] Pass-through group mode, so an adjustment layer inside a group can
       reach what is below the group
 - [ ] Gradient map adjustment: map luminance through a gradient. The

@@ -7,6 +7,15 @@ section into the next version.
 ## Unreleased
 
 ### Added
+- Blend ranges (Layer Properties > Blend Ranges). A layer can be limited to
+  a range of tones instead of a shape: its own tones, or the tones of what
+  is under it. Four stops per range give a hard or a soft edge, and the
+  stops can read lightness or one channel. Dropping a warm wash on a
+  photograph and showing it only in the highlights needs no mask at all.
+  `layer.blend_ranges` does the same from a script. Both formats keep them.
+  The original has a slot for blend ranges that no sample file uses, so
+  Firn keeps its own in the stash rather than guess that layout
+  (docs/FORMAT.md).
 - Clipping masks. A layer can be clipped to the one below it (Layers >
   Create Clipping Mask, Ctrl+Alt+G) and then shows only where that layer
   does, so a texture, gradient or tonal correction stays inside one shape

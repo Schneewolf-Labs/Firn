@@ -130,7 +130,7 @@ void Document::rasterize_vector_layer(size_t i) {
 
 LayerProps Document::props(size_t i) const {
     const Layer& L = layer(i);
-    return {L.name, L.visible, L.opacity, L.blend, L.clipped};
+    return {L.name, L.visible, L.opacity, L.blend, L.clipped, L.ranges};
 }
 
 void Document::set_props(size_t i, const LayerProps& p) {
@@ -140,6 +140,7 @@ void Document::set_props(size_t i, const LayerProps& p) {
     L.opacity = p.opacity;
     L.blend = p.blend;
     L.clipped = p.clipped;
+    L.ranges = p.ranges;
     touch();
 }
 
@@ -173,7 +174,8 @@ namespace {
 void blend_rows(Image& dst, int dox, int doy, const Image& src, int sox, int soy, const Layer& L, const raster::Rect& r) {
     const float lo = std::clamp(L.opacity, 0.0f, 1.0f);
     const bool masked = L.has_mask() && L.mask_enabled;
-    const bool fast = !masked && L.blend == BlendMode::Normal && lo >= 1.0f;
+    const bool ranged = !L.ranges.identity();
+    const bool fast = !masked && !ranged && L.blend == BlendMode::Normal && lo >= 1.0f;
     uint8_t* d = dst.data();
     const uint8_t* s = src.data();
     const int dw = dst.width(), sw = src.width();
@@ -193,10 +195,20 @@ void blend_rows(Image& dst, int dox, int doy, const Image& src, int sox, int soy
                 d[di + 3] = static_cast<uint8_t>(oa);
                 continue;
             }
+            // The mask and the blend ranges both scale the source alpha
+            // before the blend, so they compose the way two masks would.
+            float cover = 1.0f;
             if (masked) {
                 const uint8_t m = L.mask.at(x, y);
                 if (m == 0) continue;
-                uint8_t px[4] = {s[si], s[si + 1], s[si + 2], static_cast<uint8_t>(s[si + 3] * m / 255)};
+                cover = m / 255.0f;
+            }
+            if (ranged) {
+                cover *= L.ranges.factor(s + si, d + di);
+                if (cover <= 0.0f) continue;
+            }
+            if (cover < 1.0f) {
+                uint8_t px[4] = {s[si], s[si + 1], s[si + 2], static_cast<uint8_t>(s[si + 3] * cover + 0.5f)};
                 blend::pixel(d + di, px, lo, L.blend, L.blend == BlendMode::Dissolve ? blend::position_hash(x, y) : 0u);
             } else {
                 blend::pixel(d + di, s + si, lo, L.blend, L.blend == BlendMode::Dissolve ? blend::position_hash(x, y) : 0u);

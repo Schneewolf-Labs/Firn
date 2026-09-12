@@ -346,6 +346,43 @@ std::vector<Action> build() {
             app.layer_set_props(before, after);
             return ok_json();
         });
+    add("layer.blend_ranges", "Limit the active layer to a range of tones, its own or the ones below it",
+        {{"channel", "string", "which value the stops are read from", false, "gray,red,green,blue", "gray"},
+         {"this_layer", "string", "four stops in 0..255, as \"low0 low1 high1 high0\": hidden, fading in, fading out, hidden"},
+         {"underlying", "string", "the same four stops, read from what is composited below"},
+         {"reset", "bool", "put both ranges back to the full 0..255", false, nullptr, "false"}},
+        [](App& app, const Value& p, bool* ok) {
+            std::string e;
+            if (!need_doc(app, ok, e)) return e;
+            const int i = app.active_layer();
+            if (i < 0) return fail(ok, "no active layer");
+            firn::LayerProps before = app.doc->props(i), after = before;
+            if (flag(p, "reset", false)) after.ranges = firn::BlendRanges{};
+            if (p.find("channel")) {
+                const std::string c = str(p, "channel", "gray");
+                after.ranges.channel = c == "red"     ? firn::BlendRanges::Channel::Red
+                                       : c == "green" ? firn::BlendRanges::Channel::Green
+                                       : c == "blue"  ? firn::BlendRanges::Channel::Blue
+                                                      : firn::BlendRanges::Channel::Gray;
+            }
+            // Four whitespace-separated stops, kept in order so a range
+            // cannot turn inside out.
+            auto stops = [&](const char* key, firn::BlendRange& r) {
+                if (!p.find(key)) return true;
+                int v[4] = {0, 0, 255, 255};
+                const std::string text = str(p, key);
+                if (std::sscanf(text.c_str(), "%d %d %d %d", &v[0], &v[1], &v[2], &v[3]) != 4) return false;
+                for (int& x : v) x = std::clamp(x, 0, 255);
+                for (int k = 1; k < 4; ++k) v[k] = std::max(v[k], v[k - 1]);
+                r.low0 = static_cast<uint8_t>(v[0]); r.low1 = static_cast<uint8_t>(v[1]);
+                r.high1 = static_cast<uint8_t>(v[2]); r.high0 = static_cast<uint8_t>(v[3]);
+                return true;
+            };
+            if (!stops("this_layer", after.ranges.source)) return fail(ok, "this_layer needs four numbers, such as \"0 0 128 192\"");
+            if (!stops("underlying", after.ranges.under)) return fail(ok, "underlying needs four numbers, such as \"0 0 128 192\"");
+            app.layer_set_props(before, after);
+            return ok_json();
+        });
     add("layer.promote_background", "Turn the Background layer into an ordinary one", {},
         [](App& app, const Value&, bool* ok) { std::string e; if (!need_doc(app, ok, e)) return e; app.layer_promote_background(); return ok_json(); });
 

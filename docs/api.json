@@ -711,6 +711,42 @@
       "batch_safe": false,
       "input_schema": {
         "additionalProperties": false,
+        "properties": {
+          "channel": {
+            "default": "gray",
+            "description": "which value the stops are read from",
+            "enum": [
+              "gray",
+              "red",
+              "green",
+              "blue"
+            ],
+            "type": "string"
+          },
+          "reset": {
+            "default": false,
+            "description": "put both ranges back to the full 0..255",
+            "type": "boolean"
+          },
+          "this_layer": {
+            "description": "four stops in 0..255, as \"low0 low1 high1 high0\": hidden, fading in, fading out, hidden",
+            "type": "string"
+          },
+          "underlying": {
+            "description": "the same four stops, read from what is composited below",
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "name": "layer.blend_ranges",
+      "summary": "Limit the active layer to a range of tones, its own or the ones below it"
+    },
+    {
+      "batch_safe": false,
+      "input_schema": {
+        "additionalProperties": false,
         "properties": {},
         "required": [],
         "type": "object"

@@ -361,6 +361,7 @@ std::string Driver::state_json(App& app) const {
             e.set("depth", Value::number(L.depth));
             e.set("mask", Value::boolean(L.has_mask()));
             e.set("clipped", Value::boolean(L.clipped));
+            if (!L.ranges.identity()) e.set("blend_ranges", firn::blend_ranges_json(L.ranges));
             layers.push(std::move(e));
         }
         d.set("layers", std::move(layers));

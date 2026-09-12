@@ -368,7 +368,7 @@ static void test_layer_structure_commands() {
     r2.visible = false;
     CommandStack hist;
 
-    hist.run(doc, std::make_unique<LayerPropertiesCommand>(1, doc.props(1), LayerProps{"Renamed", true, 0.5f, BlendMode::Multiply}));
+    hist.run(doc, std::make_unique<LayerPropertiesCommand>(1, doc.props(1), LayerProps{"Renamed", true, 0.5f, BlendMode::Multiply, false, {}}));
     CHECK(doc.layer(1).name == "Renamed" && doc.layer(1).opacity == 0.5f && doc.layer(1).blend == BlendMode::Multiply);
     hist.undo(doc);
     CHECK(doc.layer(1).name == "Raster 1" && doc.layer(1).opacity == 1.0f);
@@ -2900,6 +2900,93 @@ static void test_icc() {
     std::remove(png.c_str()); std::remove(jpg.c_str());
 }
 
+// Blend ranges: a layer limited to a range of its own tones, or of the
+// tones beneath it, without painting a mask.
+static void test_blend_ranges() {
+    // A black-to-white ramp under a flat red layer.
+    Document doc(256, 1);
+    Layer& base = doc.add_layer("Base");
+    for (int x = 0; x < 256; ++x) base.pixels.set(x, 0, {static_cast<uint8_t>(x), static_cast<uint8_t>(x), static_cast<uint8_t>(x), 255});
+    Layer& top = doc.add_layer("Top");
+    top.pixels = Image(256, 1, {255, 0, 0, 255});
+
+    CHECK(top.ranges.identity());
+    Image f = doc.composite();
+    CHECK(f.get(10, 0).r == 255 && f.get(200, 0).r == 255);   // nothing limited yet
+
+    // Hide the layer where what is under it is dark, with a hard edge.
+    top.ranges.under.low0 = 64;
+    top.ranges.under.low1 = 64;
+    doc.touch();
+    f = doc.composite();
+    CHECK(f.get(10, 0).r == 10 && f.get(10, 0).g == 10);      // the base shows through
+    CHECK(f.get(200, 0).r == 255 && f.get(200, 0).g == 0);    // the red still covers
+
+    // Splitting the two stops ramps it in instead.
+    top.ranges.under.low1 = 192;
+    doc.touch();
+    f = doc.composite();
+    const int mid = f.get(128, 0).r;
+    CHECK(mid > 128 && mid < 255 && f.get(128, 0).g > 0 && f.get(128, 0).g < 128);
+
+    // The layer's own tones, rather than what is below.
+    top.ranges = BlendRanges{};
+    for (int x = 0; x < 256; ++x) top.pixels.set(x, 0, {static_cast<uint8_t>(x), static_cast<uint8_t>(x), static_cast<uint8_t>(x), 255});
+    top.ranges.source.high1 = 128;
+    top.ranges.source.high0 = 128;
+    doc.touch();
+    f = doc.composite();
+    CHECK(f.get(60, 0).r == 60);     // kept: the layer's own value is under the stop
+    CHECK(f.get(200, 0).r == 200);   // dropped, and the base happens to match
+
+    // One channel instead of lightness.
+    Document d2(2, 1);
+    Layer& b2 = d2.add_layer("B");
+    b2.pixels.set(0, 0, {0, 0, 0, 255});
+    b2.pixels.set(1, 0, {0, 0, 255, 255});
+    Layer& t2 = d2.add_layer("T");
+    t2.pixels = Image(2, 1, {255, 255, 0, 255});
+    t2.ranges.channel = BlendRanges::Channel::Blue;
+    t2.ranges.under.low0 = 128;
+    t2.ranges.under.low1 = 128;
+    d2.touch();
+    Image g = d2.composite();
+    CHECK(g.get(0, 0).r == 0);       // no blue underneath, so the layer is hidden
+    CHECK(g.get(1, 0).r == 255);     // blue underneath, so it shows
+
+    // A range composes with the layer's mask rather than replacing it.
+    t2.mask = mask::rectangle(2, 1, 0, 0, 1, 1, false);
+    d2.touch();
+    g = d2.composite();
+    CHECK(g.get(1, 0).r == 0);       // the mask hides the pixel the range allowed
+
+    // Both formats carry it.
+    std::string err;
+    std::vector<std::string> warnings;
+    const std::vector<uint8_t> ora = io::save_ora_to_memory(doc);
+    auto back = io::load_ora_from_memory(ora.data(), ora.size(), &err, &warnings);
+    CHECK(back && back->layer_count() == 2);
+    CHECK(back->layer(1).ranges.source.high1 == 128 && back->layer(1).ranges.source.high0 == 128);
+    CHECK(back->layer(1).ranges.under.identity());
+
+    Document d3(4, 1);
+    d3.add_layer("Under").pixels.fill({0, 0, 0, 255});
+    Layer& t3 = d3.add_layer("Ranged");
+    t3.pixels = Image(4, 1, {200, 100, 50, 255});
+    t3.ranges.channel = BlendRanges::Channel::Green;
+    t3.ranges.under.low0 = 10;
+    t3.ranges.under.low1 = 20;
+    t3.ranges.source.high1 = 200;
+    t3.ranges.source.high0 = 250;
+    const std::vector<uint8_t> psp = io::save_psp_to_memory(d3);
+    auto p3 = io::load_psp_from_memory(psp.data(), psp.size(), &err, &warnings);
+    CHECK(p3 && p3->layer_count() == 2);
+    const BlendRanges& r = p3->layer(1).ranges;
+    CHECK(r.channel == BlendRanges::Channel::Green);
+    CHECK(r.under.low0 == 10 && r.under.low1 == 20);
+    CHECK(r.source.high1 == 200 && r.source.high0 == 250);
+}
+
 // Clipping masks: a layer marked clipped shows only where the layer below
 // it does, and the whole unit then blends with that layer's own opacity,
 // blend mode and mask.
@@ -3025,6 +3112,11 @@ static void test_openraster_lossless() {
     mem.pixels.set(5, 5, {99, 88, 77, 255});
     mem.visible = false;
     mem.clipped = true;
+    mem.ranges.channel = BlendRanges::Channel::Blue;
+    mem.ranges.source.low0 = 12;
+    mem.ranges.source.low1 = 34;
+    mem.ranges.under.high1 = 200;
+    mem.ranges.under.high0 = 220;
 
     Layer& deep = doc.add_layer("Deep");
     deep.depth = 1;
@@ -3105,6 +3197,9 @@ static void test_openraster_lossless() {
 
     const Layer& M = b->layer(2);
     CHECK(M.depth == 1 && !M.visible && M.pixels.get(5, 5).r == 99 && M.clipped);
+    CHECK(M.ranges.channel == BlendRanges::Channel::Blue);
+    CHECK(M.ranges.source.low0 == 12 && M.ranges.source.low1 == 34);
+    CHECK(M.ranges.under.high1 == 200 && M.ranges.under.high0 == 220);
 
     const Layer& D = b->layer(3);
     CHECK(D.depth == 1 && D.is_deep() && D.deep->data()[0] == 1234 && D.deep->data()[1] == 4321 && D.deep->data()[2] == 999);
@@ -3431,6 +3526,7 @@ static void test_metadata() {
 
 int main() {
     test_icc();
+    test_blend_ranges();
     test_clipping_masks();
     test_openraster_lossless();
     test_openraster_vectors();

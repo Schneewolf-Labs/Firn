@@ -230,6 +230,7 @@ struct OraWriter {
         }
         if (!L.expanded) out += " firn:expanded=\"0\"";
         if (L.clipped) out += " firn:clipped=\"1\"";
+        if (!L.ranges.identity()) out += " firn:ranges=\"" + escape(json::dump(blend_ranges_json(L.ranges))) + "\"";
         if (L.style.any()) out += " firn:style=\"" + escape(json::dump(L.style.to_json())) + "\"";
     }
 
@@ -388,6 +389,10 @@ struct OraReader {
         }
         L.expanded = n.attr_or("firn:expanded", "1") != "0";
         L.clipped = n.attr_or("firn:clipped", "0") == "1";
+        if (const std::string* br = n.attr("firn:ranges")) {
+            json::Value v;
+            if (json::parse(*br, v)) L.ranges = blend_ranges_from_json(v);
+        }
         if (const std::string* st = n.attr("firn:style")) {
             json::Value v;
             if (json::parse(*st, v)) L.style = LayerStyle::from_json(v);

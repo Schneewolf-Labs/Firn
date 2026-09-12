@@ -60,6 +60,14 @@ mask disabled u8, invert-mask-on-blend u8, blend range count u16, five
 blend ranges (8 bytes each), then version-dependent extras. Skip by chunk
 length.
 
+Firn has blend ranges of its own (Layer Properties > Blend Ranges) but does
+not write them into that slot. Every sample file carries a count of zero, so
+the layout of a single 8-byte range is unverified, and guessing it risks a
+file the original mis-reads. Firn writes the same default tail every sample
+has and keeps its own ranges in the stash below. Settling it means setting a
+blend range in the original under Wine, saving, and diffing the layer info
+chunk against the same file without one.
+
 Layer types: 1 raster, 2 floating selection, 3 vector, 4 adjustment,
 5 group, 6 mask, 7 art media. Only raster layers carry a bitmap chunk and
 channels directly after the info chunk; the others are followed by their
@@ -340,8 +348,9 @@ original shows the text under image information and ignores it. Each
 `kind` (100 Gaussian Blur, 101 Average, 102 Unsharp Mask) and its
 parameters; the layer itself is written as an empty raster placeholder
 the original opens, and the reader turns it back into a filter layer.
-`clipped` entries name the layers clipped to the one below them, which the
-original composites normally. `styles` entries carry a layer index and a
+`clipped` entries name the layers clipped to the one below them, and
+`ranges` entries carry a layer's blend ranges; the original composites both
+of those layers normally. `styles` entries carry a layer index and a
 `style` object (the fields of
 `LayerStyle`, colors as `[r, g, b, a]`); the layer is written with its
 plain pixels, so the original shows it without the effects.

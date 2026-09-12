@@ -110,6 +110,12 @@ docs/    notes on the original: command inventory, module mapping, FORMAT.md
   whole stack (`Document::State`). A layer's optional `mask` multiplies its
   alpha (or the group's composite) during compositing. Tools and pixel
   commands must check `Layer::is_raster()` / `App::active_is_raster()`.
+- **Blend ranges** (`Layer::ranges`, `BlendRanges` in `blend.h`) limit a
+  layer to a range of its own tones or of the tones below it. `blend_rows`
+  turns them into a coverage factor that multiplies the source alpha, the
+  same way the mask does, so the two compose. The original has a slot for
+  these in its layer info that no sample exercises, so Firn does not write
+  it; see docs/FORMAT.md before trying.
 - **Clipping masks** (`Layer::clipped`): a run of clipped layers above a
   layer is one unit (`Document::clip_end`, `composite_clip_unit`). They are
   drawn onto the base's pixels, held to its alpha and mask, and the unit
