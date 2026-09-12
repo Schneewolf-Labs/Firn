@@ -570,6 +570,7 @@ struct App {
     // caller (scripts, the driver, the close prompt) stays synchronous,
     // because they act on the result immediately.
     void save_document_async(const std::string& path);
+    void open_document_async(const std::string& path);
     void after_saved(const std::string& path);
     void request_open();
     void request_save_as();

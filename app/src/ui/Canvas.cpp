@@ -48,7 +48,7 @@ void App::draw_canvas() {
                 const bool clicked = ImGui::Selectable(title.c_str(), false, 0, ImVec2(width, 0));
                 if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", recent[i].c_str());
                 ImGui::PopID();
-                if (clicked) { open_document(recent[i]); break; }
+                if (clicked) { open_document_async(recent[i]); break; }
             }
         }
         if (!status.empty()) { ImGui::Spacing(); ImGui::TextWrapped("%s", status.c_str()); }

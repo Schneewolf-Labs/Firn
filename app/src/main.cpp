@@ -209,7 +209,7 @@ int main(int argc, char** argv) {
             if (event.type == SDL_QUIT) app.request_quit();
             // Files dropped onto the window open as documents (one per file).
             if (event.type == SDL_DROPFILE && event.drop.file) {
-                if (!app.open_document(event.drop.file)) std::fprintf(stderr, "%s\n", app.status.c_str());
+                app.open_document_async(event.drop.file);
                 SDL_free(event.drop.file);
             }
             if (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_CLOSE &&

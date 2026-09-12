@@ -275,6 +275,24 @@ bool App::open_document(const std::string& path) {
     return true;
 }
 
+void App::open_document_async(const std::string& path) {
+    if (job) { status = job->name + " is still running."; return; }
+    if (!std::filesystem::exists(path)) { status = "Open failed: no such file: " + path; return; }
+    job = std::make_unique<BackgroundJob>();
+    job->kind = BackgroundJob::Kind::Open;
+    job->name = "Opening";
+    job->path = path;
+    job->cancellable = false;   // reading a file is not worth interrupting
+    BackgroundJob* j = job.get();
+    // The worker builds a document of its own and touches nothing the main
+    // thread owns, so this one is safe even without the modal.
+    j->done = std::async(std::launch::async, [j] {
+        j->loaded = io::load_document(j->path, &j->error, &j->warnings);
+        return j->loaded != nullptr;
+    });
+    status = "Opening " + path + "...";
+}
+
 bool App::save_document(const std::string& path) {
     if (!doc) return false;
     set_selection_edit(false);
@@ -631,6 +649,16 @@ void App::draw_background_job() {
     if (job->kind == BackgroundJob::Kind::Save) {
         if (finished) after_saved(job->path);
         else status = "Save failed: " + (job->error.empty() ? std::string("unknown error") : job->error);
+    } else if (job->kind == BackgroundJob::Kind::Open) {
+        if (!finished) {
+            status = "Open failed: " + (job->error.empty() ? std::string("unknown error") : job->error);
+        } else {
+            add_document(std::move(job->loaded), job->path);
+            config.touch_recent(job->path);
+            config.last_directory = file_dialog.directory();
+            status = "Opened " + job->path;
+            for (const std::string& w : job->warnings) status += "\n" + w;
+        }
     } else {
         const size_t layer = job->layer;
         if (!finished) status = job->name + " cancelled";

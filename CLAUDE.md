@@ -331,10 +331,13 @@ docs/    notes on the original: command inventory, module mapping, FORMAT.md
   (`content_aware_fill(false)`) because a script expects the work finished
   when the call returns, and `App::do_command` refuses every action while a
   job is running so nothing can change the document under the worker.
-  Interactive saves take the same route (`save_document_async`, used by
-  File > Save and Save As only); the close prompt, the driver and scripts
-  stay on the synchronous `save_document` because they act on its result
-  immediately. `after_saved` is the bookkeeping both share.
+  Interactive saves and opens take the same route (`save_document_async`,
+  `open_document_async`, used by File > Save, Save As, Open, the recent
+  lists and drag-and-drop); the close prompt, the command line, the driver
+  and scripts stay on the synchronous `save_document` / `open_document`
+  because they act on the result immediately. `after_saved` is the
+  bookkeeping both save paths share. Opening is the safe one: the worker
+  builds a document of its own and touches nothing the main thread owns.
 - **Content-aware fill** (`core/include/firn/inpaint.h`) synthesizes a
   region from the rest of the image by PatchMatch. Two things it is easy to
   get wrong and that its test pins down: the patch distance must weight

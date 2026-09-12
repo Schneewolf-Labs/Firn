@@ -7,6 +7,9 @@ section into the next version.
 ## Unreleased
 
 ### Changed
+- Opening a file no longer freezes the window. A 24 megapixel project took
+  over two seconds to read; it now happens on a worker. The command line,
+  scripts and the driver still open synchronously.
 - Saving from File > Save or Save As no longer freezes the window either.
   A 24 megapixel project with a few layers took about three seconds on the
   interface thread; the writing now happens on a worker while the program

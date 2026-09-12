@@ -134,7 +134,7 @@ void App::draw_menu(MenuBuilder& m) {
             for (size_t i = 0; i < config.recent_files.size(); ++i) {
                 const std::string r = config.recent_files[i];
                 m.push_id(static_cast<int>(i));
-                m.item(r.c_str(), nullptr, true, [this, r] { open_document(r); });
+                m.item(r.c_str(), nullptr, true, [this, r] { open_document_async(r); });
                 m.pop_id();
             }
             m.end_menu();
@@ -654,7 +654,7 @@ void App::draw_dialogs() {
     draw_effect_browser();
 
     if (file_dialog.draw()) {
-        if (file_op == PendingFileOp::Open) open_document(file_dialog.path());
+        if (file_op == PendingFileOp::Open) open_document_async(file_dialog.path());
         else if (file_op == PendingFileOp::SaveAs) save_document_async(file_dialog.path());
         else if (file_op == PendingFileOp::LoadSelection) load_selection(file_dialog.path());
         else if (file_op == PendingFileOp::SaveSelection) save_selection(file_dialog.path());

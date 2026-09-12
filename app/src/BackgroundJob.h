@@ -7,11 +7,15 @@
 #include <future>
 #include <string>
 
+#include <memory>
+#include <vector>
+
+#include "firn/document.h"
 #include "firn/image.h"
 
 struct BackgroundJob {
     // What the main thread does with the result when the worker is done.
-    enum class Kind { Fill, Save };
+    enum class Kind { Fill, Save, Open };
 
     Kind kind = Kind::Fill;
     std::string name;              // the dialog's title and the history entry
@@ -23,5 +27,7 @@ struct BackgroundJob {
 
     firn::Image result;            // Fill: the worker's buffer, read once `done` is ready
     size_t layer = 0;              // Fill: where it goes
-    std::string path, error;       // Save
+    std::string path, error;       // Save and Open
+    std::unique_ptr<firn::Document> loaded;      // Open: the worker's document
+    std::vector<std::string> warnings;           // Open
 };
