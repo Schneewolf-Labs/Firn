@@ -544,6 +544,7 @@ void App::draw_menu(MenuBuilder& m) {
     if (m.begin_menu("Help")) {
         m.item("Keyboard Shortcuts...", nullptr, true, [=, this] { show_shortcuts_dialog = true; });
         m.separator();
+        m.item("Check for Updates...", nullptr, !update_checking, [=, this] { start_update_check(true); show_about_dialog = true; });
         m.item("About Firn...", nullptr, true, [=, this] { show_about_dialog = true; });
         m.end_menu();
     }
@@ -639,6 +640,7 @@ void App::draw_layer_menu_items(MenuBuilder& m) {
 }
 
 void App::draw_dialogs() {
+    poll_update_check();
     draw_background_job();
     draw_adjust_dialogs();
     draw_text_dialog();
@@ -706,6 +708,9 @@ void App::draw_dialogs() {
         ImGui::SetNextItemWidth(160); ImGui::SliderInt("Autosave every (minutes, 0 = off)", &c.autosave_minutes, 0, 60);
         ImGui::SetNextItemWidth(160); ImGui::SliderInt("Default JPEG quality", &c.jpeg_quality, 1, 100);
         ImGui::SetNextItemWidth(160); ImGui::SliderInt("Checkerboard cell (px)", &c.checker_size, 2, 64);
+        ImGui::Checkbox("Check for updates on startup", &c.check_updates);
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Asks GitHub once a day whether a newer release exists, and says so.\nIt never downloads or installs anything. Off unless you turn it on,\nbecause a check tells a server that someone here is running Firn.");
         ImGui::SetNextItemWidth(160); ImGui::InputInt("New image width", &c.new_width);
         ImGui::SetNextItemWidth(160); ImGui::InputInt("New image height", &c.new_height);
         c.new_width = std::clamp(c.new_width, 1, 30000); c.new_height = std::clamp(c.new_height, 1, 30000);

@@ -290,6 +290,12 @@ docs/    notes on the original: command inventory, module mapping, FORMAT.md
   state); `App::display_needs_transform` converts the composite to sRGB
   for the canvas texture; `io::read_icc` / `io::embed_icc` handle PNG and
   JPEG.
+- **Update check** (`app/src/UpdateCheck.h`) reports a newer GitHub release
+  and never downloads one: an unsigned binary that replaces itself can break
+  an installation, and Windows cannot overwrite a running executable anyway.
+  It shells out to curl or PowerShell, the way printing uses `lp`, so there
+  is no HTTP dependency. Opt-in (`Config::check_updates`, off by default),
+  once a day, and silent on every failure.
 - **Pen input** (`app/src/Tablet.cpp`, `Tablet_mac.mm`): per-platform
   backends fill `App::pen` (pressure, tilt, eraser); the canvas copies
   pressure into `ToolInput` and `raster::Stroke` scales stamps per

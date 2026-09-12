@@ -75,6 +75,16 @@ void App::draw_about_dialog() {
     ImGui::TextUnformatted("Firn");
     ImGui::SetWindowFontScale(1.0f);
     ImGui::Text("Version %s", kFirnVersion);
+    // Whatever the last check found, if one has been made.
+    if (update_checking) {
+        ImGui::TextDisabled("Checking for a newer version...");
+    } else if (update_result.checked && update_result.newer) {
+        ImGui::TextColored(ImVec4(0.45f, 0.85f, 0.45f, 1.0f), "Firn %s is available", update_result.version.c_str());
+        ImGui::SameLine();
+        if (ImGui::SmallButton("Copy link")) ImGui::SetClipboardText(update_result.url.c_str());
+    } else if (update_result.checked) {
+        ImGui::TextDisabled("This is the newest release");
+    }
     ImGui::Text("Commit %s%s%s", kFirnCommit, kFirnBranch[0] ? " on " : "", kFirnBranch);
     ImGui::Text("Built %s with %s", kFirnBuildDate, compiler());
     ImGui::TextDisabled("A Schneewolf Labs project, Apache License 2.0");

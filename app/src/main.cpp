@@ -242,6 +242,7 @@ int main(int argc, char** argv) {
         if (!app.open_document(argv[1])) std::fprintf(stderr, "%s\n", app.status.c_str());
     }
     app.check_recovery();
+    app.start_update_check(false);   // opt-in, at most once a day; see UpdateCheck.h
     app.autosave_last = 0.0;
     tablet::init(window);
     native_pointer::init(window);

@@ -167,6 +167,19 @@ File > Print (Ctrl+P) lays the image out on Letter, A4 or Legal paper
 one-page PDF and sends it to the default or a named printer through the
 system spooler. "Save as PDF" keeps the file instead.
 
+## Updates
+
+Help > Check for Updates asks GitHub whether a newer release exists and says
+so in Help > About, with a button to copy the link. It never downloads or
+installs anything: replacing a running program is where updaters break
+installations, and opening the releases page costs one click.
+
+Preferences has "Check for updates on startup", which does the same once a
+day. It is off unless you turn it on, because a check tells a server that
+someone at your address is running Firn. Either way a failure is silent; an
+unreachable server is not worth interrupting you over. The check shells out
+to curl, or PowerShell on Windows, so it adds no dependency.
+
 ## Themes
 
 File > Preferences picks the theme (Firn, Dark, Light, Classic, Slate, or

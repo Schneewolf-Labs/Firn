@@ -6,6 +6,14 @@ section into the next version.
 
 ## Unreleased
 
+### Added
+- Help > Check for Updates asks GitHub whether a newer release exists and
+  reports it in Help > About. It only ever tells you; it never downloads or
+  installs anything. Preferences has an opt-in daily check, off by default
+  because a check tells a server someone here is running Firn. Failures are
+  silent, and it shells out to curl or PowerShell rather than adding an HTTP
+  dependency.
+
 ## 0.4.0 (2026-09-12)
 
 ### Fixed

@@ -25,6 +25,10 @@ struct Config {
     bool color_managed_display = true;   // convert tagged images to sRGB for the screen
     bool fit_tool_options = true;     // fit the default options strip when its content changes
     bool image_windows = false;          // one window per image instead of tabs
+    // Off unless asked for: a check tells a server someone is running Firn
+    // and from which address, which is the user's call to make.
+    bool check_updates = false;
+    long long last_update_check = 0;     // unix time of the last automatic check
     std::string theme = "Firn";          // a built-in or user theme name (see app/src/ui/Theme.h)
     std::string extra_tube_dir, extra_brush_dir, extra_texture_dir;
 

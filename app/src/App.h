@@ -21,6 +21,7 @@
 #include "firn/text.h"
 #include "firn/vector.h"
 #include "Config.h"
+#include "UpdateCheck.h"
 #include "Tablet.h"
 #include "tools/Tool.h"
 #include "ui/FileDialog.h"
@@ -633,6 +634,13 @@ struct App {
     std::unique_ptr<struct BackgroundJob> job;
     bool job_running() const { return job != nullptr; }
     void draw_background_job();
+    // Update check (app/src/UpdateCheck.h): report only, never download.
+    std::future<firn::update::Result> update_future;
+    firn::update::Result update_result;
+    bool update_checking = false;
+    bool update_notified = false;     // the status line has already said so
+    void start_update_check(bool manual);
+    void poll_update_check();
     const firn::Mask* paint_clip(int layer);
     firn::Mask paint_clip_cache;   // narrowed selection for a protected layer
     bool can_clip_layer() const;

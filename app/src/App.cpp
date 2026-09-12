@@ -17,10 +17,12 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <ctime>
 #include <filesystem>
 
 #include "BackgroundJob.h"
 #include "Clipboard.h"
+#include "Version.h"
 #include "imgui.h"
 #include "firn/io.h"
 #include "firn/io_psp.h"
@@ -1144,6 +1146,38 @@ void App::layer_promote_background() {
 // What a painting tool may touch on this layer: the selection, narrowed to
 // the pixels that already exist when the layer's transparency is protected.
 // The narrowed mask is cached because a stroke asks for it on every press.
+void App::start_update_check(bool manual) {
+    if (update_checking) return;
+    if (!update::available()) {
+        if (manual) status = "Checking for updates needs curl.";
+        return;
+    }
+    if (!manual) {
+        // Once a day at most, and only if the user asked for it.
+        if (!config.check_updates) return;
+        const long long now = static_cast<long long>(std::time(nullptr));
+        if (now - config.last_update_check < 24 * 60 * 60) return;
+        config.last_update_check = now;
+    }
+    update_checking = true;
+    update_notified = false;
+    update_future = update::check_async(kFirnVersion);
+    if (manual) status = "Checking for a newer version...";
+}
+
+void App::poll_update_check() {
+    if (!update_checking || !update_future.valid()) return;
+    if (update_future.wait_for(std::chrono::seconds(0)) != std::future_status::ready) return;
+    update_result = update_future.get();
+    update_checking = false;
+    // Silent when there is nothing to say or the request failed: nobody
+    // editing a picture needs to hear that a server was unreachable.
+    if (update_result.checked && update_result.newer && !update_notified) {
+        status = "Firn " + update_result.version + " is available (Help > About)";
+        update_notified = true;
+    }
+}
+
 const firn::Mask* App::paint_clip(int layer) {
     if (!doc) return nullptr;
     const Mask& sel = doc->selection();

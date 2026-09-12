@@ -45,6 +45,7 @@ add_library(firn_app OBJECT
   src/Script.cpp
   src/Config.cpp
   src/Clipboard.cpp
+  src/UpdateCheck.cpp
   src/Autosave.cpp
   src/Tablet.cpp
   src/ui/Canvas.cpp
