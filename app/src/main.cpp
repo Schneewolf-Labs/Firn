@@ -143,6 +143,15 @@ int main(int argc, char** argv) {
     SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
     SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
     SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
+    // Ask for eight bits a channel. These are minimums, and SDL's defaults
+    // are 3/3/2, which most drivers quietly exceed but a software renderer
+    // does not: the Windows CI runner was handing back a four-bit visual, so
+    // every colour came out quantised (32 became 34, 64 became 68). An image
+    // editor cannot be left to the driver's taste here.
+    SDL_GL_SetAttribute(SDL_GL_RED_SIZE, 8);
+    SDL_GL_SetAttribute(SDL_GL_GREEN_SIZE, 8);
+    SDL_GL_SetAttribute(SDL_GL_BLUE_SIZE, 8);
+    SDL_GL_SetAttribute(SDL_GL_ALPHA_SIZE, 8);
 
     auto flags = (SDL_WindowFlags)(SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI);
     // Window size is overridable for driving the app from scripts/screenshots.

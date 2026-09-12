@@ -7,6 +7,11 @@ section into the next version.
 ## Unreleased
 
 ### Fixed
+- Firn asks for eight bits a colour channel now. It never did: SDL's
+  defaults are three, three and two bits, which most drivers quietly exceed
+  and a software renderer does not. On such a setup every colour was
+  quantised to four bits, so 32 came back as 34 and 128 as 136, and the
+  canvas showed visible banding.
 - A data race when saving a project: the PNG encoder takes its compression
   level from one global, and the writer sets it per image while encoding a
   document's layers on several threads at once. The level is now chosen once.
