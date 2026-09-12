@@ -1,4 +1,5 @@
 #include "firn/raster16.h"
+#include "firn/parallel.h"
 
 #include <algorithm>
 #include <cmath>
@@ -38,11 +39,16 @@ void apply_luts(Image16& img, const Lut16& r, const Lut16& g, const Lut16& b) {
 
 void map_rgb(Image16& img, const std::function<void(float&, float&, float&)>& fn) {
     uint16_t* p = img.data();
-    for (size_t i = 0; i < img.size(); i += 4) {
-        float r = f16(p[i]), g = f16(p[i + 1]), b = f16(p[i + 2]);
-        fn(r, g, b);
-        p[i] = q16(r); p[i + 1] = q16(g); p[i + 2] = q16(b);
-    }
+    // Banded by row, so `fn` must be a pure function of the pixel it is
+    // handed: every caller here is, and a new one has to be too.
+    const size_t stride = static_cast<size_t>(img.width()) * 4;
+    parallel::rows(img.height(), static_cast<size_t>(img.width()) * 16, [&](int y0, int y1) {
+        for (size_t i = static_cast<size_t>(y0) * stride; i < static_cast<size_t>(y1) * stride; i += 4) {
+            float r = f16(p[i]), g = f16(p[i + 1]), b = f16(p[i + 2]);
+            fn(r, g, b);
+            p[i] = q16(r); p[i + 1] = q16(g); p[i + 2] = q16(b);
+        }
+    });
 }
 
 void brightness_contrast(Image16& img, int brightness, int contrast) {
@@ -186,21 +192,28 @@ void gaussian_blur(Image16& img, float radius) {
     float sum = 0;
     for (int i = -r; i <= r; ++i) { k[static_cast<size_t>(i + r)] = std::exp(-(i * i) / (2.0f * radius * radius)); sum += k[static_cast<size_t>(i + r)]; }
     for (float& x : k) x /= sum;
+    // Both passes are row-independent: each reads one buffer and writes
+    // another, so the bands cannot see each other's work.
     Planes tmp(p.w, p.h);
-    for (int y = 0; y < p.h; ++y)
-        for (int x = 0; x < p.w; ++x)
-            for (int c = 0; c < 4; ++c) {
-                float acc = 0;
-                for (int i = -r; i <= r; ++i) acc += p.v[(static_cast<size_t>(y) * p.w + std::clamp(x + i, 0, p.w - 1)) * 4 + c] * k[static_cast<size_t>(i + r)];
-                tmp.v[(static_cast<size_t>(y) * p.w + x) * 4 + c] = acc;
-            }
-    for (int y = 0; y < p.h; ++y)
-        for (int x = 0; x < p.w; ++x)
-            for (int c = 0; c < 4; ++c) {
-                float acc = 0;
-                for (int i = -r; i <= r; ++i) acc += tmp.v[(static_cast<size_t>(std::clamp(y + i, 0, p.h - 1)) * p.w + x) * 4 + c] * k[static_cast<size_t>(i + r)];
-                p.v[(static_cast<size_t>(y) * p.w + x) * 4 + c] = acc;
-            }
+    const size_t per_row = static_cast<size_t>(p.w) * static_cast<size_t>(2 * r + 1) * 4;
+    parallel::rows(p.h, per_row, [&](int y0, int y1) {
+        for (int y = y0; y < y1; ++y)
+            for (int x = 0; x < p.w; ++x)
+                for (int c = 0; c < 4; ++c) {
+                    float acc = 0;
+                    for (int i = -r; i <= r; ++i) acc += p.v[(static_cast<size_t>(y) * p.w + std::clamp(x + i, 0, p.w - 1)) * 4 + c] * k[static_cast<size_t>(i + r)];
+                    tmp.v[(static_cast<size_t>(y) * p.w + x) * 4 + c] = acc;
+                }
+    });
+    parallel::rows(p.h, per_row, [&](int y0, int y1) {
+        for (int y = y0; y < y1; ++y)
+            for (int x = 0; x < p.w; ++x)
+                for (int c = 0; c < 4; ++c) {
+                    float acc = 0;
+                    for (int i = -r; i <= r; ++i) acc += tmp.v[(static_cast<size_t>(std::clamp(y + i, 0, p.h - 1)) * p.w + x) * 4 + c] * k[static_cast<size_t>(i + r)];
+                    p.v[(static_cast<size_t>(y) * p.w + x) * 4 + c] = acc;
+                }
+    });
     img = p.to_image();
 }
 

@@ -6,7 +6,17 @@ section into the next version.
 
 ## Unreleased
 
+### Fixed
+- A data race when saving a project: the PNG encoder takes its compression
+  level from one global, and the writer sets it per image while encoding a
+  document's layers on several threads at once. The level is now chosen once.
+  Found with ThreadSanitizer, which the core tests now run clean under.
+
 ### Changed
+- The 16-bit operations run across cores as well. On a 24 megapixel layer
+  a Gaussian blur went from 5.9 seconds to 1.6, and the colour adjustments
+  from around 300 to 600 milliseconds down to a few tens. Same results, to
+  the byte.
 - The Effects menu and the per-pixel adjustments run across cores now. None
   of them did: three shared pixel passes drive most of the effects, and all
   three walked the image on one thread. On a 24 megapixel layer the median

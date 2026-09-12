@@ -353,7 +353,15 @@ docs/    notes on the original: command inventory, module mapping, FORMAT.md
   across pixels**: the median filter used to hold one window buffer outside
   its lambda, which becomes a race the moment the pass is threaded. When
   changing any of this, prove the output is unchanged rather than assuming
-  it, by hashing each operation's result before and after.
+  it, by hashing each operation's result before and after. The 16-bit side
+  goes through `raster16::map_rgb` and has the same rule.
+  **Check it with ThreadSanitizer**, which needs address randomisation off
+  on this kernel:
+  `cmake -S . -B build-tsan -G Ninja -DCMAKE_CXX_FLAGS=-fsanitize=thread
+  -DCMAKE_EXE_LINKER_FLAGS=-fsanitize=thread -DFIRN_BUILD_APP=OFF` then
+  `setarch $(uname -m) -R ./build-tsan/tests/test_core`. It found the one
+  race that was there: `encode_png` set stb's global compression level per
+  image while the project writer encoded layers in parallel.
 - Add a test in `tests/test_core.cpp` for every new raster op or command.
 
 ## macOS

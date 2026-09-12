@@ -84,6 +84,13 @@ class Firn:
         return self.image().get("layers", [])
 
 
+def png_size(path):
+    """The pixel size of a PNG, from its header."""
+    data = open(path, "rb").read(33)
+    w, h = struct.unpack(">II", data[16:24])
+    return w, h
+
+
 def png_pixel(path, x, y):
     """One pixel out of a PNG, so a test can assert on what was drawn."""
     data = open(path, "rb").read()
@@ -631,7 +638,21 @@ def test_ui_scaling(f):
         density = value(state, "font_density")
         shot = os.path.join(OUT, f"scale-{scale}.png")
         f.step("shot:" + shot)
-        check(png_pixel(shot, int((x + 48) * density), int((y + 48) * density))[:3] == (32, 64, 128),
+        px, py = int((x + 48) * density), int((y + 48) * density)
+        got = png_pixel(shot, px, py)[:3]
+        if got != (32, 64, 128):
+            # Say what was actually there. This check assumes the screenshot
+            # is the logical canvas times font_density, which is the part
+            # most likely to be wrong on a platform whose DPI handling
+            # differs, and a bare pass/fail gives nobody anything to go on.
+            w, h = png_size(shot)
+            print(f"       scale={scale} origin=({x},{y}) density={density} "
+                  f"point=({px},{py}) shot={w}x{h} got={got}")
+            for probe in (0.5, 1.0, 2.0):
+                qx, qy = int((x + 48) * probe), int((y + 48) * probe)
+                if 0 <= qx < w and 0 <= qy < h:
+                    print(f"       at density {probe}: ({qx},{qy}) = {png_pixel(shot, qx, qy)[:3]}")
+        check(got == (32, 64, 128),
               "canvas framebuffer contains the expected pixels after scaling")
     f.step("set:ui_scale:0", "wait:3")
     f.do("file.close")
