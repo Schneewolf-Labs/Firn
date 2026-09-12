@@ -15,6 +15,17 @@ section into the next version.
   nothing.
 
 ### Added
+- Vector node editing is finished. A path can be broken at a node, joined
+  back to another open path, reversed, and closed or opened, from the Pen
+  tool's Edit Nodes mode or Objects > Edit Node. Objects > Convert to Path
+  turns text into an editable outline.
+- Nine `object.*` actions read and edit a vector layer through the API:
+  `object.list` reports every object with its paths and nodes, and
+  `object.node_select` then `object.node_break` / `node_join` /
+  `path_reverse` / `path_closed` / `add_path` edit them. Three more of the
+  original's script commands run as a result -- `ConvertToPath`,
+  `ReturnVectorObjectProperties` and `NodeEditAddPath`, which together are
+  what its VectorMergeSelected script is made of.
 - The native project format keeps a picture's metadata. It was the last
   thing Firn held that saving to that format dropped: open a photo, save it
   as a `.pspimage`, and the camera, the exposure and the place all survived

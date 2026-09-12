@@ -219,7 +219,12 @@ docs/    notes on the original: command inventory, module mapping, FORMAT.md
   `Layer::objects` live, call `Document::rasterize_vector_layer`, and commit
   with `App::objects_changed`. Selection is `Object::selected` (never
   saved); groups are a group object followed by its members
-  (`vec::group_end`). Shape, line and text tools build objects in both
+  (`vec::group_end`). Node editing is `vec::break_path` / `join_paths` /
+  `reverse_path` in core, driven by `App::node_break` and its neighbours;
+  the node the Pen tool has picked lives on `App` (`node_object`,
+  `node_path`, `node_index`) so the `object.*` actions in
+  `app/src/VectorActions.cpp` act on the same one.
+  Shape, line and text tools build objects in both
   modes; "Create as vector" keeps them editable, otherwise
   `vec::rasterize` paints them through the selection. Text objects keep
   their `TextInfo` (text, font, size, insert point) and are written as the

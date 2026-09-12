@@ -424,6 +424,10 @@ struct App {
     bool create_as_vector = false;
     int pen_mode = 0;                   // 0 point to point, 1 freehand, 2 edit nodes
     bool pen_close = false;
+    // The node the Pen tool is editing, or -1 for none. It lives here rather
+    // than inside the tool so the node edit actions and the script commands
+    // act on the same node the user has picked.
+    int node_object = -1, node_path = 0, node_index = 0;
     void draw_line_style_combo();       // styled line picker for the tool options
     void draw_create_as_vector();       // the checkbox shared by the shape tools
     // Materials beyond a flat color: gradient or pattern, combined with the
@@ -494,6 +498,18 @@ struct App {
     void object_select_all();
     void object_select_none();
     void object_text_to_curves(bool per_character);
+    void object_convert_to_path();
+    // Node editing. break/reverse/close act on the selected node's path;
+    // join closes the gap between the two open paths of its object.
+    // Each returns false and sets `status` when there is nothing to do.
+    bool node_break();
+    bool node_join();
+    bool path_reverse();
+    bool path_set_closed(bool closed);
+    // Appends paths to the selected object, the way the original's
+    // NodeEditAddPath merges one object's contours into another.
+    bool object_add_path(const std::vector<firn::vec::Path>& paths);
+    firn::vec::Object* node_object_ptr(int* layer_out);
     void open_vector_properties();
     void open_text_edit();               // re-opens the text dialog on a selected text object
     bool show_vector_props_dialog = false;

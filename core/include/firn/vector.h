@@ -154,6 +154,27 @@ std::vector<Path> text_outline_paths(const TextInfo& t, const text::Font& font, 
 // Coverage multiplier of a style's texture at a pixel (1 when the style has none).
 float texture_factor(const PaintStyle& style, float x, float y, float ox, float oy);
 
+// --- Path editing -------------------------------------------------------
+// The structural half of node editing: the Pen tool's edit mode and the
+// node script commands both go through these, so a path edited by hand and
+// one edited by a script end up in the same shape.
+
+// Renormalizes a path's node flags (first node, closing node) after any
+// structural edit. Every function below already calls it.
+void fix_path_flags(Path& p);
+// Reverses the node order, swapping each node's handles so the curve it
+// describes is unchanged and only its direction flips.
+void reverse_path(Path& p);
+// Splits path `pi` of `o` at node `ni`. A closed path opens there, keeping
+// every node; an open one becomes two paths that share a copy of that node,
+// the second inserted after the first. False when there is nothing to break:
+// an end node of an open path, or a path of fewer than three nodes.
+bool break_path(Object& o, size_t pi, size_t ni);
+// Joins two open paths of `o`, whichever pair of their ends is closest,
+// leaving one path where the earlier of the two was. The two ends meet at a
+// single node. False unless both exist and both are open.
+bool join_paths(Object& o, size_t a, size_t b);
+
 // Builders for the tools.
 Object make_rectangle(float x0, float y0, float x1, float y1);
 Object make_rounded_rectangle(float x0, float y0, float x1, float y1, float radius);

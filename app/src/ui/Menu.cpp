@@ -513,6 +513,16 @@ void App::draw_menu(MenuBuilder& m) {
             m.item("As Character Shapes", nullptr, true, [=, this] { object_text_to_curves(true); });
             m.end_menu();
         }
+        m.item("Convert to Path", nullptr, has_text, [=, this] { object_convert_to_path(); });
+        if (m.begin_menu("Edit Node", node_object >= 0)) {
+            m.item("Break", nullptr, true, [=, this] { node_break(); });
+            m.item("Join", nullptr, true, [=, this] { node_join(); });
+            m.separator();
+            m.item("Reverse Path", nullptr, true, [=, this] { path_reverse(); });
+            m.item("Close Path", nullptr, true, [=, this] { path_set_closed(true); });
+            m.item("Open Path", nullptr, true, [=, this] { path_set_closed(false); });
+            m.end_menu();
+        }
         m.item("Properties...", nullptr, nsel > 0, [=, this] { open_vector_properties(); });
         m.separator();
         m.item("Select All", nullptr, on_vector, [=, this] { object_select_all(); });

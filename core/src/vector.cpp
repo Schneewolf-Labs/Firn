@@ -531,6 +531,76 @@ Object make_ellipse(float cx, float cy, float rx, float ry) {
     return finish(o);
 }
 
+// --- Path editing ---------------------------------------------------------
+
+void fix_path_flags(Path& p) {
+    for (Node& n : p.nodes) { n.flags[0] &= ~1; n.flags[1] &= ~0x80; }
+    if (p.nodes.empty()) return;
+    p.nodes.front().flags[0] |= 1;
+    if (p.closed) p.nodes.back().flags[1] |= 0x80;
+}
+
+void reverse_path(Path& p) {
+    std::reverse(p.nodes.begin(), p.nodes.end());
+    // Walking the path backwards makes each node's outgoing handle the
+    // incoming one, so the curve through it stays exactly where it was.
+    for (Node& n : p.nodes) { std::swap(n.in_x, n.out_x); std::swap(n.in_y, n.out_y); }
+    fix_path_flags(p);
+}
+
+bool break_path(Object& o, size_t pi, size_t ni) {
+    if (pi >= o.paths.size()) return false;
+    Path& p = o.paths[pi];
+    if (ni >= p.nodes.size() || p.nodes.size() < 3) return false;
+    if (p.closed) {
+        // Opening a loop: rotate so the break node starts the path, and
+        // repeat it at the end so the shape drawn does not change.
+        std::rotate(p.nodes.begin(), p.nodes.begin() + static_cast<long>(ni), p.nodes.end());
+        p.nodes.push_back(p.nodes.front());
+        p.closed = false;
+        fix_path_flags(p);
+        return true;
+    }
+    if (ni == 0 || ni + 1 == p.nodes.size()) return false;
+    Path tail;
+    tail.closed = false;
+    tail.nodes.assign(p.nodes.begin() + static_cast<long>(ni), p.nodes.end());
+    p.nodes.erase(p.nodes.begin() + static_cast<long>(ni) + 1, p.nodes.end());
+    fix_path_flags(p);
+    fix_path_flags(tail);
+    o.paths.insert(o.paths.begin() + static_cast<long>(pi) + 1, std::move(tail));
+    return true;
+}
+
+bool join_paths(Object& o, size_t a, size_t b) {
+    if (a == b || a >= o.paths.size() || b >= o.paths.size()) return false;
+    if (o.paths[a].closed || o.paths[b].closed) return false;
+    if (o.paths[a].nodes.empty() || o.paths[b].nodes.empty()) return false;
+    if (a > b) std::swap(a, b);
+    Path first = o.paths[a], second = o.paths[b];
+    // Four ways to put two open paths end to end; take whichever pair of
+    // ends is closest, so joining follows where the two actually meet.
+    auto gap = [](const Node& p, const Node& q) { return std::hypot(p.x - q.x, p.y - q.y); };
+    const float d[4] = {gap(first.nodes.back(), second.nodes.front()), gap(first.nodes.back(), second.nodes.back()),
+                        gap(first.nodes.front(), second.nodes.front()), gap(first.nodes.front(), second.nodes.back())};
+    int best = 0;
+    for (int i = 1; i < 4; ++i) if (d[i] < d[best]) best = i;
+    if (best == 1) reverse_path(second);
+    else if (best == 2) reverse_path(first);
+    else if (best == 3) { reverse_path(first); reverse_path(second); }
+    // The two ends become one node: it keeps the incoming handle of the end
+    // that arrives and the outgoing handle of the one that leaves.
+    Node& tail = first.nodes.back();
+    const Node& head = second.nodes.front();
+    tail.out_x = head.out_x - head.x + tail.x;
+    tail.out_y = head.out_y - head.y + tail.y;
+    first.nodes.insert(first.nodes.end(), second.nodes.begin() + 1, second.nodes.end());
+    fix_path_flags(first);
+    o.paths[a] = std::move(first);
+    o.paths.erase(o.paths.begin() + static_cast<long>(b));
+    return true;
+}
+
 Object make_polygon(const std::vector<std::pair<float, float>>& pts, bool closed) {
     Object o;
     o.name = closed ? "Polygon" : "Line";

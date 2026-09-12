@@ -392,6 +392,59 @@ std::string App::do_command(const std::string& name, const Value& p, bool* ok) {
     if (name == "PasteAsNewLayer") { if (auto e = need_doc(); !e.empty()) return e; paste_as_new_layer(); return json::dump(result_ok()); }
     if (name == "PasteAsNewImage") { paste_as_new_image(); return json::dump(result_ok()); }
 
+    // --- vector objects ---
+    // The original's own scripts convert shapes and text to paths, read the
+    // objects back, and append one object's contours to another; those three
+    // together are how its VectorMergeSelected works.
+    if (name == "ConvertToPath") {
+        if (auto e = need_doc(); !e.empty()) return e;
+        object_convert_to_path();
+        return json::dump(result_ok());
+    }
+    if (name == "ReturnVectorObjectProperties") {
+        if (auto e = need_doc(); !e.empty()) return e;
+        bool sub_ok = true;
+        const std::string reply = do_command("object.list", Value::object(), &sub_ok);
+        if (!sub_ok) return reply;
+        Value parsed;
+        if (!json::parse(reply, parsed)) return "object.list returned nothing usable";
+        Value r = result_ok();
+        r.set("ListOfObjects", parsed.get("objects"));
+        return json::dump(r);
+    }
+    if (name == "NodeEditAddPath") {
+        if (auto e = need_doc(); !e.empty()) return e;
+        // 'Path' is an object as ReturnVectorObjectProperties reports it, or
+        // just its list of paths, or one path on its own.
+        const Value& path = p.get("Path");
+        std::vector<vec::Path> add;
+        auto take = [&add](const Value& v) {
+            vec::Path one;
+            one.closed = v.get("closed").as_bool(false);
+            const Value& nodes = v.get("nodes");
+            for (size_t i = 0; i < nodes.size(); ++i) {
+                const Value& n = nodes[i];
+                vec::Node node;
+                node.x = static_cast<float>(n.get("x").as_number(0));
+                node.y = static_cast<float>(n.get("y").as_number(0));
+                node.in_x = n.find("in") ? static_cast<float>(n.get("in")[0].num) : node.x;
+                node.in_y = n.find("in") ? static_cast<float>(n.get("in")[1].num) : node.y;
+                node.out_x = n.find("out") ? static_cast<float>(n.get("out")[0].num) : node.x;
+                node.out_y = n.find("out") ? static_cast<float>(n.get("out")[1].num) : node.y;
+                one.nodes.push_back(node);
+            }
+            if (one.nodes.size() >= 2) add.push_back(std::move(one));
+        };
+        if (path.is_object() && path.find("nodes")) take(path);
+        else {
+            const Value& list = path.find("paths") ? path.get("paths") : path;
+            for (size_t i = 0; i < list.size(); ++i) take(list[i]);
+        }
+        if (add.empty()) return "NodeEditAddPath: Path carried no nodes";
+        if (!object_add_path(add)) return status;
+        return json::dump(result_ok());
+    }
+
     // --- geometry ---
     if (name == "Resize") {
         if (auto e = need_doc(); !e.empty()) return e;

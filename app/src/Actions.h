@@ -39,3 +39,4 @@ std::string describe_json(App& app, const std::string& name = "");
 firn::json::Value action_schema(const Action& action);
 bool validate_action(const Action& action, const firn::json::Value& params, std::string& error);
 void add_drawing_actions(std::vector<Action>& actions);
+void add_vector_actions(std::vector<Action>& actions);

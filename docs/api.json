@@ -1437,6 +1437,268 @@
       },
       "name": "app.batch",
       "summary": "Apply document edits atomically as one undo step"
+    },
+    {
+      "batch_safe": true,
+      "examples": [
+        {},
+        {
+          "paths": false
+        }
+      ],
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "paths": {
+            "default": true,
+            "description": "Include every path and node, not just the names",
+            "type": "boolean"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "name": "object.list",
+      "summary": "Report the objects on the active vector layer with their paths"
+    },
+    {
+      "batch_safe": true,
+      "examples": [
+        {
+          "index": 0
+        },
+        {
+          "mode": "all"
+        }
+      ],
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "index": {
+            "description": "Object index; leave it out with all or none",
+            "maximum": 100000,
+            "minimum": 0,
+            "type": "number"
+          },
+          "mode": {
+            "default": "set",
+            "description": "What to do with the selection",
+            "enum": [
+              "set",
+              "add",
+              "all",
+              "none"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "name": "object.select",
+      "summary": "Select vector objects by index"
+    },
+    {
+      "batch_safe": true,
+      "examples": [
+        {}
+      ],
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "name": "object.convert_to_path",
+      "summary": "Turn the selected text objects into editable paths"
+    },
+    {
+      "batch_safe": true,
+      "examples": [
+        {
+          "node": 2,
+          "object": 0
+        }
+      ],
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "node": {
+            "default": 0,
+            "description": "Node index within the path",
+            "maximum": 100000,
+            "minimum": 0,
+            "type": "number"
+          },
+          "object": {
+            "description": "Object index on the active vector layer",
+            "maximum": 100000,
+            "minimum": 0,
+            "type": "number"
+          },
+          "path": {
+            "default": 0,
+            "description": "Path index within the object",
+            "maximum": 100000,
+            "minimum": 0,
+            "type": "number"
+          }
+        },
+        "required": [
+          "object"
+        ],
+        "type": "object"
+      },
+      "name": "object.node_select",
+      "summary": "Pick the node the node edit actions act on"
+    },
+    {
+      "batch_safe": true,
+      "examples": [
+        {}
+      ],
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "name": "object.node_break",
+      "summary": "Break the selected node's path at that node"
+    },
+    {
+      "batch_safe": true,
+      "examples": [
+        {}
+      ],
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "name": "object.node_join",
+      "summary": "Join the selected node's path to the nearest other open path"
+    },
+    {
+      "batch_safe": true,
+      "examples": [
+        {}
+      ],
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "name": "object.path_reverse",
+      "summary": "Reverse the direction of the selected node's path"
+    },
+    {
+      "batch_safe": true,
+      "examples": [
+        {
+          "closed": true
+        }
+      ],
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "closed": {
+            "default": true,
+            "description": "True closes the path, false opens it",
+            "type": "boolean"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "name": "object.path_closed",
+      "summary": "Close or open the selected node's path"
+    },
+    {
+      "batch_safe": true,
+      "examples": [
+        {
+          "closed": true,
+          "nodes": [
+            {
+              "x": 10,
+              "y": 10
+            },
+            {
+              "x": 60,
+              "y": 10
+            },
+            {
+              "x": 60,
+              "y": 60
+            }
+          ]
+        }
+      ],
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "closed": {
+            "default": false,
+            "description": "Close the final segment to the first node",
+            "type": "boolean"
+          },
+          "nodes": {
+            "description": "Bezier anchors with optional absolute in/out control points",
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "in": {
+                  "items": {
+                    "maximum": 100000,
+                    "minimum": -100000,
+                    "type": "number"
+                  },
+                  "maxItems": 2,
+                  "minItems": 2,
+                  "type": "array"
+                },
+                "out": {
+                  "items": {
+                    "maximum": 100000,
+                    "minimum": -100000,
+                    "type": "number"
+                  },
+                  "maxItems": 2,
+                  "minItems": 2,
+                  "type": "array"
+                },
+                "x": {
+                  "maximum": 100000,
+                  "minimum": -100000,
+                  "type": "number"
+                },
+                "y": {
+                  "maximum": 100000,
+                  "minimum": -100000,
+                  "type": "number"
+                }
+              },
+              "required": [
+                "x",
+                "y"
+              ],
+              "type": "object"
+            },
+            "maxItems": 4096,
+            "minItems": 2,
+            "type": "array"
+          }
+        },
+        "required": [
+          "nodes"
+        ],
+        "type": "object"
+      },
+      "name": "object.add_path",
+      "summary": "Append a path to the selected object"
     }
   ],
   "commands": [

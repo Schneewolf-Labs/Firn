@@ -4,12 +4,12 @@ Command names observed in the bundled PspScript files (`App.Do(Environment, '<Na
 PSP9's Python API mirrors its internal command layer, so this is the closest thing
 to a spec for what the core has to implement. Count = occurrences in scripts.
 
-`App::do_command` (`app/src/Script.cpp`) implements 96 of the 115 names
+`App::do_command` (`app/src/Script.cpp`) implements 99 of the 115 names
 below. The parameter names come from the scripts themselves (including the
 original's own misspellings, such as `Agressive`); never invent one. What
-is left needs features we do not have (Duplicate Window, Export Tube,
-vector node editing) or is script-runner plumbing
-(StartForeignWindow, GetString, EventNotify, the preferences queries).
+is left needs features we do not have (Duplicate Window, Export Tube) or is
+script-runner plumbing (StartForeignWindow, GetString, EventNotify, the
+preferences queries).
 
 | Count | Command |
 |---|---|

@@ -430,6 +430,7 @@ std::vector<Action> build() {
             return describe_json(app, name);
         });
     add_drawing_actions(a);
+    add_vector_actions(a);
     for (auto& entry : a) {
         const std::string name(entry.name);
         if (name == "layer.new" || name == "layer.new_vector" || name == "layer.properties" || name == "layer.select" ||

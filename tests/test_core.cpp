@@ -3686,6 +3686,90 @@ static void test_openraster_lossless() {
 // The project format must be lossless: every field of the document model
 // comes back exactly. The native container cannot carry all of it, which is
 // what test_psp_vector_compat below pins down.
+// Break, join and reverse: the structural half of node editing. What they
+// must not do is move the curve, so each one is checked by flattening the
+// path before and after and comparing the outline it draws.
+static void test_path_editing() {
+    // The points a path flattens to, rounded and sorted, so the same outline
+    // walked from a different node or in the other direction compares equal.
+    auto outline = [](const vec::Path& p) {
+        std::vector<std::pair<int, int>> pts;
+        for (const auto& q : vec::flatten(p)) pts.emplace_back(static_cast<int>(std::lround(q.first * 16)), static_cast<int>(std::lround(q.second * 16)));
+        std::sort(pts.begin(), pts.end());
+        // A path repeats its start, and breaking one repeats the break node,
+        // so compare the set of points an outline covers, not the walk.
+        pts.erase(std::unique(pts.begin(), pts.end()), pts.end());
+        return pts;
+    };
+    auto near_same = [](const std::vector<std::pair<int, int>>& a, const std::vector<std::pair<int, int>>& b) {
+        if (a.size() != b.size()) return false;
+        for (size_t i = 0; i < a.size(); ++i)
+            if (std::abs(a[i].first - b[i].first) > 1 || std::abs(a[i].second - b[i].second) > 1) return false;
+        return true;
+    };
+
+    // Reversing an ellipse draws the same ellipse, backwards.
+    {
+        vec::Object e = vec::make_ellipse(50, 40, 30, 20);
+        const auto before = outline(e.paths[0]);
+        vec::reverse_path(e.paths[0]);
+        CHECK(near_same(outline(e.paths[0]), before));
+        CHECK(e.paths[0].nodes.front().flags[0] & 1);
+        CHECK(e.paths[0].nodes.back().flags[1] & 0x80);
+        vec::reverse_path(e.paths[0]);
+        CHECK(near_same(outline(e.paths[0]), before));
+    }
+
+    // Breaking a closed path opens it without changing what it draws.
+    {
+        vec::Object e = vec::make_ellipse(50, 40, 30, 20);
+        const auto before = outline(e.paths[0]);
+        CHECK(vec::break_path(e, 0, 2));
+        CHECK(e.paths.size() == 1 && !e.paths[0].closed);
+        CHECK(e.paths[0].nodes.size() == 5);           // four nodes plus the repeated one
+        CHECK(!(e.paths[0].nodes.back().flags[1] & 0x80));
+        CHECK(near_same(outline(e.paths[0]), before));
+        // Breaking again splits the open path in two.
+        CHECK(vec::break_path(e, 0, 2));
+        CHECK(e.paths.size() == 2);
+        CHECK(e.paths[0].nodes.size() == 3 && e.paths[1].nodes.size() == 3);
+        CHECK(!vec::break_path(e, 0, 0));              // an end has nothing to break
+        CHECK(!vec::break_path(e, 0, 2));              // nor does the far end
+        CHECK(!vec::break_path(e, 9, 1));
+    }
+
+    // Joining puts the two halves back together as one path.
+    {
+        vec::Object e = vec::make_ellipse(50, 40, 30, 20);
+        const auto whole = outline(e.paths[0]);
+        CHECK(vec::break_path(e, 0, 2));
+        CHECK(vec::break_path(e, 0, 2));
+        CHECK(vec::join_paths(e, 0, 1));
+        CHECK(e.paths.size() == 1 && e.paths[0].nodes.size() == 5);
+        CHECK(near_same(outline(e.paths[0]), whole));
+        CHECK(!vec::join_paths(e, 0, 0));
+        CHECK(!vec::join_paths(e, 0, 7));
+        e.paths[0].closed = true;
+        vec::Path spare; spare.closed = false; spare.nodes = e.paths[0].nodes;
+        e.paths.push_back(spare);
+        CHECK(!vec::join_paths(e, 0, 1));              // a closed path cannot be joined
+    }
+
+    // Two separate strokes meeting at a point join at whichever ends are
+    // nearest, reversing as needed, and the result is one continuous run.
+    {
+        vec::Object o;
+        o.paths.push_back(vec::make_polygon({{0, 0}, {10, 0}, {20, 0}}, false).paths[0]);
+        o.paths.push_back(vec::make_polygon({{40, 0}, {30, 0}, {20, 0}}, false).paths[0]);
+        CHECK(vec::join_paths(o, 0, 1));
+        CHECK(o.paths.size() == 1);
+        const vec::Path& p = o.paths[0];
+        CHECK(p.nodes.size() == 5);
+        for (size_t i = 0; i + 1 < p.nodes.size(); ++i) CHECK(p.nodes[i].x < p.nodes[i + 1].x);
+        CHECK(p.nodes.front().x == 0.0f && p.nodes.back().x == 40.0f);
+    }
+}
+
 static void test_openraster_vectors() {
     Document doc(64, 48);
     doc.add_layer("Background").background = true;
@@ -4024,6 +4108,7 @@ int main() {
     test_layer_style_scales_with_the_image();
     test_clipping_masks();
     test_openraster_lossless();
+    test_path_editing();
     test_openraster_vectors();
     test_psp_vector_compat();
     test_metadata();

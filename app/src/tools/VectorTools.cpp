@@ -317,14 +317,40 @@ public:
             if (layer < 0) return;
             const auto& objs = app.doc->layer(layer).objects;
             for (size_t i = 0; i < objs.size(); ++i)
-                if (objs[i].selected && !objs[i].is_group) draw_nodes(in, objs[i], static_cast<int>(i) == edit_object_ ? edit_path_ : -1, static_cast<int>(i) == edit_object_ ? edit_node_ : -1);
-            if ((ImGui::IsKeyPressed(ImGuiKey_Delete, false) || ImGui::IsKeyPressed(ImGuiKey_Backspace, false)) && edit_object_ >= 0) delete_node(app);
+                if (objs[i].selected && !objs[i].is_group) draw_nodes(in, objs[i], static_cast<int>(i) == app.node_object ? app.node_path : -1, static_cast<int>(i) == app.node_object ? app.node_index : -1);
+            if ((ImGui::IsKeyPressed(ImGuiKey_Delete, false) || ImGui::IsKeyPressed(ImGuiKey_Backspace, false)) && app.node_object >= 0) delete_node(app);
         }
     }
 
     void draw_options(App& app) override {
         ImGui::SetNextItemWidth(170);
-        if (ImGui::Combo("Mode", &app.pen_mode, "Draw Point to Point\0Draw Freehand\0Edit Nodes\0")) { if (drawing_) finish(app, app.pen_close); edit_object_ = -1; }
+        if (ImGui::Combo("Mode", &app.pen_mode, "Draw Point to Point\0Draw Freehand\0Edit Nodes\0")) { if (drawing_) finish(app, app.pen_close); app.node_object = -1; }
+        // Editing nodes and drawing them need different options, and putting
+        // both on one row ran it off the end of the window.
+        if (app.pen_mode == 2) {
+            ImGui::SameLine();
+            ImGui::BeginDisabled(app.node_object < 0);
+            if (ImGui::SmallButton("Corner")) set_node_type(app, 0);
+            ImGui::SameLine();
+            if (ImGui::SmallButton("Smooth")) set_node_type(app, 1);
+            ImGui::SameLine();
+            if (ImGui::SmallButton("Delete Node")) delete_node(app);
+            ImGui::SameLine();
+            ImGui::TextDisabled("|");
+            ImGui::SameLine();
+            if (ImGui::SmallButton("Break")) app.node_break();
+            ImGui::SameLine();
+            if (ImGui::SmallButton("Join")) app.node_join();
+            ImGui::SameLine();
+            if (ImGui::SmallButton("Reverse")) app.path_reverse();
+            ImGui::SameLine();
+            const bool closed = path_closed(app);
+            if (ImGui::SmallButton(closed ? "Open Path" : "Close Path")) app.path_set_closed(!closed);
+            ImGui::EndDisabled();
+            ImGui::SameLine();
+            ImGui::TextDisabled("Ctrl-click an outline adds a node, Delete removes one.");
+            return;
+        }
         ImGui::SameLine();
         ImGui::Checkbox("Close path", &app.pen_close);
         ImGui::SameLine();
@@ -338,18 +364,7 @@ public:
         ImGui::Checkbox("Anti-alias", &app.shape_antialias);
         ImGui::SameLine();
         app.draw_line_style_combo();
-        if (app.pen_mode == 2) {
-            ImGui::SameLine();
-            ImGui::BeginDisabled(edit_object_ < 0);
-            if (ImGui::SmallButton("Corner")) set_node_type(app, 0);
-            ImGui::SameLine();
-            if (ImGui::SmallButton("Smooth")) set_node_type(app, 1);
-            ImGui::SameLine();
-            if (ImGui::SmallButton("Delete Node")) delete_node(app);
-            ImGui::EndDisabled();
-            ImGui::SameLine();
-            ImGui::TextDisabled("Drag nodes and handles of the selected objects; Delete removes a node.");
-        } else if (drawing_) {
+        if (drawing_) {
             ImGui::SameLine();
             if (ImGui::SmallButton("Apply")) finish(app, app.pen_close);
             ImGui::SameLine();
@@ -407,6 +422,10 @@ private:
     }
 
     // --- node editing ---
+    static bool path_closed(App& app) {
+        const vec::Object* o = app.node_object_ptr(nullptr);
+        return o && o->paths[app.node_path].closed;
+    }
     void press_edit(App& app, const ToolInput& in, const ImGuiIO& io) {
         const int layer = app.vector_layer_for_edit(false);
         if (layer < 0) { app.status = "Pen: the active layer is not a vector layer."; return; }
@@ -415,23 +434,23 @@ private:
         const float tol = 6.0f / in.zoom;
         // Handles of the selected node first, then any node of a selected object.
         edit_part_ = 0;
-        if (edit_object_ >= 0 && edit_object_ < static_cast<int>(objs.size()) && edit_path_ < static_cast<int>(objs[edit_object_].paths.size()) && edit_node_ < static_cast<int>(objs[edit_object_].paths[edit_path_].nodes.size())) {
-            const vec::Node& n = objs[edit_object_].paths[edit_path_].nodes[edit_node_];
+        if (app.node_object >= 0 && app.node_object < static_cast<int>(objs.size()) && app.node_path < static_cast<int>(objs[app.node_object].paths.size()) && app.node_index < static_cast<int>(objs[app.node_object].paths[app.node_path].nodes.size())) {
+            const vec::Node& n = objs[app.node_object].paths[app.node_path].nodes[app.node_index];
             if (std::hypot(in.img_x - n.in_x, in.img_y - n.in_y) <= tol && !n.is_corner()) edit_part_ = 1;
             else if (std::hypot(in.img_x - n.out_x, in.img_y - n.out_y) <= tol && !n.is_corner()) edit_part_ = 2;
         }
         if (edit_part_ == 0) {
-            edit_object_ = -1;
-            for (int i = static_cast<int>(objs.size()) - 1; i >= 0 && edit_object_ < 0; --i) {
+            app.node_object = -1;
+            for (int i = static_cast<int>(objs.size()) - 1; i >= 0 && app.node_object < 0; --i) {
                 if (!objs[i].selected || objs[i].is_group) continue;
-                for (size_t pi = 0; pi < objs[i].paths.size() && edit_object_ < 0; ++pi)
+                for (size_t pi = 0; pi < objs[i].paths.size() && app.node_object < 0; ++pi)
                     for (size_t ni = 0; ni < objs[i].paths[pi].nodes.size(); ++ni) {
                         const vec::Node& n = objs[i].paths[pi].nodes[ni];
-                        if (std::hypot(in.img_x - n.x, in.img_y - n.y) <= tol) { edit_object_ = i; edit_path_ = static_cast<int>(pi); edit_node_ = static_cast<int>(ni); break; }
+                        if (std::hypot(in.img_x - n.x, in.img_y - n.y) <= tol) { app.node_object = i; app.node_path = static_cast<int>(pi); app.node_index = static_cast<int>(ni); break; }
                     }
             }
         }
-        if (edit_object_ < 0) {
+        if (app.node_object < 0) {
             // Not on a node: select the object under the cursor (Ctrl inserts a node on it).
             const int hit = object_at(objs, in.img_x, in.img_y, tol);
             if (hit >= 0) {
@@ -445,11 +464,11 @@ private:
         x0_ = in.img_x; y0_ = in.img_y;
     }
     void drag_edit(App& app, const ToolInput& in) {
-        if (!edit_active_ || edit_object_ < 0) return;
+        if (!edit_active_ || app.node_object < 0) return;
         auto& objs = app.doc->layer(layer_).objects;
-        if (edit_object_ >= static_cast<int>(objs.size())) return;
-        vec::Node& n = objs[edit_object_].paths[edit_path_].nodes[edit_node_];
-        const vec::Node& b = before_[edit_object_].paths[edit_path_].nodes[edit_node_];
+        if (app.node_object >= static_cast<int>(objs.size())) return;
+        vec::Node& n = objs[app.node_object].paths[app.node_path].nodes[app.node_index];
+        const vec::Node& b = before_[app.node_object].paths[app.node_path].nodes[app.node_index];
         const float dx = in.img_x - x0_, dy = in.img_y - y0_;
         const ImGuiIO& io = ImGui::GetIO();
         if (edit_part_ == 0) {
@@ -469,27 +488,27 @@ private:
         if (!app.doc || layer_ >= static_cast<int>(app.doc->layer_count())) return;
         // A click that did not move anything is a selection, not an edit.
         const auto& objs = app.doc->layer(layer_).objects;
-        if (edit_object_ >= 0 && edit_object_ < static_cast<int>(objs.size()) && edit_object_ < static_cast<int>(before_.size())) {
-            const vec::Node& a = objs[edit_object_].paths[edit_path_].nodes[edit_node_];
-            const vec::Node& b = before_[edit_object_].paths[edit_path_].nodes[edit_node_];
+        if (app.node_object >= 0 && app.node_object < static_cast<int>(objs.size()) && app.node_object < static_cast<int>(before_.size())) {
+            const vec::Node& a = objs[app.node_object].paths[app.node_path].nodes[app.node_index];
+            const vec::Node& b = before_[app.node_object].paths[app.node_path].nodes[app.node_index];
             if (a.x == b.x && a.y == b.y && a.in_x == b.in_x && a.in_y == b.in_y && a.out_x == b.out_x && a.out_y == b.out_y) return;
         }
         app.objects_changed(edit_part_ == 0 ? "Move Node" : "Adjust Curve", before_);
     }
     void set_node_type(App& app, int type) {
         const int layer = app.vector_layer_for_edit(false);
-        if (layer < 0 || edit_object_ < 0) return;
+        if (layer < 0 || app.node_object < 0) return;
         auto& objs = app.doc->layer(layer).objects;
-        if (edit_object_ >= static_cast<int>(objs.size())) return;
+        if (app.node_object >= static_cast<int>(objs.size())) return;
         std::vector<vec::Object> before = objs;
-        vec::Path& p = objs[edit_object_].paths[edit_path_];
-        vec::Node& n = p.nodes[edit_node_];
+        vec::Path& p = objs[app.node_object].paths[app.node_path];
+        vec::Node& n = p.nodes[app.node_index];
         if (type == 0) { n.in_x = n.out_x = n.x; n.in_y = n.out_y = n.y; n.flags[1] = (n.flags[1] & 0x80) | 0x40; }
         else {
             // Smooth: handles along the chord between the neighbors, a third of the way each side.
             const size_t cnt = p.nodes.size();
-            const vec::Node& prev = p.nodes[(edit_node_ + cnt - 1) % cnt];
-            const vec::Node& next = p.nodes[(edit_node_ + 1) % cnt];
+            const vec::Node& prev = p.nodes[(app.node_index + cnt - 1) % cnt];
+            const vec::Node& next = p.nodes[(app.node_index + 1) % cnt];
             const float dx = (next.x - prev.x) / 6.0f, dy = (next.y - prev.y) / 6.0f;
             n.in_x = n.x - dx; n.in_y = n.y - dy; n.out_x = n.x + dx; n.out_y = n.y + dy;
             n.flags[1] = (n.flags[1] & 0x80) | 0x43;
@@ -498,17 +517,17 @@ private:
     }
     void delete_node(App& app) {
         const int layer = app.vector_layer_for_edit(false);
-        if (layer < 0 || edit_object_ < 0) return;
+        if (layer < 0 || app.node_object < 0) return;
         auto& objs = app.doc->layer(layer).objects;
-        if (edit_object_ >= static_cast<int>(objs.size())) return;
+        if (app.node_object >= static_cast<int>(objs.size())) return;
         std::vector<vec::Object> before = objs;
-        vec::Path& p = objs[edit_object_].paths[edit_path_];
-        if (edit_node_ >= static_cast<int>(p.nodes.size())) return;
-        p.nodes.erase(p.nodes.begin() + edit_node_);
-        if (p.nodes.size() < 2) objs[edit_object_].paths.erase(objs[edit_object_].paths.begin() + edit_path_);
+        vec::Path& p = objs[app.node_object].paths[app.node_path];
+        if (app.node_index >= static_cast<int>(p.nodes.size())) return;
+        p.nodes.erase(p.nodes.begin() + app.node_index);
+        if (p.nodes.size() < 2) objs[app.node_object].paths.erase(objs[app.node_object].paths.begin() + app.node_path);
         else { p.nodes.front().flags[0] = 1; if (p.closed) p.nodes.back().flags[1] |= 0x80; }
-        if (objs[edit_object_].paths.empty()) objs.erase(objs.begin() + edit_object_);
-        edit_object_ = -1;
+        if (objs[app.node_object].paths.empty()) objs.erase(objs.begin() + app.node_object);
+        app.node_object = -1;
         app.objects_changed("Delete Node", std::move(before));
     }
     void insert_node(App& app, int obj, float x, float y) {
@@ -532,7 +551,7 @@ private:
         vec::Node n; n.x = n.in_x = n.out_x = x; n.y = n.in_y = n.out_y = y; n.flags[1] = 0x40;
         vec::Path& p = objs[obj].paths[best_path];
         p.nodes.insert(p.nodes.begin() + best_seg + 1, n);
-        edit_object_ = obj; edit_path_ = best_path; edit_node_ = best_seg + 1;
+        app.node_object = obj; app.node_path = best_path; app.node_index = best_seg + 1;
         app.objects_changed("Add Node", std::move(before));
     }
     static void draw_nodes(const ToolInput& in, const vec::Object& o, int sel_path, int sel_node) {
@@ -563,7 +582,9 @@ private:
     float drag_x_ = 0, drag_y_ = 0, x0_ = 0, y0_ = 0;
     // Edit mode
     bool edit_active_ = false;
-    int edit_object_ = -1, edit_path_ = 0, edit_node_ = 0, edit_part_ = 0;   // part: 0 anchor, 1 in handle, 2 out handle
+    int edit_part_ = 0;   // 0 anchor, 1 in handle, 2 out handle
+    // The node itself lives on App (node_object / node_path / node_index) so
+    // the node edit actions and the script commands act on the same one.
 };
 
 }  // namespace

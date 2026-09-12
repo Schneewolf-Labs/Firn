@@ -12,7 +12,7 @@ machine-readable JSON Schema, one schema per action.
 Replies are JSON. Success is `{"ok":true}` and whatever the action returns;
 a refusal comes back as a message and a non-zero exit from `firn-cli`.
 
-57 actions and 161 inherited command names.
+66 actions and 161 inherited command names.
 
 ## Documents
 
@@ -1085,6 +1085,85 @@ Batch-safe: no.
 | parameter | type | required | default | meaning |
 |---|---|---|---|---|
 | `path` | string | yes |  | file to write |
+
+
+## Other
+
+### `object.add_path`
+
+Append a path to the selected object.
+
+| parameter | type | required | default | meaning |
+|---|---|---|---|---|
+| `nodes` | array | yes |  | Bezier anchors with optional absolute in/out control points |
+| `closed` | boolean | no | `false` | Close the final segment to the first node |
+
+
+### `object.convert_to_path`
+
+Turn the selected text objects into editable paths.
+
+Takes no parameters.
+
+
+### `object.list`
+
+Report the objects on the active vector layer with their paths.
+
+| parameter | type | required | default | meaning |
+|---|---|---|---|---|
+| `paths` | boolean | no | `true` | Include every path and node, not just the names |
+
+
+### `object.node_break`
+
+Break the selected node's path at that node.
+
+Takes no parameters.
+
+
+### `object.node_join`
+
+Join the selected node's path to the nearest other open path.
+
+Takes no parameters.
+
+
+### `object.node_select`
+
+Pick the node the node edit actions act on.
+
+| parameter | type | required | default | meaning |
+|---|---|---|---|---|
+| `object` | number | yes |  | Object index on the active vector layer |
+| `path` | number | no | `0` | Path index within the object |
+| `node` | number | no | `0` | Node index within the path |
+
+
+### `object.path_closed`
+
+Close or open the selected node's path.
+
+| parameter | type | required | default | meaning |
+|---|---|---|---|---|
+| `closed` | boolean | no | `true` | True closes the path, false opens it |
+
+
+### `object.path_reverse`
+
+Reverse the direction of the selected node's path.
+
+Takes no parameters.
+
+
+### `object.select`
+
+Select vector objects by index.
+
+| parameter | type | required | default | meaning |
+|---|---|---|---|---|
+| `index` | number | no |  | Object index; leave it out with all or none |
+| `mode` | string (set, add, all, none) | no | `"set"` | What to do with the selection |
 
 
 ## Inherited commands

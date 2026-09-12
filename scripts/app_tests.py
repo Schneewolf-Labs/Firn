@@ -553,6 +553,63 @@ def test_drawing_api(f):
     f.do("file.close")
 
 
+def test_node_editing(f):
+    section("vector node editing")
+    f.do("file.new",width=200,height=150,color="#ffffff")
+    f.do("layer.new_vector")
+    f.do("draw.ellipse",x=30,y=30,width=100,height=80,fill="#eeaa75",target="vector")
+    objs=json.loads(f.do("object.list"))["objects"]
+    check(len(objs)==1 and len(objs[0]["paths"])==1 and objs[0]["paths"][0]["closed"],"object.list reports the drawn ellipse as one closed path")
+    check(len(objs[0]["paths"][0]["nodes"])==4,"an ellipse is four Bezier nodes")
+    check("in" in objs[0]["paths"][0]["nodes"][0],"curve nodes report their control points")
+
+    check(f.refused("object.node_break"),"node editing refuses before a node is picked")
+    f.do("object.node_select",object=0,node=1)
+    f.do("object.node_break")
+    paths=json.loads(f.do("object.list"))["objects"][0]["paths"]
+    check(len(paths)==1 and not paths[0]["closed"] and len(paths[0]["nodes"])==5,"breaking a closed path opens it and repeats the break node")
+    f.do("object.node_select",object=0,node=2)
+    f.do("object.node_break")
+    paths=json.loads(f.do("object.list"))["objects"][0]["paths"]
+    check(len(paths)==2,"breaking an open path splits it in two")
+    f.do("object.node_join")
+    paths=json.loads(f.do("object.list"))["objects"][0]["paths"]
+    check(len(paths)==1 and len(paths[0]["nodes"])==5,"joining puts the two halves back")
+
+    first=paths[0]["nodes"][0]
+    f.do("object.path_reverse")
+    back=json.loads(f.do("object.list"))["objects"][0]["paths"][0]["nodes"]
+    check(back[-1]["x"]==first["x"] and back[-1]["y"]==first["y"],"reversing turns the path around")
+    f.do("object.path_closed",closed=True)
+    check(json.loads(f.do("object.list"))["objects"][0]["paths"][0]["closed"],"a path can be closed again")
+
+    f.do("object.add_path",nodes=[{"x":150,"y":20},{"x":190,"y":20},{"x":190,"y":60}],closed=True)
+    obj=json.loads(f.do("object.list"))["objects"][0]
+    check(len(obj["paths"])==2,"add_path appends a contour to the selected object")
+    out=os.path.join(OUT,"nodes.png")
+    f.do("file.save_as",path=out)
+    check(png_pixel(out,175,35)[:3]==(238,170,117),"the appended contour is painted with the object's fill")
+    f.do("edit.undo")
+    check(len(json.loads(f.do("object.list"))["objects"][0]["paths"])==1,"every node edit is one undo step")
+
+    # The original's own merge script runs these three in order.
+    f.do("file.new",width=120,height=60,color="#ffffff")
+    f.do("layer.new_vector")
+    f.do("draw.rectangle",x=10,y=10,width=40,height=40,fill="#3366cc",target="vector")
+    f.do("object.select",mode="all")
+    props=json.loads(f.send('do ReturnVectorObjectProperties {}'))
+    check(len(props["ListOfObjects"])==1,"ReturnVectorObjectProperties reports the layer's objects")
+    path=props["ListOfObjects"][0]["paths"][0]
+    f.send('do ConvertToPath {}')
+    f.send('do NodeEditAddPath ' + json.dumps({"Path":{"nodes":[{"x":70,"y":10},{"x":110,"y":10},{"x":110,"y":50}],"closed":True}},separators=(',',':')))
+    check(len(json.loads(f.do("object.list"))["objects"][0]["paths"])==2,"NodeEditAddPath adds the path a script hands it")
+    f.send('do NodeEditAddPath ' + json.dumps({"Path":path},separators=(',',':')))
+    check(len(json.loads(f.do("object.list"))["objects"][0]["paths"])==3,"a path read back out can be added straight to another object")
+    check(f.refused("object.node_select",object=9),"node selection validates its indexes")
+    f.do("file.close")
+    f.do("file.close")
+
+
 def test_atomic_batches(f):
     section("atomic batches")
     out=os.path.join(OUT,"batch.png")
@@ -674,7 +731,7 @@ def main():
         drive.recv_line(sock)
         f = Firn(sock)
         for case in (test_ui_scaling, test_api_surface, test_documents, test_view, test_layers, test_selection,
-                     test_painting_and_materials, test_edit_actions, test_tools_and_history, test_image_geometry, test_clipping_masks, test_background_work, test_lock_transparency, test_pass_through_groups, test_blend_ranges, test_metadata, test_drawing_api, test_atomic_batches, test_discovery_v2):
+                     test_painting_and_materials, test_edit_actions, test_tools_and_history, test_image_geometry, test_clipping_masks, test_background_work, test_lock_transparency, test_pass_through_groups, test_blend_ranges, test_metadata, test_drawing_api, test_node_editing, test_atomic_batches, test_discovery_v2):
             case(f)
         sock.sendall(b"quit\n")
         sock.settimeout(10.0)

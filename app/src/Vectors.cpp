@@ -543,6 +543,109 @@ void App::object_text_to_curves(bool per_character) {
     if (any) objects_changed(per_character ? "Convert Text to Curves (Characters)" : "Convert Text to Curves", std::move(before));
 }
 
+void App::object_convert_to_path() {
+    // Preset shapes and lines are already paths here; only text carries a
+    // second description of itself, so this is where the conversion is.
+    object_text_to_curves(false);
+}
+
+// --- Node editing ---------------------------------------------------------------
+
+// The object the Pen tool has a node selected in, or null.
+vec::Object* App::node_object_ptr(int* layer_out) {
+    const int layer = vector_layer_for_edit(false);
+    if (layer < 0 || node_object < 0) return nullptr;
+    auto& objs = doc->layer(layer).objects;
+    if (node_object >= static_cast<int>(objs.size())) return nullptr;
+    if (node_path < 0 || node_path >= static_cast<int>(objs[node_object].paths.size())) return nullptr;
+    if (layer_out) *layer_out = layer;
+    return &objs[node_object];
+}
+
+bool App::node_break() {
+    vec::Object* o = node_object_ptr(nullptr);
+    if (!o) { status = "Break: select a node first."; return false; }
+    const int layer = vector_layer_for_edit(false);
+    std::vector<vec::Object> before = doc->layer(layer).objects;
+    if (!vec::break_path(*o, static_cast<size_t>(node_path), static_cast<size_t>(node_index))) {
+        status = "Break: a path cannot be broken at its end.";
+        return false;
+    }
+    // The break leaves the node where the path now starts, so keep the
+    // selection on something real rather than dropping it.
+    node_index = 0;
+    objects_changed("Break Path", std::move(before));
+    return true;
+}
+
+bool App::node_join() {
+    vec::Object* o = node_object_ptr(nullptr);
+    if (!o) { status = "Join: select a node first."; return false; }
+    const int layer = vector_layer_for_edit(false);
+    // Join the selected node's path to the nearest other open path of the
+    // same object: with one gap in a path there is only one thing to mean.
+    int other = -1;
+    float best = 0;
+    for (size_t i = 0; i < o->paths.size(); ++i) {
+        if (static_cast<int>(i) == node_path || o->paths[i].closed || o->paths[i].nodes.empty()) continue;
+        const vec::Path& a = o->paths[node_path];
+        if (a.closed || a.nodes.empty()) break;
+        for (const vec::Node& x : {a.nodes.front(), a.nodes.back()})
+            for (const vec::Node& y : {o->paths[i].nodes.front(), o->paths[i].nodes.back()}) {
+                const float d = std::hypot(x.x - y.x, x.y - y.y);
+                if (other < 0 || d < best) { best = d; other = static_cast<int>(i); }
+            }
+    }
+    if (other < 0) { status = "Join: this object has no other open path."; return false; }
+    std::vector<vec::Object> before = doc->layer(layer).objects;
+    if (!vec::join_paths(*o, static_cast<size_t>(node_path), static_cast<size_t>(other))) return false;
+    node_path = std::min(node_path, other);
+    node_index = 0;
+    objects_changed("Join Paths", std::move(before));
+    return true;
+}
+
+bool App::path_reverse() {
+    vec::Object* o = node_object_ptr(nullptr);
+    if (!o) { status = "Reverse: select a node first."; return false; }
+    const int layer = vector_layer_for_edit(false);
+    std::vector<vec::Object> before = doc->layer(layer).objects;
+    const size_t n = o->paths[node_path].nodes.size();
+    vec::reverse_path(o->paths[node_path]);
+    node_index = n ? static_cast<int>(n) - 1 - node_index : 0;
+    objects_changed("Reverse Path", std::move(before));
+    return true;
+}
+
+bool App::path_set_closed(bool closed) {
+    vec::Object* o = node_object_ptr(nullptr);
+    if (!o) { status = "Select a node first."; return false; }
+    const int layer = vector_layer_for_edit(false);
+    if (o->paths[node_path].closed == closed) return true;
+    std::vector<vec::Object> before = doc->layer(layer).objects;
+    o->paths[node_path].closed = closed;
+    vec::fix_path_flags(o->paths[node_path]);
+    objects_changed(closed ? "Close Path" : "Open Path", std::move(before));
+    return true;
+}
+
+bool App::object_add_path(const std::vector<vec::Path>& paths) {
+    const int layer = vector_layer_for_edit(false);
+    if (layer < 0 || paths.empty()) { status = "Add Path: the active layer is not a vector layer."; return false; }
+    auto& objs = doc->layer(layer).objects;
+    int target = -1;
+    for (size_t i = 0; i < objs.size(); ++i) if (objs[i].selected && !objs[i].is_group) target = static_cast<int>(i);
+    if (target < 0) { status = "Add Path: select an object first."; return false; }
+    std::vector<vec::Object> before = objs;
+    for (const vec::Path& p : paths) {
+        if (p.nodes.empty()) continue;
+        objs[target].paths.push_back(p);
+        vec::fix_path_flags(objs[target].paths.back());
+    }
+    objects_changed("Add Path", std::move(before));
+    return true;
+}
+
 // --- Text objects ---------------------------------------------------------------
 
 std::vector<vec::Path> App::text_paths(const vec::TextInfo& t, std::vector<int>* glyph_ids) const {

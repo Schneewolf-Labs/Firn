@@ -264,10 +264,12 @@ against Krita in both directions. In priority order:
       dropped something it holds. The Firn stash now carries it too: the
       Exif directory as base64 TIFF and the text notes as key/value pairs,
       bounded at 48 KB so the description the original reads stays sane.
-- [ ] **Vector node editing**: Convert to Path, Add Path, node-level edits.
-      Vectors are a headline feature and this is the visible hole in them;
-      four of the original's script commands wait on it. The large item,
-      and the one to cut if the release should come sooner.
+- [x] **Vector node editing**: Convert to Path, Add Path, node-level edits.
+      Break, join, reverse and close/open a path, in the Pen tool's node
+      mode, under Objects > Edit Node, and through nine `object.*` actions.
+      `ConvertToPath`, `ReturnVectorObjectProperties` and `NodeEditAddPath`
+      now run, which is what the original's VectorMergeSelected script is
+      built out of.
 - [ ] Export Picture Tube: Firn reads them and cannot write one.
 - [ ] Keep the camera's embedded thumbnail rather than dropping it.
 
