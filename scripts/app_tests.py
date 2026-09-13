@@ -500,7 +500,7 @@ def test_metadata(f):
     xmp = {m["name"]: m["value"] for m in json.loads(f.do("image.metadata"))["metadata"] if m["group"] == "XMP"}
     check(xmp.get("dc:title") == "A dog in the grass", "an XMP property can be set")
     check(xmp.get("dc:subject") == "dog; summer", "and one holding a list")
-    for ext in ("png", "jpg", "ora", "pspimage"):
+    for ext in ("png", "jpg", "ora", "pspimage", "tif"):
         path = os.path.join(OUT, "meta_xmp." + ext)
         f.do("file.save_as", path=path)
         f.do("file.close")
@@ -628,6 +628,36 @@ def test_node_editing(f):
     check(len(json.loads(f.do("object.list"))["objects"][0]["paths"])==3,"a path read back out can be added straight to another object")
     check(f.refused("object.node_select",object=9),"node selection validates its indexes")
     f.do("file.close")
+    f.do("file.close")
+
+
+def test_interchange_formats(f):
+    section("Photoshop and TIFF")
+    f.do("file.new", width=80, height=60, color="#ffffff")
+    f.do("draw.rectangle", x=10, y=10, width=30, height=25, fill="#cc3322")
+    f.do("layer.new")
+    f.do("draw.ellipse", x=30, y=20, width=40, height=30, fill="#2266cc")
+    f.do("layer.properties", name="Ellipse", blend="Multiply", opacity=60)
+    for ext in ("psd", "tif"):
+        path = os.path.join(OUT, "interchange." + ext)
+        f.do("file.save_as", path=path)
+        check(os.path.exists(path), "Firn writes a ." + ext)
+    f.do("file.close")
+    f.do("file.open", path=os.path.join(OUT, "interchange.psd"))
+    layers = f.layers()
+    check(len(layers) == 2, "a PSD round trip keeps both layers")
+    top = layers[-1]
+    check(top["name"] == "Ellipse", "and their names")
+    check(top["blend"] == "Multiply", "and their blend modes")
+    check(abs(top["opacity"] - 60) < 1, "and their opacity")
+    f.do("file.close")
+    # TIFF is a flat format, so it comes back as one layer, losslessly.
+    f.do("file.open", path=os.path.join(OUT, "interchange.tif"))
+    check(len(f.layers()) == 1, "a TIFF opens as a single flattened layer")
+    out = os.path.join(OUT, "interchange_tif.png")
+    f.do("file.save_as", path=out)
+    check(png_size(out) == (80, 60), "at the size it was written")
+    check(png_pixel(out, 15, 15)[:3] == (204, 51, 34), "with its pixels intact")
     f.do("file.close")
 
 
@@ -780,7 +810,7 @@ def main():
         drive.recv_line(sock)
         f = Firn(sock)
         for case in (test_ui_scaling, test_api_surface, test_documents, test_view, test_layers, test_selection,
-                     test_painting_and_materials, test_edit_actions, test_tools_and_history, test_image_geometry, test_clipping_masks, test_background_work, test_lock_transparency, test_pass_through_groups, test_blend_ranges, test_metadata, test_drawing_api, test_node_editing, test_tube_export, test_atomic_batches, test_discovery_v2):
+                     test_painting_and_materials, test_edit_actions, test_tools_and_history, test_image_geometry, test_clipping_masks, test_background_work, test_lock_transparency, test_pass_through_groups, test_blend_ranges, test_metadata, test_drawing_api, test_node_editing, test_interchange_formats, test_tube_export, test_atomic_batches, test_discovery_v2):
             case(f)
         sock.sendall(b"quit\n")
         sock.settimeout(10.0)

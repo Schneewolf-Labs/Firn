@@ -7,6 +7,14 @@ section into the next version.
 ## Unreleased
 
 ### Added
+- TIFF, read and written. It is what print and archival photography run on
+  and Firn could not touch it at all. Reading covers what cameras, scanners
+  and other editors actually emit: LZW, Deflate and PackBits as well as
+  uncompressed, strips or tiles, either byte order, 1 to 16 bits a channel,
+  grey, palette, RGB and RGBA. Writing is Deflate with the horizontal
+  predictor, which is lossless, and **at 16 bits a channel when the document
+  is** -- the first way Firn hands full precision to another program. CCITT
+  fax and JPEG-in-TIFF say so plainly instead of failing vaguely.
 - Firn writes Photoshop files. It could already read them faithfully, which
   meant anyone handed a PSD could edit it and had no way to hand it back.
   The layer stack goes out with names, opacity, blend modes, visibility,

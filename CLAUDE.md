@@ -185,6 +185,14 @@ docs/    notes on the original: command inventory, module mapping, FORMAT.md
   **check a writer change against GIMP**, not only against our reader.
   A group is written as a divider below its members and the group record
   above them, the reverse of how Firn stacks one.
+- **TIFF** is `core/src/io_tiff.cpp`. The reader takes LZW, Deflate,
+  PackBits and uncompressed, strips or tiles, `II` or `MM`, 1/2/4/8/16 bits,
+  grey, palette, RGB and RGBA; the writer emits Deflate with the horizontal
+  predictor, 16-bit when `doc.bit_depth()` is. **A 16-bit sample is in the
+  file's byte order, not the machine's** -- getting that wrong reads a
+  big-endian file as noise and nothing else notices, so test `MM` files
+  explicitly. CCITT fax and JPEG-in-TIFF are refused by name rather than
+  producing a blank image.
 - **Native format reading** lives in `core/src/io_psp.cpp`; `docs/FORMAT.md`
   is the reference and must be updated when the reader learns a new block.
   `tests/test_psp_corpus.cpp` loads every sample under `WindowsInstall/`

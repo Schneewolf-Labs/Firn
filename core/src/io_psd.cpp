@@ -106,11 +106,9 @@ struct PsdLayer {
 
 }  // namespace
 
-std::unique_ptr<Document> load_psd(const std::string& path, std::string* err, std::vector<std::string>* warnings) {
+std::unique_ptr<Document> load_psd_from_memory(const uint8_t* data, size_t size, std::string* err, std::vector<std::string>* warnings) {
     auto fail = [&](const std::string& m) { if (err) *err = m; return std::unique_ptr<Document>(); };
-    std::ifstream f(path, std::ios::binary);
-    if (!f) return fail("cannot open " + path);
-    std::vector<uint8_t> d((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+    const std::vector<uint8_t> d(data, data + size);
     Cursor c{d};
     if (d.size() < 26 || std::memcmp(d.data(), "8BPS", 4) != 0) return fail("not a Photoshop file");
     c.p = 4;
@@ -317,6 +315,13 @@ std::unique_ptr<Document> load_psd(const std::string& path, std::string* err, st
     if (depth == 16 && warnings) warnings->push_back("16-bit PSD: read at 8 bits per channel");
     doc->set_active_layer(static_cast<int>(doc->layer_count()) - 1);
     return doc;
+}
+
+std::unique_ptr<Document> load_psd(const std::string& path, std::string* err, std::vector<std::string>* warnings) {
+    std::ifstream f(path, std::ios::binary);
+    if (!f) { if (err) *err = "cannot open " + path; return nullptr; }
+    const std::vector<uint8_t> d((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+    return load_psd_from_memory(d.data(), d.size(), err, warnings);
 }
 
 

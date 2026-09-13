@@ -210,6 +210,26 @@ against the 115 commands its own bundled scripts use.
       GetString, EventNotify, the preferences and file-location queries)
       and two whose mapping is ambiguous (CombineRGB, MoveSelection)
 
+## 22. Interoperability (2026-09-13)
+
+Parity with the original is done and nothing is slow; what stopped Firn
+being usable *with other people* was the formats.
+
+- [x] Write Photoshop files. Firn read PSD faithfully and could not write
+      one, so anyone handed a PSD could edit it and had no way to hand it
+      back. Verified in both directions against GIMP.
+- [x] TIFF, read and written, including 16 bits a channel -- the first way
+      Firn hands full precision to another program. Verified against
+      libtiff over LZW, Deflate, PackBits, uncompressed, tiles, big-endian,
+      palette and sub-byte depths.
+- [ ] CCITT fax (Group 3 and 4) in TIFF, which is what scanned documents
+      use. Refused by name today.
+- [ ] JPEG-compressed TIFF, common straight off some cameras.
+- [ ] PSD: 16-bit output, adjustment layers as Photoshop's own rather than
+      empty placeholders, and text layers as editable text.
+- [ ] `image.crop` and `image.canvas_size` actions: the Crop tool has no
+      API equivalent, so a script has to select and crop to the selection.
+
 ## 16. Beyond the original (2026-09-11)
 
 - [x] Content-Aware Fill (exemplar synthesis, `core/src/inpaint.cpp`)

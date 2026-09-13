@@ -2922,6 +2922,8 @@ static void test_parsers_survive_broken_files() {
     Layer& top = doc.add_layer("Top");
     top.pixels = Image(24, 16, {0, 0, 0, 0});
     top.pixels.set(4, 4, {255, 0, 0, 255});
+    const std::vector<uint8_t> tiff_file = io::save_tiff_to_memory(doc);
+    const std::vector<uint8_t> psd_file = io::save_psd_to_memory(doc, nullptr);
     const std::vector<uint8_t> psp = io::save_psp_to_memory(doc);
     const std::vector<uint8_t> ora = io::save_ora_to_memory(doc);
     const std::vector<uint8_t> png = io::encode_png(bg.pixels);
@@ -2931,6 +2933,8 @@ static void test_parsers_survive_broken_files() {
         (void)io::load_psp_from_memory(d, n, &err, &warnings);
         (void)io::load_ora_from_memory(d, n, &err, &warnings);
         (void)io::load_psp_stored_composite(d, n);
+        (void)io::load_psd_from_memory(d, n, &err, &warnings);
+        (void)io::load_tiff_from_memory(d, n, &err, &warnings);
         (void)meta::parse_jpeg(d, n);
         (void)meta::parse_png(d, n);
         (void)meta::parse_tiff(d, n);
@@ -2957,7 +2961,7 @@ static void test_parsers_survive_broken_files() {
 
     // Truncated at every length, which is where offset and length fields
     // point past the end.
-    for (const std::vector<uint8_t>* src : {&psp, &ora, &png}) {
+    for (const std::vector<uint8_t>* src : {&psp, &ora, &png, &tiff_file, &psd_file}) {
         for (size_t cut = 0; cut <= src->size(); cut += std::max<size_t>(1, src->size() / 12))
             poke_every_parser(src->data(), cut);
         poke_every_parser(src->data(), src->size() - 1);
@@ -3715,6 +3719,123 @@ static void test_openraster_lossless() {
 // fussy about is lengths: a field padded to the wrong thing, or a length
 // that counts its own padding, and Photoshop and GIMP both call the whole
 // file corrupt rather than skipping the layer.
+// TIFF is what print and archival photography run on, and the only format
+// here that hands 16 bits a channel to another program without argument.
+static void test_tiff() {
+    Document d(40, 24);
+    Layer& bg = d.add_layer("Background");
+    bg.background = true;
+    for (int y = 0; y < 24; ++y)
+        for (int x = 0; x < 40; ++x)
+            bg.pixels.set(x, y, {static_cast<uint8_t>(x * 6), static_cast<uint8_t>(y * 10), 128, 255});
+    meta::Metadata md;
+    md.set(meta::Group::Image, 0x010F, "A Camera Co");
+    d.set_metadata(std::move(md));
+
+    const std::string path = tmp_path("firn_test.tif");
+    std::string err;
+    std::vector<std::string> warn;
+    CHECK(io::save_tiff(d, path, &err));
+
+    auto back = io::load_tiff(path, &err, &warn);
+    CHECK(back != nullptr);
+    if (!back) return;
+    CHECK(back->width() == 40 && back->height() == 24);
+    // Deflate with the horizontal predictor is lossless, so every pixel must
+    // come back exactly, not nearly.
+    bool exact = true;
+    for (int y = 0; y < 24 && exact; ++y)
+        for (int x = 0; x < 40; ++x) {
+            const Color a = bg.pixels.get(x, y), b = back->layer(0).pixels.get(x, y);
+            if (a.r != b.r || a.g != b.g || a.b != b.b || a.a != b.a) { exact = false; break; }
+        }
+    CHECK(exact);
+
+    // The header, checked on the bytes: little-endian, 42, and a directory
+    // whose entries are in ascending tag order, which readers rely on.
+    const std::vector<uint8_t> bytes = io::save_tiff_to_memory(d);
+    CHECK(bytes.size() > 16 && bytes[0] == 'I' && bytes[1] == 'I');
+    auto le16 = [&bytes](size_t o) { return static_cast<uint16_t>(bytes[o] | (bytes[o + 1] << 8)); };
+    auto le32 = [&bytes](size_t o) {
+        return static_cast<uint32_t>(bytes[o] | (bytes[o + 1] << 8) | (bytes[o + 2] << 16) | (static_cast<uint32_t>(bytes[o + 3]) << 24));
+    };
+    CHECK(le16(2) == 42);
+    const size_t ifd = le32(4);
+    CHECK(ifd + 2 < bytes.size());
+    const uint16_t n = le16(ifd);
+    CHECK(n >= 10);
+    uint16_t last = 0;
+    bool ascending = true, saw_predictor = false, saw_compression = false;
+    for (uint16_t i = 0; i < n; ++i) {
+        const size_t e = ifd + 2 + static_cast<size_t>(i) * 12;
+        const uint16_t tag = le16(e);
+        if (tag < last) ascending = false;
+        last = tag;
+        if (tag == 259) { saw_compression = le16(e + 8) == 8; }
+        if (tag == 317) { saw_predictor = le16(e + 8) == 2; }
+    }
+    CHECK(ascending);
+    CHECK(saw_compression);   // Deflate
+    CHECK(saw_predictor);     // horizontal differencing
+    CHECK(le32(ifd + 2 + static_cast<size_t>(n) * 12) == 0);   // no second directory
+
+    // Transparency picks up a fourth sample and says it is unassociated,
+    // which is what straight alpha means.
+    Document t(8, 8);
+    Layer& tl = t.add_layer("Layer");
+    tl.pixels = Image(8, 8, {10, 20, 30, 128});
+    const std::vector<uint8_t> with_alpha = io::save_tiff_to_memory(t);
+    bool has_extra = false, four = false;
+    {
+        const size_t i2 = static_cast<size_t>(with_alpha[4] | (with_alpha[5] << 8) | (with_alpha[6] << 16) | (static_cast<uint32_t>(with_alpha[7]) << 24));
+        const uint16_t n2 = static_cast<uint16_t>(with_alpha[i2] | (with_alpha[i2 + 1] << 8));
+        for (uint16_t i = 0; i < n2; ++i) {
+            const size_t e = i2 + 2 + static_cast<size_t>(i) * 12;
+            const uint16_t tag = static_cast<uint16_t>(with_alpha[e] | (with_alpha[e + 1] << 8));
+            const uint16_t v = static_cast<uint16_t>(with_alpha[e + 8] | (with_alpha[e + 9] << 8));
+            if (tag == 338 && v == 2) has_extra = true;
+            if (tag == 277 && v == 4) four = true;
+        }
+    }
+    CHECK(has_extra && four);
+
+    // 16 bits a channel, which is the reason to reach for TIFF at all.
+    Document deep(16, 12);
+    Layer& dl = deep.add_layer("Deep");
+    dl.background = true;
+    dl.pixels.fill({100, 150, 200, 255});
+    Image16 wide(16, 12);
+    for (int y = 0; y < 12; ++y)
+        for (int x = 0; x < 16; ++x) {
+            uint16_t* p = wide.data() + (static_cast<size_t>(y) * 16 + x) * 4;
+            p[0] = static_cast<uint16_t>(x * 4000); p[1] = static_cast<uint16_t>(y * 5000); p[2] = 30000; p[3] = 65535;
+        }
+    dl.set_deep(std::move(wide));
+    CHECK(deep.bit_depth() == 16);
+    const std::string deep_path = tmp_path("firn_test16.tif");
+    CHECK(io::save_tiff(deep, deep_path, &err));
+    {
+        std::ifstream df(deep_path, std::ios::binary);
+        const std::vector<uint8_t> b((std::istreambuf_iterator<char>(df)), std::istreambuf_iterator<char>());
+        const size_t i2 = static_cast<size_t>(b[4] | (b[5] << 8) | (b[6] << 16) | (static_cast<uint32_t>(b[7]) << 24));
+        const uint16_t n2 = static_cast<uint16_t>(b[i2] | (b[i2 + 1] << 8));
+        bool sixteen = false;
+        for (uint16_t i = 0; i < n2; ++i) {
+            const size_t e = i2 + 2 + static_cast<size_t>(i) * 12;
+            if (static_cast<uint16_t>(b[e] | (b[e + 1] << 8)) != 258) continue;
+            const size_t at = static_cast<size_t>(b[e + 8] | (b[e + 9] << 8) | (b[e + 10] << 16) | (static_cast<uint32_t>(b[e + 11]) << 24));
+            sixteen = at + 1 < b.size() && static_cast<uint16_t>(b[at] | (b[at + 1] << 8)) == 16;
+        }
+        CHECK(sixteen);
+    }
+    // It still reads back, at the eight bits the document model shows.
+    auto deep_back = io::load_tiff(deep_path, &err, &warn);
+    CHECK(deep_back != nullptr);
+    if (deep_back) CHECK(deep_back->layer(0).pixels.get(2, 2).g == static_cast<uint8_t>((2 * 5000) >> 8));
+    std::remove(path.c_str());
+    std::remove(deep_path.c_str());
+}
+
 static void test_psd_writer() {
     Document d(48, 36);
     Layer& bg = d.add_layer("Background");
@@ -4464,6 +4585,7 @@ int main() {
     test_layer_style_scales_with_the_image();
     test_clipping_masks();
     test_openraster_lossless();
+    test_tiff();
     test_psd_writer();
     test_xmp();
     test_exif_thumbnail();

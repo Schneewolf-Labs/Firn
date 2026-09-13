@@ -26,6 +26,7 @@ add_library(firncore STATIC
   src/io.cpp
   src/io_psp.cpp
   src/io_psd.cpp
+  src/io_tiff.cpp
 )
 target_include_directories(firncore PUBLIC include)
 find_package(Threads REQUIRED)

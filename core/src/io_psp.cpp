@@ -1431,10 +1431,19 @@ bool is_psd_extension(const std::string& path) {
     return ext == "psd" || ext == "psb";
 }
 
+bool is_tiff_extension(const std::string& path) {
+    const auto dot = path.rfind('.');
+    if (dot == std::string::npos) return false;
+    std::string ext = path.substr(dot + 1);
+    for (char& c : ext) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    return ext == "tif" || ext == "tiff";
+}
+
 std::unique_ptr<Document> load_document(const std::string& path, std::string* err, std::vector<std::string>* warnings) {
     if (is_ora_extension(path)) return load_ora(path, err, warnings);
     if (is_psp_extension(path)) return load_psp(path, err, warnings);
     if (is_psd_extension(path)) return load_psd(path, err, warnings);
+    if (is_tiff_extension(path)) return load_tiff(path, err, warnings);
     if (auto deep = load16(path, nullptr)) {
         auto doc = std::make_unique<Document>(deep->width(), deep->height());
         Layer& bg = doc->add_layer("Background");
@@ -2219,6 +2228,7 @@ bool save_document(const Document& doc, const std::string& path, std::string* er
     if (is_ora_extension(path)) return save_ora(doc, path, err);
     if (is_psp_extension(path)) return save_psp(doc, path, err);
     if (is_psd_extension(path)) return save_psd(doc, path, err, nullptr);
+    if (is_tiff_extension(path)) return save_tiff(doc, path, err);
     // The composite doubles as the source of the Exif thumbnail, so it is
     // flattened once here rather than again inside the metadata writer.
     const Image flat = doc.composite();

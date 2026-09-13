@@ -399,12 +399,12 @@ bool save(const Image& img, const std::string& path, std::string* err, int jpeg_
 }
 
 const std::vector<std::string>& load_extensions() {
-    static const std::vector<std::string> v{"ora", "pspimage", "psp", "psptube", "pspframe", "psd", "psb", "png", "jpg", "jpeg", "webp", "bmp", "tga", "gif", "pnm", "ppm", "pgm"};
+    static const std::vector<std::string> v{"ora", "pspimage", "psp", "psptube", "pspframe", "psd", "psb", "tif", "tiff", "png", "jpg", "jpeg", "webp", "bmp", "tga", "gif", "pnm", "ppm", "pgm"};
     return v;
 }
 
 const std::vector<std::string>& save_extensions() {
-    static const std::vector<std::string> v{"ora", "pspimage", "psd", "png", "jpg", "jpeg", "webp", "bmp", "tga"};
+    static const std::vector<std::string> v{"ora", "pspimage", "psd", "tif", "tiff", "png", "jpg", "jpeg", "webp", "bmp", "tga"};
     return v;
 }
 

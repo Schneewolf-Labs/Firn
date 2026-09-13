@@ -44,12 +44,22 @@ std::vector<uint8_t> save_ora_to_memory(const Document& doc);
 bool save_ora(const Document& doc, const std::string& path, std::string* err);
 // Photoshop PSD/PSB import (core/src/io_psd.cpp): layers, groups, masks, 8 and 16 bit RGB or grayscale.
 std::unique_ptr<Document> load_psd(const std::string& path, std::string* err, std::vector<std::string>* warnings);
+std::unique_ptr<Document> load_psd_from_memory(const uint8_t* data, size_t size, std::string* err, std::vector<std::string>* warnings);
 // Writes a Photoshop file: 8-bit RGB, the layer stack with names, opacity,
 // blend modes, masks and groups, plus the flattened composite every reader
 // falls back on. `warnings` collects what the format cannot hold.
 bool save_psd(const Document& doc, const std::string& path, std::string* err = nullptr, std::vector<std::string>* warnings = nullptr);
 std::vector<uint8_t> save_psd_to_memory(const Document& doc, std::vector<std::string>* warnings = nullptr);
+
+// TIFF: baseline plus LZW, Deflate and PackBits, strips or tiles, 8 or 16
+// bits, grey, palette, RGB and RGBA. Written as Deflate with the horizontal
+// predictor, at 16 bits when the document is.
+std::unique_ptr<Document> load_tiff(const std::string& path, std::string* err, std::vector<std::string>* warnings);
+std::unique_ptr<Document> load_tiff_from_memory(const uint8_t* data, size_t size, std::string* err, std::vector<std::string>* warnings);
+bool save_tiff(const Document& doc, const std::string& path, std::string* err = nullptr);
+std::vector<uint8_t> save_tiff_to_memory(const Document& doc);
 bool is_psd_extension(const std::string& path);
+bool is_tiff_extension(const std::string& path);
 
 // Preset shape files (.PspShape) are ordinary images holding vector layers;
 // returns the objects of every vector layer, or empty on failure.
