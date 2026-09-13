@@ -183,7 +183,8 @@ Ideas taken from studying GIMP and Krita (reimplemented, not copied):
 - [ ] Foreground Select: a real matting pass so hair and soft edges come
       out feathered rather than hard
 - [x] Let a stroke choose which assistant it follows (Tool Options: Follow)
-- [ ] Layer style presets, and styles that scale when the image is resized
+- [ ] Layer style presets. Styles scaling with the image landed in 0.5.0
+      (`LayerStyle::scale`)
 - [ ] Lighter PNG compression for large .ora saves (about a second for a
       3 MP project today, most of it the layer and merged PNGs)
 - [x] Filter layer masks in the classic format
@@ -195,15 +196,16 @@ against the 115 commands its own bundled scripts use.
 
 - [x] Edit: Copy Merged, Paste Into Selection, Repeat last effect
 - [x] File > Revert, View > Zoom to Selection, rename a layer in place
-- [x] Script commands: 69 of 115 implemented, now 96
+- [x] Script commands: 69 of 115 implemented, now 100
 - [x] Edge Preserving Smooth
 - [x] Lock transparency, the original's "transparency protected", written
       and read in that format's own field
-- [ ] Export Picture Tube (we read tubes but cannot make one)
+- [x] Export Picture Tube (0.5.0: File > Export > Picture Tube,
+      `file.export_tube`, the `ExportTube` script command)
 - [ ] Duplicate Window: two views of one image at different zooms. Needs
       shared document ownership; App and DocState each own theirs outright
-- [ ] Vector node editing: Convert to Path, Add Path, node-level edits
-      (4 script commands wait on this)
+- [x] Vector node editing: Convert to Path, Add Path, node-level edits
+      (0.5.0; the script commands that waited on it now run, 100 of 115)
 - [ ] The last script commands are runner plumbing (StartForeignWindow,
       GetString, EventNotify, the preferences and file-location queries)
       and two whose mapping is ambiguous (CombineRGB, MoveSelection)
@@ -226,9 +228,17 @@ against the 115 commands its own bundled scripts use.
       PNG and OpenRaster (`core/src/metadata.cpp`, Image > Image Information)
 - [ ] IPTC and XMP: the other two metadata standards a photograph carries.
       XMP is RDF/XML in an APP1 segment, IPTC an IIM block inside a Photoshop
-      resource. Reading both is a day's work; the editor UI is already there
-- [ ] Keep the camera's embedded thumbnail rather than dropping it, by
-      regenerating it from the edited picture on save
+      resource. Reading both is a day's work; the editor UI is already there.
+      **This is silent data loss, not a missing feature.** Measured
+      2026-09-12 on an iPhone photo: it carries a 3258-byte
+      `http://ns.adobe.com/xap/1.0/` APP1 holding the title, caption,
+      keywords, copyright and rating a photo manager wrote, and saving it
+      from Firn drops the segment with no warning. Exif comes through whole
+      by comparison (62 entries in, 62 out, MakerNote included), which is
+      what makes the gap easy to miss
+- [x] Saved photos carry a thumbnail again (0.5.0). Regenerated from the
+      picture as saved, never the camera's own: that one survives a crop and
+      goes on showing what was cut away
 - [ ] Preferences switch for what leaves the machine: strip private metadata
       on every export, as a default rather than a per-image action
 - [x] The project format is lossless: every field of the document model
@@ -236,9 +246,9 @@ against the 115 commands its own bundled scripts use.
       (`test_openraster_lossless`, `test_openraster_vectors`,
       `test_psp_vector_compat`). Vector layers use Firn's own encoding,
       `core/src/io_vec.cpp`
-- [ ] Metadata does not ride in the native container yet. It would go in the
-      Firn stash, which the original shows under image information and
-      otherwise ignores
+- [x] Metadata rides in the native container (0.5.0), in the Firn stash:
+      Exif as a base64 TIFF directory and the text notes as key/value pairs,
+      bounded at 48 KB
 - [ ] The native container still loses what the original's shape layout
       cannot hold (dashes, pattern images, per-object visibility, fractional
       point sizes). That is the original's ceiling, not a bug; the stash
