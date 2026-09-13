@@ -6,6 +6,8 @@ section into the next version.
 
 ## Unreleased
 
+## 0.5.1 (2026-09-13)
+
 ### Fixed
 - A photo's XMP is no longer thrown away when you save. XMP is where a photo
   manager keeps the title, caption, keywords, copyright, creator and rating,
