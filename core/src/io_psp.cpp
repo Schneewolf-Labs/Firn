@@ -2218,6 +2218,7 @@ bool save_psp(const Document& doc, const std::string& path, std::string* err) {
 bool save_document(const Document& doc, const std::string& path, std::string* err, int jpeg_quality) {
     if (is_ora_extension(path)) return save_ora(doc, path, err);
     if (is_psp_extension(path)) return save_psp(doc, path, err);
+    if (is_psd_extension(path)) return save_psd(doc, path, err, nullptr);
     // The composite doubles as the source of the Exif thumbnail, so it is
     // flattened once here rather than again inside the metadata writer.
     const Image flat = doc.composite();

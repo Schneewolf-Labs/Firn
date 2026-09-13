@@ -404,7 +404,7 @@ const std::vector<std::string>& load_extensions() {
 }
 
 const std::vector<std::string>& save_extensions() {
-    static const std::vector<std::string> v{"ora", "pspimage", "png", "jpg", "jpeg", "webp", "bmp", "tga"};
+    static const std::vector<std::string> v{"ora", "pspimage", "psd", "png", "jpg", "jpeg", "webp", "bmp", "tga"};
     return v;
 }
 

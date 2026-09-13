@@ -44,6 +44,11 @@ std::vector<uint8_t> save_ora_to_memory(const Document& doc);
 bool save_ora(const Document& doc, const std::string& path, std::string* err);
 // Photoshop PSD/PSB import (core/src/io_psd.cpp): layers, groups, masks, 8 and 16 bit RGB or grayscale.
 std::unique_ptr<Document> load_psd(const std::string& path, std::string* err, std::vector<std::string>* warnings);
+// Writes a Photoshop file: 8-bit RGB, the layer stack with names, opacity,
+// blend modes, masks and groups, plus the flattened composite every reader
+// falls back on. `warnings` collects what the format cannot hold.
+bool save_psd(const Document& doc, const std::string& path, std::string* err = nullptr, std::vector<std::string>* warnings = nullptr);
+std::vector<uint8_t> save_psd_to_memory(const Document& doc, std::vector<std::string>* warnings = nullptr);
 bool is_psd_extension(const std::string& path);
 
 // Preset shape files (.PspShape) are ordinary images holding vector layers;

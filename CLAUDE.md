@@ -174,6 +174,17 @@ docs/    notes on the original: command inventory, module mapping, FORMAT.md
   what it cannot, and `scripts/original-open.sh` is the real check. Add new
   Firn-only state to the .ora writer and, where the original can tolerate
   it, the Firn stash.
+- **Photoshop files** are `core/src/io_psd.cpp`, read and written (8-bit
+  RGB; a 16-bit document is written at 8 bits with a warning). PSD is
+  unforgiving about lengths in a way our own reader is not: a layer name is
+  a Pascal string padded to a multiple of four **counting from the field's
+  own start**, an additional-info block's declared length excludes the pad
+  that follows it, and a layer whose rectangle is empty must have empty
+  channel data to match. Get any of those wrong and Photoshop and GIMP
+  reject the whole file as corrupt while Firn reads it back happily, so
+  **check a writer change against GIMP**, not only against our reader.
+  A group is written as a divider below its members and the group record
+  above them, the reverse of how Firn stacks one.
 - **Native format reading** lives in `core/src/io_psp.cpp`; `docs/FORMAT.md`
   is the reference and must be updated when the reader learns a new block.
   `tests/test_psp_corpus.cpp` loads every sample under `WindowsInstall/`

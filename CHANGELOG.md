@@ -6,6 +6,15 @@ section into the next version.
 
 ## Unreleased
 
+### Added
+- Firn writes Photoshop files. It could already read them faithfully, which
+  meant anyone handed a PSD could edit it and had no way to hand it back.
+  The layer stack goes out with names, opacity, blend modes, visibility,
+  masks and groups, plus the flattened composite every reader falls back on,
+  and the ICC profile when the document carries one. Verified by round
+  trip: a PSD written by GIMP, opened in Firn, saved again and reopened in
+  GIMP with its layers, opacity and blend modes intact.
+
 ## 0.5.1 (2026-09-13)
 
 ### Fixed

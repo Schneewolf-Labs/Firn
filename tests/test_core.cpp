@@ -3710,6 +3710,116 @@ static void test_openraster_lossless() {
 // XMP is where a photo manager keeps the title, caption, keywords,
 // copyright and rating. Firn used to drop the whole packet on save while
 // Exif came through whole, which is what made the loss easy to miss.
+// Firn could read a Photoshop file and not write one, so anyone handed a
+// PSD could edit it and had no way to hand it back. What the format is
+// fussy about is lengths: a field padded to the wrong thing, or a length
+// that counts its own padding, and Photoshop and GIMP both call the whole
+// file corrupt rather than skipping the layer.
+static void test_psd_writer() {
+    Document d(48, 36);
+    Layer& bg = d.add_layer("Background");
+    bg.background = true;
+    bg.pixels.fill({200, 60, 40, 255});
+
+    Layer& mid = d.add_layer("Middle");
+    mid.pixels = Image(48, 36, {0, 0, 0, 0});
+    for (int y = 4; y < 20; ++y)
+        for (int x = 4; x < 24; ++x) mid.pixels.set(x, y, {40, 90, 200, 255});
+    mid.blend = BlendMode::Multiply;
+    mid.opacity = 0.6f;
+    mid.mask = Mask(48, 36);
+    std::fill(mid.mask.data(), mid.mask.data() + mid.mask.size(), 128);
+
+    Layer& grp = d.add_layer("A group");
+    grp.type = LayerType::Group;
+    grp.pixels = Image();
+    Layer& inner = d.add_layer("Inside");
+    inner.pixels = Image(48, 36, {0, 0, 0, 0});
+    inner.pixels.set(30, 30, {10, 220, 70, 255});
+    inner.depth = 1;
+    inner.blend = BlendMode::Screen;
+    inner.visible = false;
+
+    const std::string path = tmp_path("firn_test_write.psd");
+    std::string err;
+    std::vector<std::string> warn;
+    CHECK(io::save_psd(d, path, &err, &warn));
+
+    auto back = io::load_psd(path, &err, &warn);
+    CHECK(back != nullptr);
+    if (!back) return;
+    CHECK(back->width() == 48 && back->height() == 36);
+    CHECK(back->layer_count() == 4);
+
+    const Layer& r_bg = back->layer(0);
+    CHECK(r_bg.name == "Background" && r_bg.background);
+    const Layer& r_mid = back->layer(1);
+    CHECK(r_mid.name == "Middle");
+    CHECK(r_mid.blend == BlendMode::Multiply);
+    CHECK(std::abs(r_mid.opacity - 0.6f) < 0.01f);
+    CHECK(r_mid.has_mask() && r_mid.mask.data()[0] == 128);
+    CHECK(r_mid.pixels.get(10, 10).b == 200 && r_mid.pixels.get(40, 30).a == 0);
+    const Layer& r_grp = back->layer(2);
+    CHECK(r_grp.type == LayerType::Group && r_grp.name == "A group");
+    const Layer& r_in = back->layer(3);
+    CHECK(r_in.name == "Inside" && r_in.depth == 1);
+    CHECK(r_in.blend == BlendMode::Screen && !r_in.visible);
+    CHECK(r_in.pixels.get(30, 30).g == 220);
+
+    // The structural rules the format is unforgiving about, checked on the
+    // bytes rather than trusting our own reader, which is lenient enough to
+    // have accepted the first broken version of this writer.
+    const std::vector<uint8_t> bytes = io::save_psd_to_memory(d, nullptr);
+    CHECK(bytes.size() > 64 && std::memcmp(bytes.data(), "8BPS", 4) == 0);
+    auto be32 = [&bytes](size_t o) {
+        return (static_cast<uint32_t>(bytes[o]) << 24) | (static_cast<uint32_t>(bytes[o + 1]) << 16) |
+               (static_cast<uint32_t>(bytes[o + 2]) << 8) | bytes[o + 3];
+    };
+    auto be16 = [&bytes](size_t o) { return static_cast<uint16_t>((bytes[o] << 8) | bytes[o + 1]); };
+    CHECK(be16(4) == 1);                                  // version 1, not PSB
+    CHECK(be32(14) == 36 && be32(18) == 48);              // height then width
+    CHECK(be16(22) == 8 && be16(24) == 3);                // 8-bit RGB
+    size_t p = 26;
+    p += 4 + be32(p);                                     // colour mode data
+    p += 4 + be32(p);                                     // image resources
+    const uint32_t lm_len = be32(p);
+    const size_t lm_begin = p + 4;
+    CHECK(lm_begin + lm_len < bytes.size());              // the merged image follows it
+    p = lm_begin;
+    const uint32_t li_len = be32(p);
+    const size_t li_begin = p + 4;
+    CHECK(li_begin + li_len <= lm_begin + lm_len);        // layer info fits its parent
+    CHECK((li_len & 1) == 0);                             // and is padded even
+    // Five records for four layers: a group is a divider below its members
+    // and the group record above them, which is the reverse of how Firn
+    // keeps it. Negative promises the merged image carries real alpha.
+    CHECK(static_cast<int16_t>(be16(li_begin)) == -5);
+
+    // Every layer record's name field must be a multiple of four bytes long,
+    // counting its own length byte. Getting this wrong is what made the first
+    // files this wrote unreadable everywhere but here.
+    p = li_begin + 2;
+    for (int i = 0; i < 5; ++i) {
+        p += 16;
+        const uint16_t nch = be16(p);
+        p += 2 + static_cast<size_t>(nch) * 6;
+        CHECK(std::memcmp(bytes.data() + p, "8BIM", 4) == 0);
+        p += 12;
+        const uint32_t extra = be32(p);
+        const size_t extra_end = p + 4 + extra;
+        p += 4;
+        p += 4 + be32(p);                                 // mask data
+        p += 4 + be32(p);                                 // blending ranges
+        const size_t name_at = p;
+        const uint8_t nlen = bytes[p];
+        p += ((static_cast<size_t>(nlen) + 1 + 3) / 4) * 4;
+        CHECK((p - name_at) % 4 == 0);
+        CHECK(p <= extra_end);                            // the name stayed inside its record
+        p = extra_end;
+    }
+    std::remove(path.c_str());
+}
+
 static void test_xmp() {
     const std::string packet =
         "<?xpacket begin=\"\" id=\"W5M0MpCehiHzreSzNTczkc9d\"?>\n"
@@ -4354,6 +4464,7 @@ int main() {
     test_layer_style_scales_with_the_image();
     test_clipping_masks();
     test_openraster_lossless();
+    test_psd_writer();
     test_xmp();
     test_exif_thumbnail();
     test_picture_tube_export();
