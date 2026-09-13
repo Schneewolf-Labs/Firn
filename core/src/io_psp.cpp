@@ -966,6 +966,11 @@ void apply_firn_stash(const Reader& r, const Block& creator, Document& doc, std:
         const json::Value& notes = md.get("notes");
         for (size_t i = 0; i < notes.size(); ++i)
             got.set_text(notes[i].get("key").as_string(""), notes[i].get("value").as_string(""));
+        if (const std::string packet = md.get("xmp").as_string(""); !packet.empty()) {
+            got.xmp = packet;
+            for (meta::Entry& e : meta::parse_xmp(got.xmp)) got.entries.push_back(std::move(e));
+            got.sort();
+        }
         if (!got.empty()) doc.set_metadata(std::move(got));
     }
     doc.touch();
@@ -1045,6 +1050,12 @@ std::string firn_stash(const Document& doc) {
     if (const std::vector<uint8_t> tiff = meta::build_tiff(doc.metadata());
         !tiff.empty() && tiff.size() <= kMaxExif) {
         metadata.set("exif", json::Value::string(base64_encode(tiff)));
+        have_metadata = true;
+    }
+    // The XMP packet goes in as it stands. It is text, so it needs no
+    // base64, and it is the one thing here that other programs also read.
+    if (const std::string packet = meta::build_xmp(doc.metadata()); !packet.empty() && packet.size() <= 64 * 1024) {
+        metadata.set("xmp", json::Value::string(packet));
         have_metadata = true;
     }
     {

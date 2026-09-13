@@ -321,9 +321,9 @@ Batch-safe: no.
 
 | parameter | type | required | default | meaning |
 |---|---|---|---|---|
-| `name` | string | no |  | the Exif tag name, or the keyword of a text note |
-| `value` | string | no |  | the new value |
-| `group` | string (Image, Exif, GPS, Interop, Text) | no | `"Image"` | which directory the tag is in |
+| `name` | string | no |  | the Exif tag name, the keyword of a text note, or an XMP property as prefix:Name |
+| `value` | string | no |  | the new value; in XMP, "; " between items makes a list |
+| `group` | string (Image, Exif, GPS, Interop, Text, XMP) | no | `"Image"` | which directory the tag is in |
 
 
 ### `image.strip_metadata`

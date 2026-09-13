@@ -226,19 +226,16 @@ against the 115 commands its own bundled scripts use.
 
 - [x] Metadata: Exif and text notes read, edited and written back for JPEG,
       PNG and OpenRaster (`core/src/metadata.cpp`, Image > Image Information)
-- [ ] IPTC and XMP: the other two metadata standards a photograph carries.
-      XMP is RDF/XML in an APP1 segment, IPTC an IIM block inside a Photoshop
-      resource. Reading both is a day's work; the editor UI is already there.
-      **This is silent data loss, not a missing feature.** Measured
-      2026-09-12 on an iPhone photo: it carries a 3258-byte
-      `http://ns.adobe.com/xap/1.0/` APP1 holding the title, caption,
-      keywords, copyright and rating a photo manager wrote, and saving it
-      from Firn drops the segment with no warning. Exif comes through whole
-      by comparison (62 entries in, 62 out, MakerNote included), which is
-      what makes the gap easy to miss
-- [x] Saved photos carry a thumbnail again (0.5.0). Regenerated from the
-      picture as saved, never the camera's own: that one survives a crop and
-      goes on showing what was cut away
+- [x] XMP is kept (2026-09-12). It was silent data loss: an iPhone photo
+      carries a 3258-byte XMP APP1 with its title, caption, keywords,
+      copyright and rating, and Firn dropped the whole segment on save while
+      Exif came through whole, which is what made it easy to miss. The
+      packet now round-trips byte for byte through JPEG, PNG, OpenRaster and
+      the native container, its simple properties show and edit in Image >
+      Image Information, and Remove Private reaches into it.
+- [ ] IPTC: the remaining metadata standard, an IIM block inside a Photoshop
+      resource (APP13 in a JPEG). Less urgent than XMP was, because a modern
+      pipeline mirrors IPTC into XMP and Firn now keeps that
 - [ ] Preferences switch for what leaves the machine: strip private metadata
       on every export, as a default rather than a per-image action
 - [x] The project format is lossless: every field of the document model

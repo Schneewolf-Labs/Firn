@@ -318,7 +318,13 @@ docs/    notes on the original: command inventory, module mapping, FORMAT.md
   holds them (part of the undo state); `io::read_metadata` / `embed_metadata`
   do the files, and `MetadataCommand` is the undoable edit. The native
   container has nowhere of its own for metadata, so it rides in the Firn
-  stash (docs/FORMAT.md). Saving a JPEG or PNG writes a
+  stash (docs/FORMAT.md). **XMP is kept as the packet the file carried**
+  (`Metadata::xmp`): `parse_xmp` lifts its simple properties out as
+  `Group::XMP` entries to show and edit, `build_xmp` puts edits back, and a
+  packet nobody touched is written out byte for byte. Firn does not model
+  RDF, so a structured property (a region list, an edit history) stays in
+  the packet and out of the entries. `remove_private` has to reach into the
+  packet too, or stripping would leave the location and the owner behind. Saving a JPEG or PNG writes a
   fresh Exif thumbnail (`io::exif_thumbnail`, IFD1) from the composite; the
   one the opened file carried is deliberately not reused, since after a crop
   it would still show what was cut away. The Metadata tab of

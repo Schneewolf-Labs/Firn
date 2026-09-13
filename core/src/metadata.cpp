@@ -85,7 +85,7 @@ TagTable table_for(Group g) {
         case Group::Exif: return {kExifTags, sizeof(kExifTags) / sizeof(TagInfo)};
         case Group::GPS: return {kGpsTags, sizeof(kGpsTags) / sizeof(TagInfo)};
         case Group::Interop: return {kInteropTags, sizeof(kInteropTags) / sizeof(TagInfo)};
-        case Group::Text: break;
+        case Group::Text: case Group::XMP: break;
     }
     return {nullptr, 0};
 }
@@ -221,6 +221,10 @@ bool is_metadata_chunk(const uint8_t* type) {
 
 }  // namespace
 
+// The APP1 marker segment XMP lives in, and the PNG chunk keyword it uses.
+static const std::string kXmpSig = std::string("http://ns.adobe.com/xap/1.0/") + '\0';
+static const char* const kXmpPngKey = "XML:com.adobe.xmp";
+
 const char* group_name(Group g) {
     switch (g) {
         case Group::Image: return "Image";
@@ -228,12 +232,13 @@ const char* group_name(Group g) {
         case Group::GPS: return "GPS";
         case Group::Interop: return "Interop";
         case Group::Text: return "Text";
+        case Group::XMP: return "XMP";
     }
     return "";
 }
 
 std::string Entry::name() const {
-    if (group == Group::Text) return key;
+    if (group == Group::Text || group == Group::XMP) return key;
     if (const TagInfo* t = lookup(group, tag)) return t->name;
     char buf[16];
     std::snprintf(buf, sizeof buf, "Tag 0x%04X", tag);
@@ -241,7 +246,7 @@ std::string Entry::name() const {
 }
 
 std::string Entry::text() const {
-    if (group == Group::Text) return std::string(value.begin(), value.end());
+    if (group == Group::Text || group == Group::XMP) return std::string(value.begin(), value.end());
     if (type == kAscii) return trim(std::string(value.begin(), value.end()));
     if (type == kUndefined) {
         if (tag == 0x9286 && value.size() > 8) {   // UserComment: an 8-byte character code first
@@ -262,7 +267,7 @@ std::string Entry::text() const {
 }
 
 bool Entry::editable() const {
-    if (group == Group::Text) return true;
+    if (group == Group::Text || group == Group::XMP) return true;
     if (type == kAscii) return true;
     if (type == kUndefined) return tag == 0x9286;
     if (type == kByte && tag >= 0x9C9B && tag <= 0x9C9F) return true;
@@ -270,7 +275,7 @@ bool Entry::editable() const {
 }
 
 bool Entry::set_text(const std::string& s) {
-    if (group == Group::Text) { value.assign(s.begin(), s.end()); count = static_cast<uint32_t>(value.size()); return true; }
+    if (group == Group::Text || group == Group::XMP) { value.assign(s.begin(), s.end()); count = static_cast<uint32_t>(value.size()); return true; }
     if (type == kAscii) {
         value.assign(s.begin(), s.end());
         value.push_back(0);
@@ -315,6 +320,224 @@ bool Entry::set_text(const std::string& s) {
     return true;
 }
 
+// --- XMP --------------------------------------------------------------------
+// XMP is RDF/XML, and Firn does not pretend to understand RDF. It keeps the
+// packet a file arrived with and lifts out the handful of properties a
+// person actually reads and edits: a value held as an element's text, as an
+// attribute on rdf:Description, or as an rdf:Alt / Bag / Seq of rdf:li.
+// Everything else stays in the packet untouched, and a packet nobody edited
+// is written back byte for byte.
+
+namespace {
+
+bool xml_name_char(char c) {
+    return std::isalnum(static_cast<unsigned char>(c)) || c == '_' || c == '-' || c == '.' || c == ':';
+}
+
+// "dc:title" and friends; rdf: and x: are structure, not content.
+bool xmp_property_name(const std::string& name) {
+    const size_t colon = name.find(':');
+    if (colon == std::string::npos || colon == 0 || colon + 1 >= name.size()) return false;
+    const std::string prefix = name.substr(0, colon);
+    return prefix != "rdf" && prefix != "x" && prefix != "xml" && prefix != "xmlns";
+}
+
+std::string xml_unescape(const std::string& s) {
+    std::string out;
+    out.reserve(s.size());
+    for (size_t i = 0; i < s.size(); ++i) {
+        if (s[i] != '&') { out.push_back(s[i]); continue; }
+        const size_t end = s.find(';', i);
+        if (end == std::string::npos || end - i > 10) { out.push_back(s[i]); continue; }
+        const std::string ent = s.substr(i + 1, end - i - 1);
+        if (ent == "amp") out.push_back('&');
+        else if (ent == "lt") out.push_back('<');
+        else if (ent == "gt") out.push_back('>');
+        else if (ent == "quot") out.push_back('"');
+        else if (ent == "apos") out.push_back('\'');
+        else if (ent.size() > 1 && ent[0] == '#') {
+            const long cp = ent[1] == 'x' ? std::strtol(ent.c_str() + 2, nullptr, 16) : std::strtol(ent.c_str() + 1, nullptr, 10);
+            if (cp > 0 && cp < 0x80) out.push_back(static_cast<char>(cp));
+            else out.append(s, i, end - i + 1);   // leave anything wider alone
+        } else { out.push_back(s[i]); continue; }
+        i = end;
+    }
+    return out;
+}
+
+std::string xml_escape(const std::string& s) {
+    std::string out;
+    out.reserve(s.size());
+    for (const char c : s) {
+        if (c == '&') out += "&amp;";
+        else if (c == '<') out += "&lt;";
+        else if (c == '>') out += "&gt;";
+        else if (c == '"') out += "&quot;";
+        else out.push_back(c);
+    }
+    return out;
+}
+
+// The text of every <rdf:li> in a run of XML, joined the way a list reads.
+std::string join_list_items(const std::string& body) {
+    std::string out;
+    size_t p = 0;
+    while ((p = body.find("<rdf:li", p)) != std::string::npos) {
+        const size_t open = body.find('>', p);
+        if (open == std::string::npos) break;
+        if (body[open - 1] == '/') { p = open + 1; continue; }   // empty item
+        const size_t close = body.find("</rdf:li>", open);
+        if (close == std::string::npos) break;
+        const std::string item = xml_unescape(body.substr(open + 1, close - open - 1));
+        if (!item.empty()) { if (!out.empty()) out += "; "; out += item; }
+        p = close + 9;
+    }
+    return out;
+}
+
+struct XmpSpan {          // where a property's value sits in the packet
+    size_t begin = 0, end = 0;   // the bytes to replace
+    bool attribute = false;      // an attribute value rather than element content
+    bool list = false;           // the span is a run of rdf:li items
+    std::string indent;          // leading whitespace of the element, for lists
+};
+
+// Finds `property` in the packet and reports both its value and the bytes
+// that hold it, so reading and writing agree on where it lives.
+bool find_property(const std::string& packet, const std::string& property, std::string* value, XmpSpan* span) {
+    // As an element: <dc:title ...> ... </dc:title>
+    size_t p = 0;
+    while ((p = packet.find('<' + property, p)) != std::string::npos) {
+        const size_t after = p + 1 + property.size();
+        if (after < packet.size() && xml_name_char(packet[after])) { p = after; continue; }
+        const size_t open = packet.find('>', p);
+        if (open == std::string::npos) return false;
+        if (packet[open - 1] == '/') {           // <dc:title/>: empty
+            if (value) value->clear();
+            if (span) { span->begin = open; span->end = open; }
+            return true;
+        }
+        const size_t close = packet.find("</" + property + ">", open);
+        if (close == std::string::npos) return false;
+        const std::string body = packet.substr(open + 1, close - open - 1);
+        const bool is_list = body.find("<rdf:li") != std::string::npos;
+        const std::string text = is_list ? join_list_items(body) : xml_unescape(trim(body));
+        // A structured value -- a region list, an edit history, a list whose
+        // items are themselves structures -- still has markup once it is
+        // unwrapped. There is no honest way to show that as one line or to
+        // write one back, so it stays in the packet and out of the entries.
+        if (text.find('<') != std::string::npos) return false;
+        if (value) *value = text;
+        if (span) {
+            span->begin = open + 1;
+            span->end = close;
+            span->list = is_list;
+            size_t line = packet.rfind('\n', p);
+            span->indent = line == std::string::npos ? std::string() : packet.substr(line + 1, p - line - 1);
+        }
+        return true;
+    }
+    // As an attribute: photoshop:Credit="Someone"
+    p = 0;
+    while ((p = packet.find(property + "=", p)) != std::string::npos) {
+        const bool starts_name = p == 0 || !xml_name_char(packet[p - 1]);
+        const size_t q = p + property.size() + 1;
+        if (!starts_name || q >= packet.size() || (packet[q] != '"' && packet[q] != '\'')) { p = q; continue; }
+        const char quote = packet[q];
+        const size_t end = packet.find(quote, q + 1);
+        if (end == std::string::npos) return false;
+        if (value) *value = xml_unescape(packet.substr(q + 1, end - q - 1));
+        if (span) { span->begin = q + 1; span->end = end; span->attribute = true; }
+        return true;
+    }
+    return false;
+}
+
+}  // namespace
+
+std::vector<Entry> parse_xmp(const std::string& packet) {
+    std::vector<Entry> out;
+    std::vector<std::string> seen;
+    auto take = [&](const std::string& name) {
+        if (!xmp_property_name(name)) return;
+        if (std::find(seen.begin(), seen.end(), name) != seen.end()) return;
+        std::string value;
+        if (!find_property(packet, name, &value, nullptr) || value.empty()) return;
+        seen.push_back(name);
+        Entry e;
+        e.group = Group::XMP;
+        e.key = name;
+        e.type = kAscii;
+        e.set_text(value);
+        out.push_back(std::move(e));
+    };
+    // Every element and attribute name in the packet, in the order they
+    // appear; take() decides which of them name a property.
+    for (size_t p = 0; p + 1 < packet.size(); ++p) {
+        if (packet[p] == '<') {
+            size_t q = p + 1;
+            if (q < packet.size() && (packet[q] == '/' || packet[q] == '?' || packet[q] == '!')) continue;
+            const size_t start = q;
+            while (q < packet.size() && xml_name_char(packet[q])) ++q;
+            take(packet.substr(start, q - start));
+        } else if (packet[p] == '=' && (packet[p + 1] == '"' || packet[p + 1] == '\'')) {
+            size_t q = p;
+            while (q > 0 && xml_name_char(packet[q - 1])) --q;
+            take(packet.substr(q, p - q));
+        }
+    }
+    std::stable_sort(out.begin(), out.end(), [](const Entry& a, const Entry& b) { return a.key < b.key; });
+    return out;
+}
+
+std::string build_xmp(const Metadata& md) {
+    if (md.xmp.empty()) return {};
+    std::string packet = md.xmp;
+    // Only properties whose value differs from the packet are touched, so an
+    // untouched packet comes back exactly as it went in.
+    for (const Entry& e : md.entries) {
+        if (e.group != Group::XMP || !xmp_property_name(e.key)) continue;
+        const std::string want = e.text();
+        std::string have;
+        XmpSpan span;
+        if (!find_property(packet, e.key, &have, &span)) {
+            // A property the packet does not have yet goes in as a simple
+            // element, just inside the description that holds the rest.
+            const size_t at = packet.find("</rdf:Description>");
+            if (at == std::string::npos) continue;
+            packet.insert(at, "<" + e.key + ">" + xml_escape(want) + "</" + e.key + ">\n   ");
+            continue;
+        }
+        if (have == want) continue;
+        std::string replacement;
+        if (span.attribute) {
+            replacement = xml_escape(want);
+        } else if (span.list) {
+            // Rebuild the list, keeping whichever container it already used.
+            const std::string body = md.xmp.substr(span.begin, span.end - span.begin);
+            const char* kind = body.find("<rdf:Alt") != std::string::npos ? "rdf:Alt"
+                             : body.find("<rdf:Seq") != std::string::npos ? "rdf:Seq" : "rdf:Bag";
+            const bool alt = std::string(kind) == "rdf:Alt";
+            const std::string pad = span.indent + " ";
+            replacement = "\n" + pad + "<" + kind + ">";
+            size_t start = 0;
+            while (start <= want.size()) {
+                const size_t sep = want.find("; ", start);
+                const std::string item = want.substr(start, sep == std::string::npos ? std::string::npos : sep - start);
+                if (!item.empty())
+                    replacement += "\n" + pad + " <rdf:li" + (alt ? " xml:lang=\"x-default\"" : "") + ">" + xml_escape(item) + "</rdf:li>";
+                if (sep == std::string::npos) break;
+                start = sep + 2;
+            }
+            replacement += "\n" + pad + "</" + std::string(kind) + ">\n" + span.indent;
+        } else {
+            replacement = xml_escape(want);
+        }
+        packet = packet.substr(0, span.begin) + replacement + packet.substr(span.end);
+    }
+    return packet;
+}
+
 const Entry* Metadata::find(Group g, uint16_t tag) const {
     for (const Entry& e : entries)
         if (e.group == g && e.tag == tag) return &e;
@@ -327,8 +550,14 @@ const Entry* Metadata::find_text(const std::string& key) const {
     return nullptr;
 }
 
+const Entry* Metadata::find_xmp(const std::string& property) const {
+    for (const Entry& e : entries)
+        if (e.group == Group::XMP && e.key == property) return &e;
+    return nullptr;
+}
+
 bool Metadata::set(Group g, uint16_t tag, const std::string& text) {
-    if (g == Group::Text) return false;
+    if (g == Group::Text || g == Group::XMP) return false;
     for (Entry& e : entries)
         if (e.group == g && e.tag == tag) return e.set_text(text);
     const TagInfo* t = lookup(g, tag);
@@ -357,12 +586,64 @@ bool Metadata::set_text(const std::string& key, const std::string& value) {
     return true;
 }
 
+bool Metadata::set_xmp(const std::string& property, const std::string& value) {
+    if (property.find(':') == std::string::npos || property.size() > 120) return false;
+    for (Entry& e : entries)
+        if (e.group == Group::XMP && e.key == property) return e.set_text(value);
+    // A property can only be written into a packet, so give the image one to
+    // hold it when it has none.
+    if (xmp.empty())
+        xmp = "<?xpacket begin=\"\" id=\"W5M0MpCehiHzreSzNTczkc9d\"?>\n"
+              "<x:xmpmeta xmlns:x=\"adobe:ns:meta/\">\n"
+              " <rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">\n"
+              "  <rdf:Description rdf:about=\"\"\n"
+              "    xmlns:dc=\"http://purl.org/dc/elements/1.1/\"\n"
+              "    xmlns:xmp=\"http://ns.adobe.com/xap/1.0/\"\n"
+              "    xmlns:photoshop=\"http://ns.adobe.com/photoshop/1.0/\">\n"
+              "  </rdf:Description>\n"
+              " </rdf:RDF>\n"
+              "</x:xmpmeta>\n<?xpacket end=\"w\"?>";
+    Entry e;
+    e.group = Group::XMP;
+    e.key = property;
+    e.type = kAscii;
+    e.set_text(value);
+    entries.push_back(std::move(e));
+    sort();
+    return true;
+}
+
 void Metadata::remove(Group g, uint16_t tag) {
     entries.erase(std::remove_if(entries.begin(), entries.end(), [&](const Entry& e) { return e.group == g && e.tag == tag; }), entries.end());
 }
 
 void Metadata::remove_text(const std::string& key) {
     entries.erase(std::remove_if(entries.begin(), entries.end(), [&](const Entry& e) { return e.group == Group::Text && e.key == key; }), entries.end());
+}
+
+void Metadata::remove_xmp(const std::string& property) {
+    entries.erase(std::remove_if(entries.begin(), entries.end(),
+                                 [&](const Entry& e) { return e.group == Group::XMP && e.key == property; }),
+                  entries.end());
+    if (xmp.empty()) return;
+    // The packet is the thing that gets written, so the property has to come
+    // out of it too, element or attribute.
+    XmpSpan span;
+    if (!find_property(xmp, property, nullptr, &span)) return;
+    if (span.attribute) {
+        size_t begin = span.begin - property.size() - 2;
+        while (begin > 0 && (xmp[begin - 1] == ' ' || xmp[begin - 1] == '\n' || xmp[begin - 1] == '\t')) --begin;
+        xmp = xmp.substr(0, begin) + xmp.substr(span.end + 1);
+        return;
+    }
+    const size_t open = xmp.rfind('<' + property, span.begin);
+    const std::string closing = "</" + property + ">";
+    const size_t close = xmp.find(closing, span.end);
+    if (open == std::string::npos || close == std::string::npos) return;
+    size_t begin = open;
+    while (begin > 0 && (xmp[begin - 1] == ' ' || xmp[begin - 1] == '\t')) --begin;
+    if (begin > 0 && xmp[begin - 1] == '\n') --begin;
+    xmp = xmp.substr(0, begin) + xmp.substr(close + closing.size());
 }
 
 void Metadata::remove_private() {
@@ -372,12 +653,23 @@ void Metadata::remove_private() {
                       return e.tag == 0x927C || e.tag == 0xA430 || e.tag == 0xA431 || e.tag == 0xA435 || e.tag == 0xA420;
                   }),
                   entries.end());
+    // XMP says the same things in its own vocabulary, so stripping only the
+    // Exif side would leave the location and the owner in the file.
+    static const char* kPrivate[] = {
+        "exif:GPSLatitude", "exif:GPSLongitude", "exif:GPSAltitude", "exif:GPSTimeStamp",
+        "exif:GPSVersionID", "exif:GPSStatus", "exif:GPSMapDatum", "exif:GPSDestLatitude", "exif:GPSDestLongitude",
+        "photoshop:City", "photoshop:State", "photoshop:Country", "Iptc4xmpCore:Location",
+        "aux:SerialNumber", "aux:LensSerialNumber", "exifEX:BodySerialNumber",
+        "dc:creator", "photoshop:Credit", "photoshop:AuthorsPosition", "xmp:CreatorTool",
+        "Iptc4xmpCore:CreatorContactInfo",
+    };
+    for (const char* p : kPrivate) remove_xmp(p);
 }
 
 void Metadata::sort() {
     std::stable_sort(entries.begin(), entries.end(), [](const Entry& a, const Entry& b) {
         if (a.group != b.group) return static_cast<int>(a.group) < static_cast<int>(b.group);
-        if (a.group == Group::Text) return a.key < b.key;
+        if (a.group == Group::Text || a.group == Group::XMP) return a.key < b.key;
         return a.tag < b.tag;
     });
 }
@@ -460,10 +752,22 @@ Metadata parse_jpeg(const uint8_t* data, size_t size) {
         if (marker == 0xD9 || marker == 0xDA) break;
         const size_t len = (static_cast<size_t>(data[p + 2]) << 8) | data[p + 3];
         if (len < 2 || p + 2 + len > size) break;
-        if (marker == 0xE1 && len > 10 && std::memcmp(data + p + 4, "Exif\0\0", 6) == 0)
-            return parse_tiff(data + p + 10, len - 8);
+        if (marker == 0xE1 && len > 10 && std::memcmp(data + p + 4, "Exif\0\0", 6) == 0) {
+            Metadata exif = parse_tiff(data + p + 10, len - 8);
+            md.entries.insert(md.entries.end(), exif.entries.begin(), exif.entries.end());
+        } else if (marker == 0xE1 && len > 2 + kXmpSig.size() &&
+                   std::memcmp(data + p + 4, kXmpSig.data(), kXmpSig.size()) == 0) {
+            // The packet keeps its own bytes; the properties worth showing
+            // are lifted out of it. Extended XMP (a second segment keyed by
+            // a GUID) is left alone rather than half-assembled.
+            const size_t at = p + 4 + kXmpSig.size();
+            md.xmp.assign(reinterpret_cast<const char*>(data + at), p + 2 + len - at);
+            const std::vector<Entry> props = parse_xmp(md.xmp);
+            md.entries.insert(md.entries.end(), props.begin(), props.end());
+        }
         p += 2 + len;
     }
+    md.sort();
     return md;
 }
 
@@ -515,7 +819,11 @@ Metadata parse_png(const uint8_t* data, size_t size) {
                     }
                 }
             }
-            if (!key.empty()) {
+            if (key == kXmpPngKey) {
+                md.xmp = text;
+                const std::vector<Entry> props = parse_xmp(md.xmp);
+                md.entries.insert(md.entries.end(), props.begin(), props.end());
+            } else if (!key.empty()) {
                 Entry e;
                 e.group = Group::Text;
                 e.key = key;
@@ -542,7 +850,7 @@ std::vector<uint8_t> build_tiff(const Metadata& md, const std::vector<uint8_t>& 
             case Group::Exif: exif.entries.push_back(&e); break;
             case Group::GPS: gps.entries.push_back(&e); break;
             case Group::Interop: interop.entries.push_back(&e); break;
-            case Group::Text: break;
+            case Group::Text: case Group::XMP: break;   // their own containers, not the TIFF block
         }
     }
     if (image.entries.empty() && exif.entries.empty() && gps.entries.empty() && interop.entries.empty()) return {};
@@ -645,6 +953,18 @@ std::vector<uint8_t> apply_jpeg(const std::vector<uint8_t>& file, const Metadata
         app1.insert(app1.end(), sig, sig + 6);
         app1.insert(app1.end(), tiff.begin(), tiff.end());
     }
+    // XMP rides in its own APP1 beside the Exif one. A packet over the
+    // segment's 64 KB is left out rather than cut in half, which would make
+    // it unparseable; Firn does not write the Extended XMP that carries one.
+    if (const std::string packet = build_xmp(md); !packet.empty() && packet.size() + kXmpSig.size() + 2 <= 65535) {
+        const size_t len = packet.size() + kXmpSig.size() + 2;
+        app1.push_back(0xFF);
+        app1.push_back(0xE1);
+        app1.push_back(static_cast<uint8_t>(len >> 8));
+        app1.push_back(static_cast<uint8_t>(len));
+        app1.insert(app1.end(), kXmpSig.begin(), kXmpSig.end());
+        app1.insert(app1.end(), packet.begin(), packet.end());
+    }
 
     std::vector<uint8_t> out;
     out.reserve(file.size() + app1.size());
@@ -660,7 +980,8 @@ std::vector<uint8_t> apply_jpeg(const std::vector<uint8_t>& file, const Metadata
         const size_t len = (static_cast<size_t>(file[p + 2]) << 8) | file[p + 3];
         if (len < 2 || p + 2 + len > file.size()) break;
         const bool is_exif = marker == 0xE1 && len > 8 && std::memcmp(&file[p + 4], "Exif\0\0", 6) == 0;
-        if (!is_exif) {
+        const bool is_xmp = marker == 0xE1 && len > kXmpSig.size() && std::memcmp(&file[p + 4], kXmpSig.data(), kXmpSig.size()) == 0;
+        if (!is_exif && !is_xmp) {
             // Exif belongs before everything but a JFIF header.
             if (!inserted && marker != 0xE0) { out.insert(out.end(), app1.begin(), app1.end()); inserted = true; }
             out.insert(out.end(), file.begin() + p, file.begin() + p + 2 + len);
@@ -692,6 +1013,19 @@ std::vector<uint8_t> apply_png(const std::vector<uint8_t>& file, const Metadata&
                     body.push_back(0);
                     body.insert(body.end(), e.value.begin(), e.value.end());
                     png_chunk(out, "tEXt", body);
+                }
+                // XMP must be an iTXt with this exact keyword and no
+                // compression: a tEXt holding the same bytes is where no XMP
+                // reader looks.
+                if (const std::string packet = build_xmp(md); !packet.empty()) {
+                    std::vector<uint8_t> body(kXmpPngKey, kXmpPngKey + std::strlen(kXmpPngKey));
+                    body.push_back(0);        // keyword terminator
+                    body.push_back(0);        // not compressed
+                    body.push_back(0);        // compression method
+                    body.push_back(0);        // empty language tag
+                    body.push_back(0);        // empty translated keyword
+                    body.insert(body.end(), packet.begin(), packet.end());
+                    png_chunk(out, "iTXt", body);
                 }
                 inserted = true;
             }

@@ -260,9 +260,9 @@ std::vector<Action> build() {
             return firn::json::dump(out);
         });
     add("image.set_metadata", "Set one Exif tag or text note",
-        {{"name", "string", "the Exif tag name, or the keyword of a text note"},
-         {"value", "string", "the new value"},
-         {"group", "string", "which directory the tag is in", false, "Image,Exif,GPS,Interop,Text", "Image"}},
+        {{"name", "string", "the Exif tag name, the keyword of a text note, or an XMP property as prefix:Name"},
+         {"value", "string", "the new value; in XMP, \"; \" between items makes a list"},
+         {"group", "string", "which directory the tag is in", false, "Image,Exif,GPS,Interop,Text,XMP", "Image"}},
         [](App& app, const Value& p, bool* ok) {
             std::string e;
             if (!need_doc(app, ok, e)) return e;
@@ -271,6 +271,7 @@ std::vector<Action> build() {
             firn::meta::Metadata md = app.doc->metadata();
             bool done = false;
             if (group == "Text") done = md.set_text(name, str(p, "value"));
+            else if (group == "XMP") done = md.set_xmp(name, str(p, "value"));
             else {
                 const firn::meta::Group g = group == "Exif"      ? firn::meta::Group::Exif
                                             : group == "GPS"     ? firn::meta::Group::GPS
@@ -291,7 +292,7 @@ std::vector<Action> build() {
             if (!need_doc(app, ok, e)) return e;
             firn::meta::Metadata md = app.doc->metadata();
             if (str(p, "what", "all") == "private") md.remove_private();
-            else md.entries.clear();
+            else { md.entries.clear(); md.xmp.clear(); }   // the packet is metadata too
             app.run(std::make_unique<firn::MetadataCommand>("Strip Metadata", std::move(md)));
             return ok_json();
         });

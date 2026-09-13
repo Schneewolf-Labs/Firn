@@ -47,11 +47,11 @@ void draw_metadata_tab(App& app) {
     MenuState& ms = *app.menu_state;
     meta::Metadata& md = ms.meta_edit;
 
-    ImGui::TextDisabled("Exif tags and text notes travel with PNG, JPEG and project files.");
-    if (ImGui::Button("Remove All")) { md.entries.clear(); ms.meta_row = -1; }
+    ImGui::TextDisabled("Exif tags, XMP properties and text notes travel with PNG, JPEG and project files.");
+    if (ImGui::Button("Remove All")) { md.entries.clear(); md.xmp.clear(); ms.meta_row = -1; }
     ImGui::SameLine();
     if (ImGui::Button("Remove Private")) { md.remove_private(); ms.meta_row = -1; }
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Drops GPS, serial numbers, the owner's name and maker notes.");
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Drops GPS, serial numbers, the owner's name and maker notes, in Exif and in XMP.");
     ImGui::SameLine();
     if (ImGui::BeginCombo("##add", "Add...", ImGuiComboFlags_WidthFitPreview)) {
         for (const AddableTag& a : kAddable)
@@ -108,7 +108,11 @@ void draw_metadata_tab(App& app) {
             ImGui::PopID();
         }
         if (remove_at >= 0) {
-            md.entries.erase(md.entries.begin() + remove_at);
+            // An XMP property lives in the packet, so dropping the row alone
+            // would leave it in the file and bring it back on the next read.
+            const meta::Entry& gone = md.entries[static_cast<size_t>(remove_at)];
+            if (gone.group == meta::Group::XMP) md.remove_xmp(gone.key);
+            else md.entries.erase(md.entries.begin() + remove_at);
             ms.meta_row = -1;
         }
         ImGui::EndTable();
@@ -826,7 +830,7 @@ void App::draw_dialogs() {
             ImGui::EndTabBar();
         }
         ImGui::Separator();
-        const bool changed = doc && !(ms.meta_edit.entries == doc->metadata().entries);
+        const bool changed = doc && (!(ms.meta_edit.entries == doc->metadata().entries) || ms.meta_edit.xmp != doc->metadata().xmp);
         ImGui::BeginDisabled(!changed);
         if (ImGui::Button("Apply", ImVec2(90, 0))) { commit_metadata(*this, ms.meta_edit); ms.meta_loaded = false; ImGui::CloseCurrentPopup(); }
         ImGui::EndDisabled();

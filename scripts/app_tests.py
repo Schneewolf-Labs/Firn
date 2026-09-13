@@ -492,6 +492,27 @@ def test_metadata(f):
     check(("Image", "Artist") in after, "and leaves the rest alone")
     f.do("image.strip_metadata")
     check(json.loads(f.do("image.metadata"))["metadata"] == [], "stripping everything empties it")
+
+    # XMP: where a photo manager keeps the title, keywords and rating.
+    f.do("image.set_metadata", group="XMP", name="dc:title", value="A dog in the grass")
+    f.do("image.set_metadata", group="XMP", name="dc:subject", value="dog; summer")
+    f.do("image.set_metadata", group="XMP", name="xmp:Rating", value="4")
+    xmp = {m["name"]: m["value"] for m in json.loads(f.do("image.metadata"))["metadata"] if m["group"] == "XMP"}
+    check(xmp.get("dc:title") == "A dog in the grass", "an XMP property can be set")
+    check(xmp.get("dc:subject") == "dog; summer", "and one holding a list")
+    for ext in ("png", "jpg", "ora", "pspimage"):
+        path = os.path.join(OUT, "meta_xmp." + ext)
+        f.do("file.save_as", path=path)
+        f.do("file.close")
+        f.do("file.open", path=path)
+        back = {m["name"]: m["value"] for m in json.loads(f.do("image.metadata"))["metadata"] if m["group"] == "XMP"}
+        check(back.get("dc:title") == "A dog in the grass", "XMP survives a " + ext + " round trip")
+        check(back.get("dc:subject") == "dog; summer", "including its lists, in " + ext)
+    f.do("image.set_metadata", group="XMP", name="photoshop:City", value="Reykjavik")
+    f.do("image.strip_metadata", what="private")
+    left = {m["name"] for m in json.loads(f.do("image.metadata"))["metadata"] if m["group"] == "XMP"}
+    check("photoshop:City" not in left, "stripping private data reaches into the XMP packet")
+    check("dc:title" in left, "and leaves the rest of it alone")
     f.do("file.close")
 
 

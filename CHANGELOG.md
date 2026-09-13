@@ -6,6 +6,25 @@ section into the next version.
 
 ## Unreleased
 
+### Fixed
+- A photo's XMP is no longer thrown away when you save. XMP is where a photo
+  manager keeps the title, caption, keywords, copyright, creator and rating,
+  and Firn dropped the whole packet while Exif came through untouched, which
+  is what made the loss easy to miss: an ordinary iPhone photo carries about
+  3 KB of it. The packet now survives JPEG, PNG, OpenRaster and the native
+  project format byte for byte.
+
+### Added
+- XMP properties show up in Image > Image Information beside the Exif tags
+  and text notes, and can be edited there or through `image.set_metadata`
+  with `group: XMP`. A value with "; " in it is a list, which is how
+  keywords are held. Firn does not pretend to understand RDF: a structured
+  property such as a face-region list stays in the packet and out of the
+  table rather than being shown as one unreadable line.
+- Remove Private now reaches into the XMP as well. Stripping only the Exif
+  side would have left the location and the owner's name in the file, since
+  XMP says the same things in its own vocabulary.
+
 ## 0.5.0 (2026-09-12)
 
 ### Fixed

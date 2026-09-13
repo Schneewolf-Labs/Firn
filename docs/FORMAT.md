@@ -299,7 +299,8 @@ Adjustment and filter layers also carry `firn:adjustment-full`, the whole
 kind's parameters, the way the original writes them, and this keeps the
 values a person set and then switched away from.
 16-bit layers are 16-bit PNGs. `<firn:icc src>` holds the color profile,
-`<firn:exif src>` and `<firn:text key value>` the metadata,
+`<firn:exif src>`, `<firn:text key value>` and `<firn:xmp src>` (the
+XMP packet, verbatim, as its own file) the metadata,
 `<firn:channel name src>` each saved selection, `<firn:selection src>` the
 live selection, `<firn:active index>` the active layer, `<firn:guide axis
 pos>` each ruler guide and `<firn:assistant kind x0 y0 x1 y1>` each
@@ -364,7 +365,8 @@ plain pixels, so the original shows it without the effects. A `metadata`
 object carries the image's metadata, which this format has nowhere of its
 own for: `exif` is a base64 TIFF directory as `meta::build_tiff` writes it
 (skipped above 48 KB, so the description stays bounded), and `notes` is an
-array of `{"key","value"}` for the PNG-style text entries.
+array of `{"key","value"}` for the PNG-style text entries, and `xmp` is the
+XMP packet as text (skipped above 64 KB).
 
 ## Text shapes
 

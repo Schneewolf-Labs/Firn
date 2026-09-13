@@ -2934,6 +2934,19 @@ static void test_parsers_survive_broken_files() {
         (void)meta::parse_jpeg(d, n);
         (void)meta::parse_png(d, n);
         (void)meta::parse_tiff(d, n);
+        // XMP is XML out of a file, so the scanner sees whatever is there:
+        // unterminated tags, quotes that never close, markup in the middle
+        // of a value. Building it back must not walk off the end either.
+        {
+            meta::Metadata md;
+            md.xmp.assign(reinterpret_cast<const char*>(d), n);
+            md.entries = meta::parse_xmp(md.xmp);
+            (void)meta::build_xmp(md);
+            for (meta::Entry& e : md.entries) e.set_text("changed");
+            (void)meta::build_xmp(md);
+            for (const meta::Entry& e : std::vector<meta::Entry>(md.entries)) md.remove_xmp(e.key);
+            md.remove_private();
+        }
         std::vector<vec::Object> objs;
         (void)io::decode_objects(d, n, objs);
         (void)io::vector_objects_from_bytes(d, n, objs);
@@ -3694,6 +3707,125 @@ static void test_openraster_lossless() {
 // A saved photo carries a thumbnail of what it now shows. The one a file
 // arrived with is not reused: after a crop it would still show what was cut
 // away, which is a real way for detail to leak out of a picture.
+// XMP is where a photo manager keeps the title, caption, keywords,
+// copyright and rating. Firn used to drop the whole packet on save while
+// Exif came through whole, which is what made the loss easy to miss.
+static void test_xmp() {
+    const std::string packet =
+        "<?xpacket begin=\"\" id=\"W5M0MpCehiHzreSzNTczkc9d\"?>\n"
+        "<x:xmpmeta xmlns:x=\"adobe:ns:meta/\">\n"
+        " <rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">\n"
+        "  <rdf:Description rdf:about=\"\"\n"
+        "    xmlns:dc=\"http://purl.org/dc/elements/1.1/\"\n"
+        "    xmlns:xmp=\"http://ns.adobe.com/xap/1.0/\"\n"
+        "    xmlns:photoshop=\"http://ns.adobe.com/photoshop/1.0/\"\n"
+        "    xmp:Rating=\"4\"\n"
+        "    photoshop:City=\"Reykjavik\">\n"
+        "   <dc:title>\n"
+        "    <rdf:Alt>\n"
+        "     <rdf:li xml:lang=\"x-default\">A dog in the grass</rdf:li>\n"
+        "    </rdf:Alt>\n"
+        "   </dc:title>\n"
+        "   <dc:subject>\n"
+        "    <rdf:Bag>\n"
+        "     <rdf:li>dog</rdf:li>\n"
+        "     <rdf:li>summer</rdf:li>\n"
+        "    </rdf:Bag>\n"
+        "   </dc:subject>\n"
+        "   <dc:rights>Copyright 2026 &amp; all that</dc:rights>\n"
+        "   <mwg-rs:Regions rdf:parseType=\"Resource\">\n"
+        "    <mwg-rs:AppliedToDimensions stDim:w=\"5712\"/>\n"
+        "   </mwg-rs:Regions>\n"
+        "  </rdf:Description>\n"
+        " </rdf:RDF>\n"
+        "</x:xmpmeta>\n<?xpacket end=\"w\"?>";
+
+    const std::vector<meta::Entry> props = meta::parse_xmp(packet);
+    auto value_of = [&props](const char* key) {
+        for (const meta::Entry& e : props) if (e.key == key) return e.text();
+        return std::string("(missing)");
+    };
+    CHECK(value_of("dc:title") == "A dog in the grass");        // an rdf:Alt
+    CHECK(value_of("dc:subject") == "dog; summer");             // an rdf:Bag
+    CHECK(value_of("dc:rights") == "Copyright 2026 & all that");  // entity decoded
+    CHECK(value_of("xmp:Rating") == "4");                       // an attribute
+    CHECK(value_of("photoshop:City") == "Reykjavik");
+    CHECK(value_of("stDim:w") == "5712");
+    // Structure, not content: neither the RDF scaffolding nor a property
+    // whose value is itself markup becomes an entry.
+    CHECK(value_of("mwg-rs:Regions") == "(missing)");
+    CHECK(value_of("rdf:Description") == "(missing)");
+    CHECK(value_of("x:xmpmeta") == "(missing)");
+
+    meta::Metadata md;
+    md.xmp = packet;
+    md.entries = props;
+    // Nothing edited: the packet must come back exactly as it went in.
+    CHECK(meta::build_xmp(md) == packet);
+
+    // Each kind of value edited in place.
+    CHECK(md.set_xmp("dc:title", "A very good dog"));
+    CHECK(md.set_xmp("dc:subject", "dog; winter; snow"));
+    CHECK(md.set_xmp("xmp:Rating", "5"));
+    CHECK(md.set_xmp("dc:description", "Taken on a walk"));   // not in the packet yet
+    const std::string edited = meta::build_xmp(md);
+    const std::vector<meta::Entry> back = meta::parse_xmp(edited);
+    auto back_of = [&back](const char* key) {
+        for (const meta::Entry& e : back) if (e.key == key) return e.text();
+        return std::string("(missing)");
+    };
+    CHECK(back_of("dc:title") == "A very good dog");
+    CHECK(back_of("dc:subject") == "dog; winter; snow");
+    CHECK(back_of("xmp:Rating") == "5");
+    CHECK(back_of("dc:description") == "Taken on a walk");
+    CHECK(back_of("dc:rights") == "Copyright 2026 & all that");   // untouched
+    CHECK(back_of("photoshop:City") == "Reykjavik");
+    CHECK(edited.find("mwg-rs:Regions") != std::string::npos);    // structure survives
+    CHECK(edited.find("<?xpacket end") != std::string::npos);
+
+    // Stripping private metadata has to reach into the packet: leaving the
+    // Exif GPS out but the XMP city in would not be stripping anything.
+    meta::Metadata priv = md;
+    priv.set(meta::Group::GPS, 0x0001, "N");
+    priv.remove_private();
+    CHECK(!priv.find(meta::Group::GPS, 0x0001));
+    CHECK(!priv.find_xmp("photoshop:City"));
+    CHECK(priv.xmp.find("photoshop:City") == std::string::npos);
+    CHECK(priv.find_xmp("dc:title"));                             // not private
+    CHECK(meta::parse_xmp(meta::build_xmp(priv)).size() > 0);
+
+    // The project formats have to carry it too, or saving a photo as a
+    // project and back would lose what saving it as a JPEG now keeps.
+    Image img(24, 18, {200, 180, 160, 255});
+    Document d(24, 18);
+    Layer& b = d.add_layer("Background");
+    b.background = true;
+    b.pixels = img;
+    meta::Metadata file_md;
+    file_md.xmp = packet;
+    file_md.entries = props;
+    file_md.set(meta::Group::Image, 0x010F, "A Camera Co");
+    d.set_metadata(file_md);
+    std::string err;
+    for (const char* ext : {"jpg", "png", "ora", "pspimage"}) {
+        const std::string path = tmp_path((std::string("firn_test_xmp.") + ext).c_str());
+        CHECK(io::save_document(d, path, &err, 92));
+        meta::Metadata got;
+        if (std::string(ext) == "jpg" || std::string(ext) == "png") {
+            got = io::read_metadata(path);
+        } else {
+            std::vector<std::string> warn;
+            auto back = io::load_document(path, &err, &warn);
+            CHECK(back != nullptr);
+            if (back) got = back->metadata();
+        }
+        CHECK(got.xmp == packet);                                  // byte for byte
+        CHECK(got.find_xmp("dc:title") && got.find_xmp("dc:title")->text() == "A dog in the grass");
+        CHECK(got.find(meta::Group::Image, 0x010F));               // Exif still there too
+        std::remove(path.c_str());
+    }
+}
+
 static void test_exif_thumbnail() {
     Image img(400, 300, {0, 0, 0, 255});
     for (int y = 0; y < 300; ++y)
@@ -4222,6 +4354,7 @@ int main() {
     test_layer_style_scales_with_the_image();
     test_clipping_masks();
     test_openraster_lossless();
+    test_xmp();
     test_exif_thumbnail();
     test_picture_tube_export();
     test_path_editing();

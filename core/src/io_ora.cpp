@@ -352,6 +352,10 @@ struct OraWriter {
         for (const meta::Entry& e : doc.metadata().entries)
             if (e.group == meta::Group::Text)
                 out += "  <firn:text key=\"" + escape(e.key) + "\" value=\"" + escape(e.text()) + "\"/>\n";
+        // The XMP packet goes in whole, as its own file: it is XML of its
+        // own and has no business being escaped into an attribute.
+        if (const std::string packet = meta::build_xmp(doc.metadata()); !packet.empty())
+            out += "  <firn:xmp src=\"" + add_file("xmp", "xml", std::vector<uint8_t>(packet.begin(), packet.end())) + "\"/>\n";
         for (const Document::AlphaChannel& ch : doc.alpha_channels()) {
             const Mask* m = &ch.mask;
             out += "  <firn:channel name=\"" + escape(ch.name) + "\" src=\"" + add_file("channel", "png", [m] { return mask_png(*m); }) + "\"/>\n";
@@ -562,6 +566,13 @@ std::unique_ptr<Document> load_ora_from_memory(const uint8_t* data, size_t size,
             }
         }
         else if (c.name == "firn:text") { doc->metadata().set_text(c.attr_or("key", ""), c.attr_or("value", "")); }
+        else if (c.name == "firn:xmp") {
+            if (const std::vector<uint8_t>* b = ar.find(c.attr_or("src", ""))) {
+                doc->metadata().xmp.assign(b->begin(), b->end());
+                for (meta::Entry& e : meta::parse_xmp(doc->metadata().xmp)) doc->metadata().entries.push_back(std::move(e));
+                doc->metadata().sort();
+            }
+        }
         else if (c.name == "firn:active") { active = static_cast<int>(c.number("index", -1)); }
         else if (c.name == "firn:selection") {
             if (const std::vector<uint8_t>* b = ar.find(c.attr_or("src", ""))) {

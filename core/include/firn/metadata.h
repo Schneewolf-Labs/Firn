@@ -17,8 +17,10 @@ enum Type : uint16_t {
     kFloat = 11, kDouble = 12,
 };
 
-// Which directory an entry came from. Text entries are PNG text chunks.
-enum class Group { Image, Exif, GPS, Interop, Text };
+// Which directory an entry came from. Text entries are PNG text chunks;
+// XMP entries are properties lifted out of the XMP packet, keyed by their
+// qualified name ("dc:title").
+enum class Group { Image, Exif, GPS, Interop, Text, XMP };
 
 const char* group_name(Group g);
 
@@ -28,7 +30,7 @@ struct Entry {
     uint16_t type = kAscii;
     uint32_t count = 0;            // components, not bytes
     std::vector<uint8_t> value;    // little-endian component bytes
-    std::string key;               // text chunk keyword, empty for Exif
+    std::string key;               // text chunk keyword or XMP property, empty for Exif
 
     bool operator==(const Entry& o) const {
         return group == o.group && tag == o.tag && type == o.type && count == o.count && value == o.value && key == o.key;
@@ -41,20 +43,31 @@ struct Entry {
 
 struct Metadata {
     std::vector<Entry> entries;
+    // The XMP packet exactly as the file carried it. Editing goes through
+    // the Group::XMP entries; this is what they are read out of and written
+    // back into, so a packet nobody touched is re-emitted byte for byte
+    // rather than rebuilt from a partial understanding of it.
+    std::string xmp;
 
-    bool empty() const { return entries.empty(); }
+    bool empty() const { return entries.empty() && xmp.empty(); }
     size_t size() const { return entries.size(); }
     const Entry* find(Group g, uint16_t tag) const;
     const Entry* find_text(const std::string& key) const;
+    const Entry* find_xmp(const std::string& property) const;
     // Adds or replaces an entry. Exif tags keep the type they had, or take
     // the one the tag table gives them. Returns false when the tag is
     // unknown or the text does not fit the type.
     bool set(Group g, uint16_t tag, const std::string& text);
     bool set_text(const std::string& key, const std::string& value);
+    // Adds or replaces an XMP property, named as "prefix:Name". A value with
+    // "; " in it becomes an unordered list, which is how keywords are held.
+    bool set_xmp(const std::string& property, const std::string& value);
     void remove(Group g, uint16_t tag);
     void remove_text(const std::string& key);
+    void remove_xmp(const std::string& property);
     // Drops everything that identifies where and how the picture was taken:
-    // GPS, camera serial numbers, owner and maker notes.
+    // GPS, camera serial numbers, owner and maker notes, and the XMP
+    // properties that say the same things in their own vocabulary.
     void remove_private();
     void sort();                   // by group, then tag or keyword
 };
@@ -64,6 +77,10 @@ uint16_t tag_for_name(Group g, const std::string& name);
 
 // Parsers. `parse_tiff` takes the bytes after "Exif\0\0" (a TIFF header).
 Metadata parse_tiff(const uint8_t* data, size_t size);
+// Lifts the simple properties out of an XMP packet as Group::XMP entries.
+// Elements and attributes both, and rdf:Alt / Bag / Seq lists joined with
+// "; ". Anything it does not recognise stays in the packet untouched.
+std::vector<Entry> parse_xmp(const std::string& packet);
 Metadata parse_jpeg(const uint8_t* data, size_t size);
 Metadata parse_png(const uint8_t* data, size_t size);
 
@@ -77,6 +94,10 @@ std::vector<uint8_t> build_tiff(const Metadata& md, const std::vector<uint8_t>& 
 // Rewrites a whole file's metadata, returning the new bytes. Existing Exif
 // and text chunks are replaced. Returns the input unchanged when the format
 // has nowhere to put metadata.
+// The XMP packet to write: `md.xmp` with every edited Group::XMP entry put
+// back into it, or empty when there is no XMP. An untouched packet comes
+// back unchanged.
+std::string build_xmp(const Metadata& md);
 std::vector<uint8_t> apply_jpeg(const std::vector<uint8_t>& file, const Metadata& md, const std::vector<uint8_t>& thumbnail = {});
 std::vector<uint8_t> apply_png(const std::vector<uint8_t>& file, const Metadata& md, const std::vector<uint8_t>& thumbnail = {});
 

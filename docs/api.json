@@ -460,16 +460,17 @@
               "Exif",
               "GPS",
               "Interop",
-              "Text"
+              "Text",
+              "XMP"
             ],
             "type": "string"
           },
           "name": {
-            "description": "the Exif tag name, or the keyword of a text note",
+            "description": "the Exif tag name, the keyword of a text note, or an XMP property as prefix:Name",
             "type": "string"
           },
           "value": {
-            "description": "the new value",
+            "description": "the new value; in XMP, \"; \" between items makes a list",
             "type": "string"
           }
         },
