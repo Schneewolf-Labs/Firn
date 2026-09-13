@@ -6,6 +6,8 @@ section into the next version.
 
 ## Unreleased
 
+## 0.6.0 (2026-09-13)
+
 ### Added
 - TIFF, read and written. It is what print and archival photography run on
   and Firn could not touch it at all. Reading covers what cameras, scanners
