@@ -466,6 +466,14 @@ docs/    notes on the original: command inventory, module mapping, FORMAT.md
   cancel). It shells out to curl or PowerShell like `UpdateCheck` rather
   than bringing in an HTTP library, and the payloads go through files
   because a base64 image is far past any platform's command line limit.
+  **Which field the picture goes in is a model-family difference, not a
+  preference** (`gen::Conditioning`). An inpainting model takes it as
+  `init_image` and fills a `mask_image`; an instruction model (Qwen-Image-Edit,
+  FLUX Kontext) takes it as `ref_images` with no mask. Get it wrong and there
+  is no error, just a wrong answer: asked through `init_image` to remove a dog
+  from a lawn, Qwen-Image-Edit returned a different lawn with a different dog,
+  and the same request through `ref_images` removed the dog and matched the
+  mowing stripes. Generative Fill is the first, Generative Edit the second.
   **Send an explicit seed.** The server's own default is a fixed number, so
   without one every request returns the same picture and there is no way to
   try again -- and a seed that suits neither the prompt nor the image stays

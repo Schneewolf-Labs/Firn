@@ -644,6 +644,14 @@ def test_generate_action(f):
     names = set(api["input_schema"]["properties"])
     check(names == {"prompt", "strength", "seed"}, "the action takes a prompt, a strength and a seed")
     check("seed" not in api["input_schema"].get("required", []), "the seed is optional, so each call differs")
+    # Instruction editing is a separate action because the picture goes to
+    # the model a different way: as a reference, not as noise to work back
+    # from, and with no selection involved.
+    check(f.refused("generate.edit", prompt="remove the dog"), "generative edit refuses with no model configured")
+    check(f.refused("generate.edit"), "and refuses without an instruction")
+    edit = json.loads(f.do("app.describe", name="generate.edit"))["actions"][0]
+    check(set(edit["input_schema"]["properties"]) == {"prompt", "seed"}, "editing takes an instruction and a seed, no strength")
+    check("prompt" in edit["input_schema"].get("required", []), "the instruction is required")
     f.do("file.close")
 
 

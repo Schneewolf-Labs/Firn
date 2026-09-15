@@ -626,6 +626,9 @@ struct App {
     // An empty prompt is allowed: some services take the instruction from
     // the picture alone.
     void generative_fill(const std::string& prompt, bool background = true);
+    // Instruction editing: the whole layer goes as a reference, the model
+    // returns the edited picture, and there is no selection involved.
+    void generative_edit(const std::string& prompt, bool background = true);
     float generate_strength = 0.9f;   // how far from the original to go
     int generate_seed = -1;           // -1 asks for a fresh one each time
     bool generate_configured() const;

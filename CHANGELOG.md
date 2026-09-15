@@ -16,6 +16,12 @@ section into the next version.
   out to curl or PowerShell, the way the update check does.
   Also the `generate.fill` action, with an optional seed so a script can pin
   a result that the interface deliberately varies.
+- Edit > Generative Edit, for instruction models: "remove the dog" against
+  the whole layer rather than a selection. It is a separate command because
+  the picture reaches the model a different way -- as the reference it was
+  trained to edit, not as noise to work back from. Hand an instruction model
+  an init image and it stops editing and starts inventing, which is a silent
+  wrong answer rather than an error. Also the `generate.edit` action.
 
 ## 0.6.0 (2026-09-13)
 

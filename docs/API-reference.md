@@ -12,7 +12,7 @@ machine-readable JSON Schema, one schema per action.
 Replies are JSON. Success is `{"ok":true}` and whatever the action returns;
 a refusal comes back as a message and a non-zero exit from `firn-cli`.
 
-68 actions and 165 inherited command names.
+69 actions and 165 inherited command names.
 
 ## Documents
 
@@ -1105,6 +1105,16 @@ Batch-safe: no.
 
 
 ## Other
+
+### `generate.edit`
+
+Edit the whole layer by instruction, for models that take a reference image.
+
+| parameter | type | required | default | meaning |
+|---|---|---|---|---|
+| `prompt` | string | yes |  | What to change, as an instruction: "remove the dog" |
+| `seed` | number | no | a fresh one each time | Pin the result; left out, every call differs |
+
 
 ### `generate.fill`
 

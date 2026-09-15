@@ -33,6 +33,14 @@ const char* disposition_name(Disposition d) {
     return "";
 }
 
+const char* conditioning_name(Conditioning c) {
+    switch (c) {
+        case Conditioning::Init: return "init";
+        case Conditioning::Reference: return "reference";
+    }
+    return "";
+}
+
 void composite_into(Image& dst, const Image& generated, const Mask& region, float feather) {
     if (dst.empty() || generated.empty()) return;
     const int w = dst.width(), h = dst.height();

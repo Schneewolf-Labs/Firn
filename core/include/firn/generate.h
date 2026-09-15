@@ -30,10 +30,24 @@ enum class Disposition {
     ReplaceLayer,  // replace that layer's pixels outright
 };
 
+// How the picture is offered to the model, which is a difference between
+// families rather than a preference. An inpainting model wants the image as
+// something to noise and denoise back; an instruction model wants it as the
+// reference it was trained to edit against. Hand an instruction model an
+// init image and it stops editing and starts inventing: asked to remove a
+// dog from a lawn it returned a different lawn with a different dog, and
+// the same request as a reference removed the dog and matched the mowing
+// stripes.
+enum class Conditioning {
+    Init,        // img2img and masked inpainting
+    Reference,   // instruction editing (Qwen-Image-Edit, FLUX Kontext)
+};
+
 enum class Status { Queued, Running, Done, Failed, Cancelled };
 
 const char* status_name(Status s);
 const char* disposition_name(Disposition d);
+const char* conditioning_name(Conditioning c);
 
 struct Request {
     std::string name = "Generate";   // history entry and the label a queue shows
@@ -41,6 +55,7 @@ struct Request {
     json::Value params = json::Value::object();   // passed through untouched
 
     Image init;                      // the picture to work from, when there is one
+    Conditioning conditioning = Conditioning::Init;
     Mask region;                     // where it applies; empty means the whole image
     Disposition disposition = Disposition::NewLayer;
     float feather = 3.0f;            // softening applied when compositing into a region

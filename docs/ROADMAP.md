@@ -250,6 +250,14 @@ compositing. Model capabilities move faster than an editor should.
       remote endpoint is still the real decision.
 - [x] Edit > Generative Fill, the `generate.fill` action, and an address in
       Preferences with a Test button. Off by default.
+- [x] Edit > Generative Edit for instruction models, and `gen::Conditioning`,
+      because which field the picture goes in separates the model families:
+      `init_image` for inpainting, `ref_images` for instruction editing.
+      Verified against Qwen-Image-Edit 2511.
+- [ ] Ask the far side which of the two it is, rather than making the user
+      choose. The capabilities endpoint reports `init_image`, `mask_image`
+      and `ref_images` all true regardless of what is loaded, so it does not
+      discriminate today; the model name might.
 - [ ] Read the far side's capabilities and build the parameter form from
       them, rather than hardcoding one service's fields. The one already
       running here publishes `features`, `limits`, `defaults`, and live

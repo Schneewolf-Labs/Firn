@@ -176,8 +176,18 @@ gen::Backend backend(const std::string& base) {
         // The caller's parameters go through untouched; only the pieces the
         // document owns are filled in here.
         for (const auto& [k, v] : req.params.obj) body.set(k, v);
-        body.set("init_image", json::Value::string(base64(io::encode_png(req.init))));
-        if (!req.region.empty()) body.set("mask_image", json::Value::string(base64(mask_png(req.region, w, h))));
+        const std::string picture = base64(io::encode_png(req.init));
+        if (req.conditioning == gen::Conditioning::Reference) {
+            // An instruction model takes the picture as what it is editing,
+            // not as noise to work back from, and a mask only crops whatever
+            // it decided to imagine.
+            json::Value refs = json::Value::array();
+            refs.push(json::Value::string(picture));
+            body.set("ref_images", std::move(refs));
+        } else {
+            body.set("init_image", json::Value::string(picture));
+            if (!req.region.empty()) body.set("mask_image", json::Value::string(base64(mask_png(req.region, w, h))));
+        }
         body.set("width", json::Value::number(w));
         body.set("height", json::Value::number(h));
         // A seed of the caller's choosing, otherwise a fresh one every time.

@@ -307,6 +307,25 @@ std::vector<Action> build() {
             app.generate_seed = seed_before;
             return worked ? ok_json() : fail(ok, why);
         });
+    add("generate.edit", "Edit the whole layer by instruction, for models that take a reference image",
+        {{"prompt", "string", "What to change, as an instruction: \"remove the dog\"", true},
+         {"seed", "number", "Pin the result; left out, every call differs", false, nullptr, "a fresh one each time", R"({"minimum":0,"maximum":2147483647})"}},
+        [](App& app, const Value& p, bool* ok) {
+            std::string e;
+            if (!need_doc(app, ok, e)) return e;
+            if (!app.generate_configured()) return fail(ok, "no image model is configured; set one in Preferences");
+            if (str(p, "prompt").empty()) return fail(ok, "generate.edit needs an instruction");
+            const int seed_before = app.generate_seed;
+            app.generate_seed = p.find("seed") ? static_cast<int>(p.get("seed").as_number(-1)) : -1;
+            const std::string before = app.status;
+            app.status.clear();
+            app.generative_edit(str(p, "prompt"), false);
+            const bool worked = app.status == "Generative Edit done";
+            const std::string why = app.status;
+            app.status = before;
+            app.generate_seed = seed_before;
+            return worked ? ok_json() : fail(ok, why);
+        });
     add("image.strip_metadata", "Remove metadata from the image",
         {{"what", "string", "everything, or only what identifies the photographer and the place", false, "all,private", "all"}},
         [](App& app, const Value& p, bool* ok) {

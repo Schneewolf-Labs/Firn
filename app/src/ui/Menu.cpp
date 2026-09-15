@@ -172,8 +172,10 @@ void App::draw_menu(MenuBuilder& m) {
         m.item("Paste As New Layer", "Ctrl+L", has_doc, [=, this] { paste_as_new_layer(); });
         m.item("Paste Into Selection", "Ctrl+Shift+L", has_layer && doc->has_selection(), [=, this] { paste_into_selection(); });
         m.item("Clear", "Delete", has_layer, [=, this] { clear_selection(); });
-        m.item("Generative Fill...", nullptr, has_layer && doc->has_selection() && generate_configured(), [=, this] { menu_state->generate_prompt[0] = 0; show_generate_dialog = true; }, false,
+        m.item("Generative Fill...", nullptr, has_layer && doc->has_selection() && generate_configured(), [=, this] { menu_state->generate_prompt[0] = 0; menu_state->generate_whole = false; show_generate_dialog = true; }, false,
                "Hands the selection to an image model and composites what comes back.");
+        m.item("Generative Edit...", nullptr, has_layer && generate_configured(), [=, this] { menu_state->generate_prompt[0] = 0; menu_state->generate_whole = true; show_generate_dialog = true; }, false,
+               "Asks an instruction model to change the whole layer: \"remove the dog\".");
         m.item("Content-Aware Fill", nullptr, has_layer && doc->has_selection(), [=, this] { content_aware_fill(); }, false,
                "Rebuilds the selection from the rest of the picture, to remove something from it.");
         m.separator();
@@ -1169,20 +1171,27 @@ void App::draw_tube_export_dialog() {
 // about the model is the server's business, which is the point of treating
 // it as a service rather than a feature.
 void App::draw_generate_dialog() {
-    if (show_generate_dialog) { ImGui::OpenPopup("Generative Fill"); show_generate_dialog = false; }
-    if (!ImGui::BeginPopupModal("Generative Fill", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) return;
+    const char* title = menu_state->generate_whole ? "Generative Edit" : "Generative Fill";
+    if (show_generate_dialog) { ImGui::OpenPopup(title); show_generate_dialog = false; }
+    if (!ImGui::BeginPopupModal(title, nullptr, ImGuiWindowFlags_AlwaysAutoResize)) return;
     if (!doc) { ImGui::CloseCurrentPopup(); ImGui::EndPopup(); return; }
-    ImGui::TextDisabled("The selection is replaced; the rest of the picture is left alone.");
+    ImGui::TextDisabled(menu_state->generate_whole
+                            ? "The whole layer is replaced by the model's answer."
+                            : "The selection is replaced; the rest of the picture is left alone.");
     ImGui::SetNextItemWidth(420);
     if (ImGui::IsWindowAppearing()) ImGui::SetKeyboardFocusHere();
-    const bool entered = ImGui::InputTextWithHint("##prompt", "What should be there", menu_state->generate_prompt,
+    const bool entered = ImGui::InputTextWithHint("##prompt", menu_state->generate_whole ? "What to change" : "What should be there", menu_state->generate_prompt,
                                                   sizeof menu_state->generate_prompt, ImGuiInputTextFlags_EnterReturnsTrue);
     ImGui::TextDisabled("%s", config.generate_url.c_str());
     ImGui::Separator();
-    const bool go = ImGui::Button("Fill", ImVec2(90, 0)) || entered;
+    const bool go = ImGui::Button(menu_state->generate_whole ? "Edit" : "Fill", ImVec2(90, 0)) || entered;
     ImGui::SameLine();
     const bool cancel = ImGui::Button("Cancel", ImVec2(90, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape, false);
-    if (go) { generative_fill(menu_state->generate_prompt); ImGui::CloseCurrentPopup(); }
+    if (go) {
+        if (menu_state->generate_whole) generative_edit(menu_state->generate_prompt);
+        else generative_fill(menu_state->generate_prompt);
+        ImGui::CloseCurrentPopup();
+    }
     else if (cancel) ImGui::CloseCurrentPopup();
     ImGui::EndPopup();
 }

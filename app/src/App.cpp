@@ -697,6 +697,63 @@ void App::generative_fill(const std::string& prompt, bool background) {
     status = "Asking the model...";
 }
 
+void App::generative_edit(const std::string& prompt, bool background) {
+    if (!doc || !active_is_raster()) { status = "Generative Edit needs a raster layer."; return; }
+    if (prompt.empty()) { status = "Generative Edit needs an instruction."; return; }
+    if (config.generate_url.empty()) { status = "Generative Edit: set a server address in Preferences first."; return; }
+    if (!firn::genhttp::available()) { status = "Generative Edit needs curl, which is not installed."; return; }
+    if (job) { status = job->name + " is still running."; return; }
+
+    const size_t layer = static_cast<size_t>(active_layer());
+    gen::Request req;
+    req.name = "Generative Edit";
+    req.init = doc->layer(layer).pixels;
+    req.conditioning = gen::Conditioning::Reference;
+    req.disposition = gen::Disposition::ReplaceLayer;   // the model returns the whole picture
+    req.revision = doc->revision();
+    req.layer = static_cast<int>(layer);
+    req.params.set("prompt", json::Value::string(prompt));
+    if (generate_seed >= 0) req.params.set("seed", json::Value::number(generate_seed));
+
+    gen::Backend send = firn::genhttp::backend(config.generate_url);
+    if (!background) {
+        gen::Progress p;
+        gen::Result r = send(req, p);
+        if (!r.ok) { status = "Generative Edit: " + (r.error.empty() ? std::string("no result") : r.error); return; }
+        // Whole-picture: the region is empty, so this takes the frame entire
+        // after bringing it back to the layer's size.
+        Image out = req.init;
+        gen::composite_into(out, r.image, Mask(), 0.0f);
+        run(std::make_unique<AdjustCommand>(layer, "Generative Edit", [img = std::move(out)](Image& i) { i = img; }));
+        status = "Generative Edit done";
+        return;
+    }
+
+    job = std::make_unique<BackgroundJob>();
+    job->name = "Generative Edit";
+    job->layer = layer;
+    job->result = req.init;
+    BackgroundJob* j = job.get();
+    j->done = std::async(std::launch::async, [j, req = std::move(req), send = std::move(send)]() mutable {
+        gen::Progress p;
+        std::atomic<bool>* cancel = &j->cancel;
+        std::thread relay([&p, cancel, j] {
+            while (p.status.load() != gen::Status::Done && p.status.load() != gen::Status::Failed) {
+                if (cancel->load()) p.cancel.store(true);
+                j->progress.store(std::max(0.0f, p.fraction.load()), std::memory_order_relaxed);
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            }
+        });
+        gen::Result r = send(req, p);
+        p.status.store(gen::Status::Done);
+        relay.join();
+        if (!r.ok) { j->error = r.error; return false; }
+        gen::composite_into(j->result, r.image, Mask(), 0.0f);
+        return true;
+    });
+    status = "Asking the model...";
+}
+
 void App::draw_background_job() {
     if (!job) return;
     if (!job->opened) { ImGui::OpenPopup("Working"); job->opened = true; }

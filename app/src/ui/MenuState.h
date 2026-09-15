@@ -22,7 +22,8 @@ struct MenuState {
     char meta_new_key[80] = {0};
     bool meta_loaded = false;           // meta_edit matches the document
     // File > Export > Picture Tube: the cell grid and how the tool places them.
-    char generate_prompt[512] = {0};    // Edit > Generative Fill
+    char generate_prompt[512] = {0};    // Edit > Generative Fill / Edit
+    bool generate_whole = false;        // instruction editing rather than filling a selection
     firn::io::TubeInfo tube_export{};
     bool tube_export_ready = false;     // the grid has been sized to this image
 };
