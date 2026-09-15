@@ -1307,11 +1307,18 @@ public:
     int part_at(const App& app, const ToolInput& in) const {
         const raster::Rect& r = app.crop_rect;
         if (r.empty()) return -1;
-        const float grab = 6.0f / std::max(in.zoom, 0.05f);
-        const bool l = std::abs(in.img_x - r.x0) <= grab, rr = std::abs(in.img_x - r.x1) <= grab;
-        const bool t = std::abs(in.img_y - r.y0) <= grab, b = std::abs(in.img_y - r.y1) <= grab;
-        const bool inx = in.img_x >= r.x0 - grab && in.img_x <= r.x1 + grab;
-        const bool iny = in.img_y >= r.y0 - grab && in.img_y <= r.y1 + grab;
+        // In screen pixels, not image ones: a handle should take the same
+        // amount of aim however far the picture is zoomed in, and dividing a
+        // fixed distance by the zoom makes it sub-pixel tight exactly when
+        // the handles look biggest.
+        const float grab = 6.0f;
+        const float sx = in.origin.x + in.img_x * in.zoom, sy = in.origin.y + in.img_y * in.zoom;
+        const float rx0 = in.origin.x + r.x0 * in.zoom, rx1 = in.origin.x + r.x1 * in.zoom;
+        const float ry0 = in.origin.y + r.y0 * in.zoom, ry1 = in.origin.y + r.y1 * in.zoom;
+        const bool l = std::abs(sx - rx0) <= grab, rr = std::abs(sx - rx1) <= grab;
+        const bool t = std::abs(sy - ry0) <= grab, b = std::abs(sy - ry1) <= grab;
+        const bool inx = sx >= rx0 - grab && sx <= rx1 + grab;
+        const bool iny = sy >= ry0 - grab && sy <= ry1 + grab;
         if (l && t) return 0;
         if (rr && t) return 1;
         if (rr && b) return 2;
