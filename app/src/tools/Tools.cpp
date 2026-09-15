@@ -920,6 +920,22 @@ int gesture_mode(const App& app) {
     return app.sel_mode;
 }
 
+// The right button on a selection tool, as the original has it: it ends a
+// selection still being drawn, and otherwise clears one. A click inside the
+// selection leaves it alone, so working within a selection cannot throw it
+// away by accident. Returns true when the press was the right button and has
+// been dealt with, so a tool can hand it over and stop.
+bool selection_right_press(App& app, const ToolInput& in, ImGuiMouseButton b) {
+    if (b != ImGuiMouseButton_Right) return false;
+    if (!app.doc) return true;
+    const Mask& sel = app.doc->selection();
+    if (sel.empty()) return true;
+    const int x = static_cast<int>(std::floor(in.img_x)), y = static_cast<int>(std::floor(in.img_y));
+    const bool inside = x >= 0 && y >= 0 && x < sel.width() && y < sel.height() && sel.at(x, y) > 0;
+    if (!inside) app.select_none();
+    return true;
+}
+
 // Selection tool shapes, in the original's order.
 static const char* const kSelectionShapes = "Rectangle\0Square\0Rounded Rectangle\0Rounded Square\0Ellipse\0Circle\0Triangle\0Pentagon\0Hexagon\0Octagon\0Star\0Arrow\0";
 
@@ -946,7 +962,8 @@ public:
     bool wants_snap() const override { return true; }
     const char* name() const override { return "Selection"; }
     const char* shortcut() const override { return "S"; }
-    void on_press(App& app, const ToolInput& in, ImGuiMouseButton) override {
+    void on_press(App& app, const ToolInput& in, ImGuiMouseButton b) override {
+        if (selection_right_press(app, in, b)) return;
         if (!app.doc) return;
         dragging_ = true;
         x0_ = x1_ = in.img_x;
@@ -1017,7 +1034,15 @@ public:
     const char* name() const override { return "Freehand Selection"; }
     const char* shortcut() const override { return "L"; }
     bool overlay_always() const override { return polygon_open_; }
-    void on_press(App& app, const ToolInput& in, ImGuiMouseButton) override {
+    void on_press(App& app, const ToolInput& in, ImGuiMouseButton b) override {
+        if (b == ImGuiMouseButton_Right) {
+            // The right button ends a point to point selection where it
+            // stands, which is what it does in the original and the reason
+            // it is easier than hunting for the first vertex.
+            if (polygon_open_) { close_polygon(app); return; }
+            selection_right_press(app, in, b);
+            return;
+        }
         if (!app.doc) return;
         const int type = app.sel_freehand_type;
         if (type == 1 || type == 2) {
@@ -1090,7 +1115,7 @@ public:
         ImGui::SliderInt("Smoothing", &app.sel_smoothing, 0, 100);
         ImGui::SameLine();
         draw_selection_common(app);
-        if (app.sel_freehand_type == 1 || app.sel_freehand_type == 2) { ImGui::SameLine(); ImGui::TextDisabled("Click to add points; double-click or Enter closes, Backspace removes"); }
+        if (app.sel_freehand_type == 1 || app.sel_freehand_type == 2) { ImGui::SameLine(); ImGui::TextDisabled("Click to add points; right-click, double-click or Enter closes, Backspace removes"); }
     }
 
 private:
@@ -1148,7 +1173,8 @@ public:
     const char* category() const override { return "Selection"; }
     const char* name() const override { return "Magic Wand"; }
     const char* shortcut() const override { return "W"; }
-    void on_press(App& app, const ToolInput& in, ImGuiMouseButton) override {
+    void on_press(App& app, const ToolInput& in, ImGuiMouseButton b) override {
+        if (selection_right_press(app, in, b)) return;
         if (!in.inside || !app.doc || app.active_layer() < 0) return;
         const int x = static_cast<int>(std::floor(in.img_x)), y = static_cast<int>(std::floor(in.img_y));
         Mask shape = app.wand_sample_merged

@@ -6,6 +6,15 @@ section into the next version.
 
 ## Unreleased
 
+### Fixed
+- The right button does its own job with the selection tools instead of
+  repeating the left one. It ends a point to point selection where it
+  stands, which is easier than hunting for the first vertex, and otherwise
+  clears the selection -- but only when the click falls outside it, so
+  working inside a selection cannot throw it away by accident. A right drag
+  no longer draws a selection at all. Foreground Select keeps the right
+  button for marking background, which is what it is for there.
+
 ### Added
 - Edit > Generative Fill hands the selection to an image model and
   composites what comes back, as one undoable step. Firn is a client here,

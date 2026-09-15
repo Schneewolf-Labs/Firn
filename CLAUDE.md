@@ -147,6 +147,13 @@ docs/    notes on the original: command inventory, module mapping, FORMAT.md
   while editing it), `App::paint_touched(layer)` after live edits, and
   `App::commit_pixels(...)` to record the gesture. That is what makes every
   painting tool work on masks for free.
+- **The right button is not a second left button.** On the selection tools
+  it ends a point to point selection in progress and otherwise clears the
+  selection, and only when the click is outside it
+  (`selection_right_press`); a right drag draws nothing. Foreground Select
+  is the deliberate exception: there the right button marks background. A
+  new tool that ignores its `ImGuiMouseButton` argument silently gets the
+  wrong behaviour, which is how this went unnoticed.
 - New tools go in `app/src/tools/Tools.cpp` and register in
   `make_default_tools()`; give them a single-letter `shortcut()` matching the
   original where one exists (A pan, Z zoom, S selection, E dropper, B brush,

@@ -655,6 +655,44 @@ def test_generate_action(f):
     f.do("file.close")
 
 
+def test_right_button_selection(f):
+    section("the right button on a selection tool")
+    def sel(): return f.image()["selection"]
+    f.do("file.new", width=200, height=150, color="#ffffff")
+    f.step("tool:Selection")
+    f.do("select.rect", x0=40, y0=30, x1=160, y1=120)
+    check(sel(), "there is a selection to work with")
+    # Inside it the right button does nothing, so working within a selection
+    # cannot throw it away by accident.
+    f.send("click_img 100 75 right")
+    check(sel(), "right-clicking inside the selection keeps it")
+    # Outside it, the right button clears it, as in the original.
+    f.send("click_img 10 10 right")
+    check(not sel(), "right-clicking outside the selection clears it")
+    # And a right drag never draws one, which is what made the two buttons
+    # feel identical before.
+    f.do("select.rect", x0=40, y0=30, x1=160, y1=120)
+    f.send("drag_img 60,50 140,110 right")
+    check(sel(), "a right drag inside leaves the selection as it was")
+    f.do("select.none")
+    f.send("drag_img 20,20 90,90 right")
+    check(not sel(), "and a right drag never draws a new one")
+
+    # Point to point: the right button ends the selection where it stands.
+    f.step("tool:Freehand Selection", "set:sel_type:1")
+    for pt in ((20, 20), (120, 30), (90, 110)):
+        f.send("click_img %d %d" % pt)
+    check(not sel(), "a polygon still being drawn is not a selection yet")
+    f.send("click_img 60 90 right")
+    check(sel(), "right-clicking closes the polygon")
+
+    # The magic wand follows the same rule.
+    f.step("tool:Magic Wand")
+    f.send("click_img 10 10 right")
+    check(not sel(), "and the wand clears a selection the same way")
+    f.do("file.close")
+
+
 def test_interchange_formats(f):
     section("Photoshop and TIFF")
     f.do("file.new", width=80, height=60, color="#ffffff")
@@ -834,7 +872,7 @@ def main():
         drive.recv_line(sock)
         f = Firn(sock)
         for case in (test_ui_scaling, test_api_surface, test_documents, test_view, test_layers, test_selection,
-                     test_painting_and_materials, test_edit_actions, test_tools_and_history, test_image_geometry, test_clipping_masks, test_background_work, test_lock_transparency, test_pass_through_groups, test_blend_ranges, test_metadata, test_drawing_api, test_node_editing, test_generate_action, test_interchange_formats, test_tube_export, test_atomic_batches, test_discovery_v2):
+                     test_painting_and_materials, test_edit_actions, test_tools_and_history, test_image_geometry, test_clipping_masks, test_background_work, test_lock_transparency, test_pass_through_groups, test_blend_ranges, test_metadata, test_drawing_api, test_node_editing, test_generate_action, test_right_button_selection, test_interchange_formats, test_tube_export, test_atomic_batches, test_discovery_v2):
             case(f)
         sock.sendall(b"quit\n")
         sock.settimeout(10.0)
