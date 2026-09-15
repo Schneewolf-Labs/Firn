@@ -1349,11 +1349,12 @@ public:
     void on_drag(App& app, const ToolInput& in, ImGuiMouseButton) override {
         if (!dragging_) return;
         if (part_ < 0) { update(app, in); return; }
-        // A press that has barely moved is a click, not a drag. Without this
-        // the first half of a double-click nudges the rectangle by a pixel
-        // or two before the second half crops to it.
-        const float slack = 3.0f / std::max(in.zoom, 0.05f);
-        if (!moved_ && std::hypot(in.img_x - grab_x_, in.img_y - grab_y_) < slack) return;
+        // A press that has barely moved is a click, not a drag: without this
+        // the first half of a double-click nudges the rectangle before the
+        // second half crops to it. ImGui's own threshold rather than a
+        // distance in image pixels, which varies with zoom and with how the
+        // platform scales the display.
+        if (!moved_ && !ImGui::IsMouseDragging(ImGuiMouseButton_Left)) return;
         moved_ = true;
         const int dx = static_cast<int>(std::lround(in.img_x - grab_x_)), dy = static_cast<int>(std::lround(in.img_y - grab_y_));
         raster::Rect r = start_;
