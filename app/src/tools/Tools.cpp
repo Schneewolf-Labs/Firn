@@ -920,6 +920,20 @@ int gesture_mode(const App& app) {
     return app.sel_mode;
 }
 
+// The cursor for a box handle: 0..3 the corners from the top left round,
+// 4..7 the edges from the top, 8 the inside. Saying what a handle will do
+// before it is grabbed is most of what makes one feel solid.
+ImGuiMouseCursor handle_cursor(int part) {
+    switch (part) {
+        case 0: case 2: return ImGuiMouseCursor_ResizeNWSE;
+        case 1: case 3: return ImGuiMouseCursor_ResizeNESW;
+        case 4: case 6: return ImGuiMouseCursor_ResizeNS;
+        case 5: case 7: return ImGuiMouseCursor_ResizeEW;
+        case 8: return ImGuiMouseCursor_ResizeAll;
+        default: return ImGuiMouseCursor_Arrow;
+    }
+}
+
 // The right button on a selection tool, as the original has it: it ends a
 // selection still being drawn, and otherwise clears one. A click inside the
 // selection leaves it alone, so working within a selection cannot throw it
@@ -1288,20 +1302,76 @@ public:
     bool wants_snap() const override { return true; }
     const char* name() const override { return "Crop"; }
     const char* shortcut() const override { return "R"; }
+    // Which part of an existing rectangle the cursor is on: 0..3 the corners,
+    // 4..7 the edges, 8 the inside, -1 nothing.
+    int part_at(const App& app, const ToolInput& in) const {
+        const raster::Rect& r = app.crop_rect;
+        if (r.empty()) return -1;
+        const float grab = 6.0f / std::max(in.zoom, 0.05f);
+        const bool l = std::abs(in.img_x - r.x0) <= grab, rr = std::abs(in.img_x - r.x1) <= grab;
+        const bool t = std::abs(in.img_y - r.y0) <= grab, b = std::abs(in.img_y - r.y1) <= grab;
+        const bool inx = in.img_x >= r.x0 - grab && in.img_x <= r.x1 + grab;
+        const bool iny = in.img_y >= r.y0 - grab && in.img_y <= r.y1 + grab;
+        if (l && t) return 0;
+        if (rr && t) return 1;
+        if (rr && b) return 2;
+        if (l && b) return 3;
+        if (t && inx) return 4;
+        if (rr && iny) return 5;
+        if (b && inx) return 6;
+        if (l && iny) return 7;
+        if (in.img_x > r.x0 && in.img_x < r.x1 && in.img_y > r.y0 && in.img_y < r.y1) return 8;
+        return -1;
+    }
     void on_press(App& app, const ToolInput& in, ImGuiMouseButton) override {
         if (!app.doc) return;
+        // Double-clicking inside the rectangle crops, which is how the
+        // original finishes the gesture and saves a trip to Enter.
+        part_ = part_at(app, in);
+        if (part_ == 8 && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
+            app.crop_to(app.crop_rect);
+            part_ = -1;
+            return;
+        }
+        // An existing rectangle is adjusted rather than thrown away: an edge
+        // or corner resizes it, the middle moves it.
+        if (part_ >= 0) {
+            start_ = app.crop_rect;
+            grab_x_ = in.img_x; grab_y_ = in.img_y;
+            dragging_ = true;
+            return;
+        }
         x0_ = in.img_x; y0_ = in.img_y;
         dragging_ = true;
         update(app, in);
     }
-    void on_drag(App& app, const ToolInput& in, ImGuiMouseButton) override { if (dragging_) update(app, in); }
+    void on_drag(App& app, const ToolInput& in, ImGuiMouseButton) override {
+        if (!dragging_) return;
+        if (part_ < 0) { update(app, in); return; }
+        const int dx = static_cast<int>(std::lround(in.img_x - grab_x_)), dy = static_cast<int>(std::lround(in.img_y - grab_y_));
+        raster::Rect r = start_;
+        if (part_ == 8) { r.x0 += dx; r.x1 += dx; r.y0 += dy; r.y1 += dy; }
+        else {
+            if (part_ == 0 || part_ == 3 || part_ == 7) r.x0 += dx;
+            if (part_ == 1 || part_ == 2 || part_ == 5) r.x1 += dx;
+            if (part_ == 0 || part_ == 1 || part_ == 4) r.y0 += dy;
+            if (part_ == 2 || part_ == 3 || part_ == 6) r.y1 += dy;
+            if (r.x1 < r.x0) std::swap(r.x0, r.x1);
+            if (r.y1 < r.y0) std::swap(r.y0, r.y1);
+        }
+        const int w = app.doc->width(), h = app.doc->height();
+        r.x0 = std::clamp(r.x0, 0, w); r.x1 = std::clamp(r.x1, 0, w);
+        r.y0 = std::clamp(r.y0, 0, h); r.y1 = std::clamp(r.y1, 0, h);
+        app.crop_rect = r;
+    }
     void on_release(App& app, const ToolInput& in, ImGuiMouseButton) override {
         if (!dragging_) return;
-        update(app, in);
+        if (part_ < 0) update(app, in);
         dragging_ = false;
+        part_ = -1;
         if (app.crop_rect.x1 - app.crop_rect.x0 < 1 || app.crop_rect.y1 - app.crop_rect.y0 < 1) app.crop_rect = {};
     }
-    void cancel(App& app) override { dragging_ = false; app.crop_rect = {}; }
+    void cancel(App& app) override { dragging_ = false; part_ = -1; app.crop_rect = {}; }
     void draw_overlay(App& app, const ToolInput& in) override {
         const raster::Rect& r = app.crop_rect;
         if (r.empty()) return;
@@ -1316,12 +1386,21 @@ public:
         in.dl->AddRectFilled(ImVec2(b.x, a.y), ImVec2(big1.x, b.y), shade);
         in.dl->AddRect(a, b, IM_COL32(255, 255, 255, 255));
         in.dl->AddRect(ImVec2(a.x - 1, a.y - 1), ImVec2(b.x + 1, b.y + 1), IM_COL32(0, 0, 0, 255));
+        if (const int part = dragging_ ? part_ : part_at(app, in); part >= 0) ImGui::SetMouseCursor(handle_cursor(part));
+        // The handles that say the rectangle can be adjusted rather than
+        // only redrawn.
+        const ImVec2 mid((a.x + b.x) * 0.5f, (a.y + b.y) * 0.5f);
+        for (const ImVec2& p : {ImVec2(a.x, a.y), ImVec2(b.x, a.y), ImVec2(b.x, b.y), ImVec2(a.x, b.y),
+                                ImVec2(mid.x, a.y), ImVec2(b.x, mid.y), ImVec2(mid.x, b.y), ImVec2(a.x, mid.y)}) {
+            in.dl->AddRectFilled(ImVec2(p.x - 3, p.y - 3), ImVec2(p.x + 3, p.y + 3), IM_COL32(255, 255, 255, 255));
+            in.dl->AddRect(ImVec2(p.x - 3, p.y - 3), ImVec2(p.x + 3, p.y + 3), IM_COL32(0, 0, 0, 255));
+        }
         // Enter applies while the tool is active.
         if (ImGui::IsKeyPressed(ImGuiKey_Enter, false) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter, false)) app.crop_to(app.crop_rect);
     }
     void draw_options(App& app) override {
         const raster::Rect& r = app.crop_rect;
-        if (r.empty()) ImGui::TextUnformatted("Drag a rectangle, then press Enter or Apply.");
+        if (r.empty()) ImGui::TextUnformatted("Drag a rectangle; its edges adjust it, a double-click inside crops.");
         else ImGui::Text("%d, %d  %d x %d", r.x0, r.y0, r.x1 - r.x0, r.y1 - r.y0);
         ImGui::SameLine();
         if (ImGui::SmallButton("Apply") && !r.empty()) app.crop_to(r);
@@ -1340,6 +1419,9 @@ private:
     }
     bool dragging_ = false;
     float x0_ = 0, y0_ = 0;
+    int part_ = -1;                 // which handle is being dragged, 8 = the whole rectangle
+    raster::Rect start_{};          // the rectangle as it was when the drag began
+    float grab_x_ = 0, grab_y_ = 0;
 };
 
 // --- Picture Tube ------------------------------------------------------
@@ -1474,19 +1556,35 @@ public:
     const char* shortcut() const override { return "T"; }
     void on_press(App& app, const ToolInput& in, ImGuiMouseButton b) override {
         if (!app.doc || b != ImGuiMouseButton_Left) return;
+        // Clicking text that is already there re-opens it, rather than
+        // starting a second block on top of the first. Only vector text can
+        // be edited again; once it is painted it is pixels like any other.
+        const int layer = app.active_layer();
+        if (layer >= 0 && app.doc->layer(layer).is_vector()) {
+            auto& objs = app.doc->layer(layer).objects;
+            for (int i = static_cast<int>(objs.size()) - 1; i >= 0; --i) {
+                if (!objs[static_cast<size_t>(i)].is_text) continue;
+                if (!vec::hit_test(objs[static_cast<size_t>(i)], in.img_x, in.img_y, 4.0f / std::max(in.zoom, 0.05f))) continue;
+                app.select_objects({static_cast<size_t>(i)}, false);
+                app.text_edit_object = i;
+                app.show_text_dialog = true;
+                return;
+            }
+        }
         app.text_x = static_cast<int>(std::floor(in.img_x));
         app.text_y = static_cast<int>(std::floor(in.img_y));
         app.text_edit_object = -1;
         app.show_text_dialog = true;
     }
     void draw_overlay(App&, const ToolInput& in) override {
+        ImGui::SetMouseCursor(ImGuiMouseCursor_TextInput);
         in.dl->AddLine(ImVec2(in.screen.x, in.screen.y - 8), ImVec2(in.screen.x, in.screen.y + 8), IM_COL32(255, 255, 255, 220));
         in.dl->AddLine(ImVec2(in.screen.x - 8, in.screen.y), ImVec2(in.screen.x + 8, in.screen.y), IM_COL32(255, 255, 255, 220));
     }
     void draw_options(App& app) override {
         app.draw_create_as_vector();
         ImGui::SameLine();
-        ImGui::TextUnformatted("Click where the text's top-left corner should go.");
+        ImGui::TextUnformatted("Click where the text goes, or on text already there to edit it.");
     }
 };
 

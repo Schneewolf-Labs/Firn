@@ -374,6 +374,10 @@ void App::draw_canvas_view(ImVec2 view_pos, ImVec2 view_size) {
     if (hovered && io.MouseWheel != 0.0f) zoom_about(io.MousePos, std::pow(1.15f, io.MouseWheel));
 
     const bool space = ImGui::IsKeyDown(ImGuiKey_Space);
+    // Panning says so: with the Pan tool, while space is held, and while a
+    // middle drag is under way.
+    if (hovered && (space || tool().pans_with_left_drag() || ImGui::IsMouseDragging(ImGuiMouseButton_Middle)))
+        ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
     const bool pan_drag = ImGui::IsMouseDragging(ImGuiMouseButton_Middle) ||
                           ((tool().pans_with_left_drag() || space) && ImGui::IsMouseDragging(ImGuiMouseButton_Left));
     if (active && pan_drag) {

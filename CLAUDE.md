@@ -147,6 +147,11 @@ docs/    notes on the original: command inventory, module mapping, FORMAT.md
   while editing it), `App::paint_touched(layer)` after live edits, and
   `App::commit_pixels(...)` to record the gesture. That is what makes every
   painting tool work on masks for free.
+- **Say what a gesture will do before it happens.** `ImGui::SetMouseCursor`
+  in a tool's `draw_overlay` is how: resize arrows on the crop and vector
+  handles (`handle_cursor`), a move arrow inside a box, a hand for panning
+  and for the rotate knob, a caret for the Text tool. A handle that does not
+  change the cursor reads as decoration.
 - **The right button is not a second left button.** On the selection tools
   it ends a point to point selection in progress and otherwise clears the
   selection, and only when the click is outside it

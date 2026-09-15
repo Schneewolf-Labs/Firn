@@ -7,6 +7,17 @@ section into the next version.
 ## Unreleased
 
 ### Fixed
+- The crop rectangle can be adjusted instead of only redrawn: its corners
+  and edges resize it, dragging the middle moves it, and a double-click
+  inside crops, which is how the original ends the gesture. Before this,
+  pressing anywhere threw the rectangle away and started another.
+- Clicking text that is already there with the Text tool re-opens it for
+  editing, rather than starting a second block on top of the first. Vector
+  text only; once it is painted it is pixels like anything else.
+- The pointer says what it is about to do. Resize arrows on the crop and
+  vector handles, a move arrow inside them, the rotate knob and panning as a
+  hand, a caret for the Text tool. Nothing in the program set a cursor
+  before, so every handle looked like every other part of the canvas.
 - The right button does its own job with the selection tools instead of
   repeating the left one. It ends a point to point selection where it
   stands, which is easier than hunting for the first vertex, and otherwise

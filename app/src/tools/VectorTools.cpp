@@ -189,12 +189,35 @@ public:
         mode_ = Mode::None;
     }
 
+    static ImGuiMouseCursor cursor_for(int handle) {
+        switch (handle) {
+            case 0: case 4: return ImGuiMouseCursor_ResizeNWSE;
+            case 2: case 6: return ImGuiMouseCursor_ResizeNESW;
+            case 1: case 5: return ImGuiMouseCursor_ResizeNS;
+            case 3: case 7: return ImGuiMouseCursor_ResizeEW;
+            case 8: return ImGuiMouseCursor_Hand;    // the rotate knob
+            default: return ImGuiMouseCursor_Arrow;
+        }
+    }
     void draw_overlay(App& app, const ToolInput& in) override {
         const int layer = app.vector_layer_for_edit(false);
         if (layer < 0) return;
         const auto& objs = app.doc->layer(layer).objects;
         float x0, y0, x1, y1;
-        if (selection_bounds(objs, &x0, &y0, &x1, &y1)) draw_selection_box(in, x0, y0, x1, y1, true);
+        if (selection_bounds(objs, &x0, &y0, &x1, &y1)) {
+            draw_selection_box(in, x0, y0, x1, y1, true);
+            // Say what a handle does before it is grabbed.
+            if (mode_ == Mode::None) {
+                if (const int h = hit_handle(in, x0, y0, x1, y1); h >= 0) ImGui::SetMouseCursor(cursor_for(h));
+                else if (in.img_x > x0 && in.img_x < x1 && in.img_y > y0 && in.img_y < y1) ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeAll);
+            } else if (mode_ == Mode::Scale) {
+                ImGui::SetMouseCursor(cursor_for(handle_));
+            } else if (mode_ == Mode::Move) {
+                ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeAll);
+            } else if (mode_ == Mode::Rotate) {
+                ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+            }
+        }
         if (mode_ == Mode::Marquee) {
             const ImVec2 a = to_screen(in, x0_, y0_), b = to_screen(in, x1_, y1_);
             in.dl->AddRect(ImVec2(std::min(a.x, b.x), std::min(a.y, b.y)), ImVec2(std::max(a.x, b.x), std::max(a.y, b.y)), IM_COL32(0, 160, 255, 255));

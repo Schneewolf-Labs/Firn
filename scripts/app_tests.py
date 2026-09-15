@@ -693,6 +693,51 @@ def test_right_button_selection(f):
     f.do("file.close")
 
 
+def test_crop_and_text_gestures(f):
+    section("crop handles and editing text in place")
+    def size():
+        i = f.image()
+        return (i["width"], i["height"])
+
+    # The crop rectangle can be adjusted rather than only redrawn, and a
+    # double-click inside it crops, which is how the original ends the
+    # gesture.
+    f.do("file.new", width=200, height=150, color="#ffffff")
+    f.step("tool:Crop")
+    f.send("drag_img 40,30 160,120")
+    check(size() == (200, 150), "drawing the rectangle does not crop on its own")
+    f.send("drag_img 160,120 120,90")          # pull the bottom-right corner in
+    f.send("dbl_img 80 60")                    # double-click inside applies
+    w, h = size()
+    check(abs(w - 80) <= 4 and abs(h - 60) <= 4, "a corner handle resizes the rectangle, a double-click crops to it")
+
+    # Grabbing the middle moves the whole rectangle.
+    f.do("file.new", width=200, height=150, color="#ffffff")
+    f.send("drag_img 20,20 80,80")
+    f.send("drag_img 50,50 90,90")
+    f.send("dbl_img 100 100")
+    w, h = size()
+    check(abs(w - 60) <= 4 and abs(h - 60) <= 4, "dragging the middle moves it without changing its size")
+    f.do("file.close")
+    f.do("file.close")
+
+    # Text already on the page is re-opened by clicking it, rather than
+    # having a second block started on top.
+    f.do("file.new", width=300, height=200, color="#ffffff")
+    f.do("layer.new_vector")
+    f.step("tool:Text", "set:create_as_vector:1")
+    f.send("click_img 30 60")
+    f.send("type Hello")
+    f.send("key Enter")
+    objs = json.loads(f.do("object.list"))["objects"]
+    check(len(objs) == 1 and objs[0]["kind"] == "text", "the text tool makes a text object")
+    f.send("click_img 60 40")                  # on the text itself
+    f.send("key Enter")
+    check(len(json.loads(f.do("object.list"))["objects"]) == 1,
+          "clicking text already there edits it instead of stacking another")
+    f.do("file.close")
+
+
 def test_interchange_formats(f):
     section("Photoshop and TIFF")
     f.do("file.new", width=80, height=60, color="#ffffff")
@@ -872,7 +917,7 @@ def main():
         drive.recv_line(sock)
         f = Firn(sock)
         for case in (test_ui_scaling, test_api_surface, test_documents, test_view, test_layers, test_selection,
-                     test_painting_and_materials, test_edit_actions, test_tools_and_history, test_image_geometry, test_clipping_masks, test_background_work, test_lock_transparency, test_pass_through_groups, test_blend_ranges, test_metadata, test_drawing_api, test_node_editing, test_generate_action, test_right_button_selection, test_interchange_formats, test_tube_export, test_atomic_batches, test_discovery_v2):
+                     test_painting_and_materials, test_edit_actions, test_tools_and_history, test_image_geometry, test_clipping_masks, test_background_work, test_lock_transparency, test_pass_through_groups, test_blend_ranges, test_metadata, test_drawing_api, test_node_editing, test_generate_action, test_right_button_selection, test_crop_and_text_gestures, test_interchange_formats, test_tube_export, test_atomic_batches, test_discovery_v2):
             case(f)
         sock.sendall(b"quit\n")
         sock.settimeout(10.0)
