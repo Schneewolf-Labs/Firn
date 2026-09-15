@@ -230,6 +230,33 @@ being usable *with other people* was the formats.
 - [ ] `image.crop` and `image.canvas_size` actions: the Crop tool has no
       API equivalent, so a script has to select and crop to the selection.
 
+## 23. Image models (2026-09-15)
+
+Not a tool of Firn's own, but a wrapper: the far side is whatever service
+is pointed at, and Firn owns the queue, the document semantics and the
+compositing. Model capabilities move faster than an editor should.
+
+- [x] `core/include/firn/generate.h`: request, result, disposition, a
+      backend as a `std::function`, and a queue that runs several at once
+      with the document free to change underneath. Tested against a fake
+      backend, clean under ThreadSanitizer.
+- [x] `gen::composite_into`, and the measurement that makes it mandatory:
+      pasting a service's own frame moved the rest of the picture by 7.4
+      levels on average, 129 at worst.
+- [ ] The HTTP backend. Firn has no HTTP client and the update check
+      deliberately shells out rather than adding one; megabyte payloads and
+      polling will not stretch that far. cpp-httplib is the likely answer,
+      and TLS for a remote endpoint is the real decision.
+- [ ] Read the far side's capabilities and build the parameter form from
+      them, rather than hardcoding one service's fields. The one already
+      running here publishes `features`, `limits`, `defaults`, and live
+      `loras` and `upscalers` lists.
+- [ ] Decide what a result does when the document moved while it was out.
+      `Document::revision()` is the primitive; degrade to a new layer and
+      say so.
+- [ ] `App::job` is a single slot and `do_command` refuses every action
+      while it runs. A queue needs that assumption lifted.
+
 ## 16. Beyond the original (2026-09-11)
 
 - [x] Content-Aware Fill (exemplar synthesis, `core/src/inpaint.cpp`)

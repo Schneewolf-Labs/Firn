@@ -15,7 +15,10 @@
 #include "firn/json.h"
 #include "firn/print.h"
 #include "firn/commands.h"
+#include <thread>
+
 #include "firn/document.h"
+#include "firn/generate.h"
 #include "firn/icc.h"
 #include "firn/io.h"
 #include "firn/inpaint.h"
@@ -3721,6 +3724,176 @@ static void test_openraster_lossless() {
 // file corrupt rather than skipping the layer.
 // TIFF is what print and archival photography run on, and the only format
 // here that hands 16 bits a channel to another program without argument.
+// Work handed to an image model. The queue and the compositing are the
+// parts Firn owns; the backend here is a fake, so none of this needs a
+// server, a model, or a network.
+static void test_generate_queue() {
+    using namespace std::chrono_literals;
+
+    // A backend that returns a flat colour and, like a real one, hands back
+    // a whole frame rather than only the part it was asked to change.
+    auto flat_backend = [](Color c) {
+        return [c](const gen::Request& r, gen::Progress& p) {
+            gen::Result out;
+            p.fraction.store(0.5f);
+            out.image = Image(r.init.width(), r.init.height(), c);
+            out.ok = true;
+            return out;
+        };
+    };
+
+    // Jobs run, come back in submission order, and report themselves.
+    {
+        gen::Queue q(flat_backend({10, 20, 30, 255}), 1);
+        std::vector<uint64_t> ids;
+        for (int i = 0; i < 4; ++i) {
+            gen::Request r;
+            r.name = "Job " + std::to_string(i);
+            r.init = Image(8, 8, {0, 0, 0, 255});
+            r.revision = static_cast<uint64_t>(i);
+            r.layer = i;
+            ids.push_back(q.submit(std::move(r)));
+        }
+        CHECK(ids[0] == 1 && ids[3] == 4);
+        q.wait();
+        std::vector<gen::Finished> done = q.drain();
+        CHECK(done.size() == 4);
+        CHECK(q.drain().empty());                     // draining takes them away
+        CHECK(q.outstanding() == 0);
+        bool ordered = true, carried = true;
+        for (size_t i = 0; i < done.size(); ++i) {
+            if (done[i].id != ids[i]) ordered = false;
+            if (done[i].status != gen::Status::Done || !done[i].result.ok) ordered = false;
+            // The request comes back with it, so a late answer can still say
+            // which layer and which revision it was built from.
+            if (done[i].request.revision != i || done[i].request.layer != static_cast<int>(i)) carried = false;
+        }
+        CHECK(ordered);
+        CHECK(carried);
+    }
+
+    // A backend that fails, and one that is not there at all.
+    {
+        gen::Queue q([](const gen::Request&, gen::Progress&) {
+            gen::Result r;
+            r.error = "the far side said no";
+            return r;
+        }, 1);
+        gen::Request r;
+        r.init = Image(4, 4, {0, 0, 0, 255});
+        q.submit(std::move(r));
+        q.wait();
+        const std::vector<gen::Finished> done = q.drain();
+        CHECK(done.size() == 1 && done[0].status == gen::Status::Failed);
+        CHECK(done[0].result.error == "the far side said no");
+    }
+    {
+        gen::Queue q(nullptr, 1);
+        q.submit(gen::Request{});
+        q.wait();
+        const std::vector<gen::Finished> done = q.drain();
+        CHECK(done.size() == 1 && done[0].status == gen::Status::Failed);
+    }
+
+    // Cancelling. A queued job always stops; a running one only when its
+    // backend is still willing to be stopped, and the queue reports which.
+    {
+        std::atomic<bool> release{false};
+        std::atomic<int> started{0};
+        gen::Queue q([&release, &started](const gen::Request&, gen::Progress& p) {
+            started.fetch_add(1);
+            p.cancellable.store(false);          // past the point of no return
+            while (!release.load()) std::this_thread::sleep_for(1ms);
+            gen::Result r;
+            r.ok = !p.cancel.load();
+            r.image = Image(4, 4, {1, 2, 3, 255});
+            return r;
+        }, 1);
+        const uint64_t first = q.submit(gen::Request{});
+        while (started.load() == 0) std::this_thread::sleep_for(1ms);
+        const uint64_t queued = q.submit(gen::Request{});
+        CHECK(q.cancel(queued));                 // still waiting, so it stops
+        CHECK(!q.cancel(first));                 // running and not cancellable
+        CHECK(!q.cancel(9999));                  // no such job
+        const std::vector<gen::Job> snapshot = q.jobs();
+        CHECK(snapshot.size() == 2);
+        CHECK(snapshot[0].status == gen::Status::Running && !snapshot[0].cancellable);
+        CHECK(snapshot[1].status == gen::Status::Queued);
+        release.store(true);
+        q.wait();
+        const std::vector<gen::Finished> done = q.drain();
+        CHECK(done.size() == 2);
+        // The cancelled one never ran, so the backend saw only the first.
+        CHECK(started.load() == 1);
+        bool saw_cancelled = false;
+        for (const gen::Finished& f : done) if (f.status == gen::Status::Cancelled) saw_cancelled = true;
+        CHECK(saw_cancelled);
+    }
+
+    // Compositing is the part that keeps an edit local. Measured against a
+    // real service, the area outside the mask came back 7.5 levels different
+    // on average and 130 at worst; the fake backend here does the same thing
+    // by handing back a whole flat frame.
+    {
+        Image original(64, 48);
+        for (int y = 0; y < 48; ++y)
+            for (int x = 0; x < 64; ++x)
+                original.set(x, y, {static_cast<uint8_t>(x * 4), static_cast<uint8_t>(y * 5), 90, 255});
+        const Image generated(64, 48, {255, 0, 0, 255});
+        Mask region(64, 48, 0);
+        for (int y = 10; y < 30; ++y)
+            for (int x = 10; x < 40; ++x) region.at(x, y) = 255;
+
+        Image dst = original;
+        gen::composite_into(dst, generated, region, 0.0f);
+        bool inside_taken = true, outside_kept = true;
+        for (int y = 0; y < 48; ++y)
+            for (int x = 0; x < 64; ++x) {
+                const Color d = dst.get(x, y), o = original.get(x, y);
+                if (region.at(x, y) == 255) {
+                    if (d.r != 255 || d.g != 0 || d.b != 0) inside_taken = false;
+                } else if (d.r != o.r || d.g != o.g || d.b != o.b) outside_kept = false;
+            }
+        CHECK(inside_taken);
+        CHECK(outside_kept);      // the whole point: nothing outside moves
+
+        // Feathering softens the seam without reaching past the region's own
+        // spread, and still leaves the far side of the picture alone.
+        Image soft = original;
+        gen::composite_into(soft, generated, region, 4.0f);
+        CHECK(soft.get(25, 20).r == 255);                       // deep inside
+        const Color edge = soft.get(41, 20);
+        CHECK(edge.r > original.get(41, 20).r && edge.r < 255);  // partly blended
+        CHECK(soft.get(60, 45).r == original.get(60, 45).r);     // far corner untouched
+
+        // A backend working at its own resolution is brought back to the
+        // layer's size rather than pasted at the wrong scale.
+        Image half = original;
+        gen::composite_into(half, Image(32, 24, {0, 255, 0, 255}), region, 0.0f);
+        CHECK(half.get(25, 20).g == 255);
+        CHECK(half.get(60, 45).r == original.get(60, 45).r);
+
+        // An empty region means the whole frame, which is the one case where
+        // a backend's own output can be taken entire.
+        Image all = original;
+        gen::composite_into(all, generated, Mask(), 0.0f);
+        CHECK(all.get(0, 0).r == 255 && all.get(63, 47).r == 255);
+    }
+
+    // Several at once, which is the reason a queue exists rather than one
+    // slot: the interface stays responsive and the document is free to move.
+    {
+        gen::Queue q(flat_backend({7, 7, 7, 255}), 3);
+        for (int i = 0; i < 9; ++i) {
+            gen::Request r;
+            r.init = Image(4, 4, {0, 0, 0, 255});
+            q.submit(std::move(r));
+        }
+        q.wait();
+        CHECK(q.drain().size() == 9);
+    }
+}
+
 static void test_tiff() {
     Document d(40, 24);
     Layer& bg = d.add_layer("Background");
@@ -4585,6 +4758,7 @@ int main() {
     test_layer_style_scales_with_the_image();
     test_clipping_masks();
     test_openraster_lossless();
+    test_generate_queue();
     test_tiff();
     test_psd_writer();
     test_xmp();

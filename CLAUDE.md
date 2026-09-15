@@ -440,6 +440,27 @@ docs/    notes on the original: command inventory, module mapping, FORMAT.md
   truncations, corrupted headers and noise; it is cheap and belongs in the
   ordinary run, but it only catches memory errors when built with the
   sanitizer.
+- **Work handed to an image model** (`core/include/firn/generate.h`) is
+  deliberately ignorant of what the model is: a `Request` carries an opaque
+  `json::Value` of parameters the backend understands, an optional image and
+  region, and a `Disposition` saying what the answer means for the document
+  (into the region, a new layer, or replacing one). Model capabilities churn
+  far faster than an editor should, so only the three things Firn itself
+  acts on are named here. A `gen::Backend` is a `std::function`, which is
+  what lets the tests run without a server.
+  **`gen::composite_into` is not optional.** A service that runs the whole
+  frame through an encoder and decoder returns every pixel slightly changed,
+  including the ones it was told to leave alone: measured against a real one,
+  the area outside the mask moved 7.4 levels on average and 129 at worst, and
+  compositing locally brought that to zero. Never paste a backend's frame
+  into a layer.
+  Cancelling is a request, not a guarantee: `Progress::cancellable` is the
+  backend's to clear, because some services accept a cancel only while the
+  work is still queued, and a button that claims otherwise is lying.
+  `gen::Queue` runs several at once and the document is free to change while
+  work is out, so a `Request` records the `revision` and `layer` it was built
+  from; a result that comes back to a document that moved must degrade
+  visibly rather than paint into the wrong place.
 - Add a test in `tests/test_core.cpp` for every new raster op or command.
 
 ## macOS
