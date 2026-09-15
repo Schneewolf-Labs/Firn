@@ -28,6 +28,10 @@ struct Config {
     // Off unless asked for: a check tells a server someone is running Firn
     // and from which address, which is the user's call to make.
     bool check_updates = false;
+    // Where to send generative work. Empty means the feature is off: a
+    // request tells a server you are running Firn, so it is opt in like the
+    // update check.
+    std::string generate_url;
     long long last_update_check = 0;     // unix time of the last automatic check
     std::string theme = "Firn";          // a built-in or user theme name (see app/src/ui/Theme.h)
     std::string extra_tube_dir, extra_brush_dir, extra_texture_dir;

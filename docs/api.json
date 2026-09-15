@@ -485,6 +485,36 @@
       "input_schema": {
         "additionalProperties": false,
         "properties": {
+          "prompt": {
+            "description": "What should be there; some services take the instruction from the picture alone",
+            "type": "string"
+          },
+          "seed": {
+            "description": "Pin the result; left out, every call differs",
+            "maximum": 2147483647,
+            "minimum": 0,
+            "type": "number",
+            "x-default-description": "a fresh one each time"
+          },
+          "strength": {
+            "default": 0.9,
+            "description": "How far from the original to go, 0 to 1",
+            "maximum": 1,
+            "minimum": 0,
+            "type": "number"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "name": "generate.fill",
+      "summary": "Hand the selection to an image model and composite what comes back"
+    },
+    {
+      "batch_safe": false,
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {
           "what": {
             "default": "all",
             "description": "everything, or only what identifies the photographer and the place",

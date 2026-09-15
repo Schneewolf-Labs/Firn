@@ -631,6 +631,22 @@ def test_node_editing(f):
     f.do("file.close")
 
 
+def test_generate_action(f):
+    section("image model action")
+    # No server is configured in CI, so what is checked here is that the
+    # feature refuses cleanly rather than hanging or half-editing.
+    f.do("file.new", width=64, height=48, color="#ffffff")
+    check(f.refused("generate.fill", prompt="anything"), "generative fill refuses with no model configured")
+    check(f.image()["history_cursor"] == 0, "and leaves the history alone")
+    f.do("select.rect", x0=8, y0=8, x1=40, y1=32)
+    check(f.refused("generate.fill", prompt="anything"), "still refused with a selection")
+    api = json.loads(f.do("app.describe", name="generate.fill"))["actions"][0]
+    names = set(api["input_schema"]["properties"])
+    check(names == {"prompt", "strength", "seed"}, "the action takes a prompt, a strength and a seed")
+    check("seed" not in api["input_schema"].get("required", []), "the seed is optional, so each call differs")
+    f.do("file.close")
+
+
 def test_interchange_formats(f):
     section("Photoshop and TIFF")
     f.do("file.new", width=80, height=60, color="#ffffff")
@@ -810,7 +826,7 @@ def main():
         drive.recv_line(sock)
         f = Firn(sock)
         for case in (test_ui_scaling, test_api_surface, test_documents, test_view, test_layers, test_selection,
-                     test_painting_and_materials, test_edit_actions, test_tools_and_history, test_image_geometry, test_clipping_masks, test_background_work, test_lock_transparency, test_pass_through_groups, test_blend_ranges, test_metadata, test_drawing_api, test_node_editing, test_interchange_formats, test_tube_export, test_atomic_batches, test_discovery_v2):
+                     test_painting_and_materials, test_edit_actions, test_tools_and_history, test_image_geometry, test_clipping_masks, test_background_work, test_lock_transparency, test_pass_through_groups, test_blend_ranges, test_metadata, test_drawing_api, test_node_editing, test_generate_action, test_interchange_formats, test_tube_export, test_atomic_batches, test_discovery_v2):
             case(f)
         sock.sendall(b"quit\n")
         sock.settimeout(10.0)

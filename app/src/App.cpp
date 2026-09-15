@@ -1,4 +1,5 @@
 #include "App.h"
+#include "GenerateBackend.h"
 #include "ui/AdjustState.h"
 #include "ui/AdjustLayerState.h"
 #include "ui/PaletteState.h"
@@ -632,6 +633,70 @@ void App::content_aware_fill(bool background) {
     status = "Filling from the surrounding picture...";
 }
 
+bool App::generate_configured() const {
+    return !config.generate_url.empty() && firn::genhttp::available();
+}
+
+void App::generative_fill(const std::string& prompt, bool background) {
+    if (!doc || !active_is_raster()) { status = "Generative Fill needs a raster layer."; return; }
+    if (!doc->has_selection() || !doc->selection().any()) { status = "Generative Fill needs a selection."; return; }
+    if (config.generate_url.empty()) { status = "Generative Fill: set a server address in Preferences first."; return; }
+    if (!firn::genhttp::available()) { status = "Generative Fill needs curl, which is not installed."; return; }
+    if (job) { status = job->name + " is still running."; return; }
+
+    const size_t layer = static_cast<size_t>(active_layer());
+    gen::Request req;
+    req.name = "Generative Fill";
+    req.init = doc->layer(layer).pixels;
+    req.region = doc->selection();
+    req.disposition = gen::Disposition::IntoRegion;
+    req.feather = 6.0f;
+    req.revision = doc->revision();
+    req.layer = static_cast<int>(layer);
+    if (!prompt.empty()) req.params.set("prompt", json::Value::string(prompt));
+    req.params.set("strength", json::Value::number(generate_strength));
+    if (generate_seed >= 0) req.params.set("seed", json::Value::number(generate_seed));
+
+    gen::Backend send = firn::genhttp::backend(config.generate_url);
+    if (!background) {
+        // A script wants the work finished when the call returns.
+        gen::Progress p;
+        gen::Result r = send(req, p);
+        if (!r.ok) { status = "Generative Fill: " + (r.error.empty() ? std::string("no result") : r.error); return; }
+        Image out = req.init;
+        gen::composite_into(out, r.image, req.region, req.feather);
+        run(std::make_unique<AdjustCommand>(layer, "Generative Fill", [img = std::move(out)](Image& i) { i = img; }));
+        status = "Generative Fill done";
+        return;
+    }
+
+    job = std::make_unique<BackgroundJob>();
+    job->name = "Generative Fill";
+    job->layer = layer;
+    job->result = req.init;
+    BackgroundJob* j = job.get();
+    j->done = std::async(std::launch::async, [j, req = std::move(req), send = std::move(send)]() mutable {
+        gen::Progress p;
+        // The service decides whether it will still take a cancel; the
+        // button follows what it says rather than the other way round.
+        std::atomic<bool>* cancel = &j->cancel;
+        std::thread relay([&p, cancel, j] {
+            while (p.status.load() != gen::Status::Done && p.status.load() != gen::Status::Failed) {
+                if (cancel->load()) p.cancel.store(true);
+                j->progress.store(std::max(0.0f, p.fraction.load()), std::memory_order_relaxed);
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            }
+        });
+        gen::Result r = send(req, p);
+        p.status.store(gen::Status::Done);
+        relay.join();
+        if (!r.ok) { j->error = r.error; return false; }
+        gen::composite_into(j->result, r.image, req.region, req.feather);
+        return true;
+    });
+    status = "Asking the model...";
+}
+
 void App::draw_background_job() {
     if (!job) return;
     if (!job->opened) { ImGui::OpenPopup("Working"); job->opened = true; }
@@ -672,7 +737,7 @@ void App::draw_background_job() {
         }
     } else {
         const size_t layer = job->layer;
-        if (!finished) status = job->name + " cancelled";
+        if (!finished) status = job->error.empty() ? job->name + " cancelled" : job->name + ": " + job->error;
         else if (!doc || layer >= doc->layer_count() || !doc->layer(layer).is_raster()) status = job->name + ": the layer is gone";
         else {
             // The work is done, so the command only has to hand the pixels

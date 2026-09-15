@@ -461,6 +461,20 @@ docs/    notes on the original: command inventory, module mapping, FORMAT.md
   work is out, so a `Request` records the `revision` and `layer` it was built
   from; a result that comes back to a document that moved must degrade
   visibly rather than paint into the wrong place.
+- **Talking to an image model** is `app/src/GenerateBackend.cpp`, a
+  `gen::Backend` over the native async API (`/sdcpp/v1/img_gen`, poll,
+  cancel). It shells out to curl or PowerShell like `UpdateCheck` rather
+  than bringing in an HTTP library, and the payloads go through files
+  because a base64 image is far past any platform's command line limit.
+  **Send an explicit seed.** The server's own default is a fixed number, so
+  without one every request returns the same picture and there is no way to
+  try again -- and a seed that suits neither the prompt nor the image stays
+  stuck: seed 42 on one model returned flat colour where a random seed
+  returned the scene. `generate.fill` takes an optional seed so a script can
+  pin what the interface varies.
+  The address lives in `Config::generate_url` and is empty by default: a
+  request tells a server someone here is running Firn, the same reasoning as
+  the update check.
 - Add a test in `tests/test_core.cpp` for every new raster op or command.
 
 ## macOS

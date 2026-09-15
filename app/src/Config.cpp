@@ -52,6 +52,7 @@ void Config::load() {
         else if (key == "smooth_amount") smooth_amount = std::clamp(static_cast<float>(std::atof(value.c_str())), 1.0f, 100.0f);
         else if (key == "checker_size") checker_size = std::clamp(std::atoi(value.c_str()), 2, 64);
         else if (key == "check_updates") check_updates = value == "1";
+        else if (key == "generate_url") generate_url = value;
         else if (key == "last_update_check") last_update_check = std::atoll(value.c_str());
         else if (key == "color_managed_display") color_managed_display = value == "1";
         else if (key == "fit_tool_options") fit_tool_options = value == "1";
@@ -74,6 +75,7 @@ void Config::save() const {
     f << "grid_spacing=" << grid_spacing << "\n";
     f << "jpeg_quality=" << jpeg_quality << "\nundo_limit=" << undo_limit << "\nundo_memory_mb=" << undo_memory_mb << "\nchecker_size=" << checker_size << "\n";
     f << "check_updates=" << (check_updates ? 1 : 0) << "\nlast_update_check=" << last_update_check << "\n";
+    f << "generate_url=" << generate_url << "\n";
     f << "color_managed_display=" << (color_managed_display ? 1 : 0) << "\n";
     f << "fit_tool_options=" << (fit_tool_options ? 1 : 0) << "\n";
     f << "image_windows=" << (image_windows ? 1 : 0) << "\n";

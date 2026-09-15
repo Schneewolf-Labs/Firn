@@ -243,10 +243,13 @@ compositing. Model capabilities move faster than an editor should.
 - [x] `gen::composite_into`, and the measurement that makes it mandatory:
       pasting a service's own frame moved the rest of the picture by 7.4
       levels on average, 129 at worst.
-- [ ] The HTTP backend. Firn has no HTTP client and the update check
-      deliberately shells out rather than adding one; megabyte payloads and
-      polling will not stretch that far. cpp-httplib is the likely answer,
-      and TLS for a remote endpoint is the real decision.
+- [x] The HTTP backend, shelling out like the update check after all: the
+      payloads go through files rather than the command line, which works
+      fine. cpp-httplib remains the answer if polling every half second
+      through a process spawn ever costs enough to notice, and TLS for a
+      remote endpoint is still the real decision.
+- [x] Edit > Generative Fill, the `generate.fill` action, and an address in
+      Preferences with a Test button. Off by default.
 - [ ] Read the far side's capabilities and build the parameter form from
       them, rather than hardcoding one service's fields. The one already
       running here publishes `features`, `limits`, `defaults`, and live

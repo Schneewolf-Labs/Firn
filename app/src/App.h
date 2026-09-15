@@ -195,6 +195,7 @@ struct App {
     PendingFileOp file_op = PendingFileOp::None;
     bool show_new_dialog = false;
     bool show_tube_export_dialog = false;
+    bool show_generate_dialog = false;
     // Adjustment / effect dialogs with live preview (ui/Adjust.cpp)
     enum class Adj { None, BrightnessContrast, Curves, Gamma, Levels, Threshold, ChannelMixer, Colorize, HSL,
                      Average, Gaussian, Posterize, Solarize, UnsharpMask, Median, MotionBlur, Mosaic, AddNoise, DropShadow,
@@ -563,6 +564,7 @@ struct App {
     // with the given cell grid; the status line carries the refusal.
     bool export_tube(const std::string& path, const firn::io::TubeInfo& info);
     void draw_tube_export_dialog();
+    void draw_generate_dialog();
     bool load_tube(int index);
     // Text tool
     std::vector<firn::text::FontInfo> fonts;
@@ -620,6 +622,13 @@ struct App {
     void paste_into_selection(); // scales the clipboard to the selection and paints it through
     void repeat_last_effect();   // re-applies the last Adjust/Effects dialog with its settings
     void content_aware_fill(bool background = true);   // rebuilds the selection from the rest of the picture
+    // Hands the selection to an image model and composites what comes back.
+    // An empty prompt is allowed: some services take the instruction from
+    // the picture alone.
+    void generative_fill(const std::string& prompt, bool background = true);
+    float generate_strength = 0.9f;   // how far from the original to go
+    int generate_seed = -1;           // -1 asks for a fresh one each time
+    bool generate_configured() const;
     void revert();               // reloads the file from disk, dropping every change
     bool show_revert_prompt = false;
     void zoom_to_rect(firn::raster::Rect r);   // fills the view with an image rect

@@ -285,6 +285,28 @@ std::vector<Action> build() {
             app.run(std::make_unique<firn::MetadataCommand>("Metadata", std::move(md)));
             return ok_json();
         });
+    add("generate.fill", "Hand the selection to an image model and composite what comes back",
+        {{"prompt", "string", "What should be there; some services take the instruction from the picture alone"},
+         {"strength", "number", "How far from the original to go, 0 to 1", false, nullptr, "0.9", R"({"minimum":0,"maximum":1})"},
+         {"seed", "number", "Pin the result; left out, every call differs", false, nullptr, "a fresh one each time", R"({"minimum":0,"maximum":2147483647})"}},
+        [](App& app, const Value& p, bool* ok) {
+            std::string e;
+            if (!need_doc(app, ok, e)) return e;
+            if (!app.generate_configured()) return fail(ok, "no image model is configured; set one in Preferences");
+            const float strength_before = app.generate_strength;
+            const int seed_before = app.generate_seed;
+            app.generate_strength = std::clamp(static_cast<float>(p.get("strength").as_number(0.9)), 0.0f, 1.0f);
+            app.generate_seed = p.find("seed") ? static_cast<int>(p.get("seed").as_number(-1)) : -1;
+            const std::string before = app.status;
+            app.status.clear();
+            app.generative_fill(str(p, "prompt"), false);
+            const bool worked = app.status == "Generative Fill done";
+            const std::string why = app.status;
+            app.status = before;
+            app.generate_strength = strength_before;
+            app.generate_seed = seed_before;
+            return worked ? ok_json() : fail(ok, why);
+        });
     add("image.strip_metadata", "Remove metadata from the image",
         {{"what", "string", "everything, or only what identifies the photographer and the place", false, "all,private", "all"}},
         [](App& app, const Value& p, bool* ok) {

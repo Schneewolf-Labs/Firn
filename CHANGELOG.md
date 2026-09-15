@@ -6,6 +6,17 @@ section into the next version.
 
 ## Unreleased
 
+### Added
+- Edit > Generative Fill hands the selection to an image model and
+  composites what comes back, as one undoable step. Firn is a client here,
+  not a tool with opinions: the far side is any stable-diffusion.cpp server,
+  on this machine or elsewhere, and the parameters are passed through
+  untouched. Off unless you set an address in Preferences, which has a Test
+  button that says what answered. There is no new dependency -- it shells
+  out to curl or PowerShell, the way the update check does.
+  Also the `generate.fill` action, with an optional seed so a script can pin
+  a result that the interface deliberately varies.
+
 ## 0.6.0 (2026-09-13)
 
 ### Added

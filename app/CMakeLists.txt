@@ -49,6 +49,7 @@ add_library(firn_app OBJECT
   src/ActionSchema.cpp
   src/DrawingActions.cpp
   src/VectorActions.cpp
+  src/GenerateBackend.cpp
   src/Script.cpp
   src/Config.cpp
   src/Clipboard.cpp

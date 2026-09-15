@@ -5,6 +5,7 @@
 #include <memory>
 
 #include "App.h"
+#include "GenerateBackend.h"
 #include "ui/MenuBuilder.h"
 #include "ui/MenuState.h"
 #include "ui/Shortcut.h"
@@ -171,6 +172,8 @@ void App::draw_menu(MenuBuilder& m) {
         m.item("Paste As New Layer", "Ctrl+L", has_doc, [=, this] { paste_as_new_layer(); });
         m.item("Paste Into Selection", "Ctrl+Shift+L", has_layer && doc->has_selection(), [=, this] { paste_into_selection(); });
         m.item("Clear", "Delete", has_layer, [=, this] { clear_selection(); });
+        m.item("Generative Fill...", nullptr, has_layer && doc->has_selection() && generate_configured(), [=, this] { menu_state->generate_prompt[0] = 0; show_generate_dialog = true; }, false,
+               "Hands the selection to an image model and composites what comes back.");
         m.item("Content-Aware Fill", nullptr, has_layer && doc->has_selection(), [=, this] { content_aware_fill(); }, false,
                "Rebuilds the selection from the rest of the picture, to remove something from it.");
         m.separator();
@@ -697,6 +700,7 @@ void App::draw_dialogs() {
     }
 
     draw_tube_export_dialog();
+    draw_generate_dialog();
 
     if (show_new_dialog) { ImGui::OpenPopup("New Image"); show_new_dialog = false; }
     if (show_print_dialog) { ImGui::OpenPopup("Print"); show_print_dialog = false; }
@@ -732,6 +736,25 @@ void App::draw_dialogs() {
         ImGui::Checkbox("Check for updates on startup", &c.check_updates);
         if (ImGui::IsItemHovered())
             ImGui::SetTooltip("Asks GitHub once a day whether a newer release exists, and says so.\nIt never downloads or installs anything. Off unless you turn it on,\nbecause a check tells a server that someone here is running Firn.");
+        {
+            // Where generative work goes. Empty means the feature is off,
+            // the same posture as the update check: a request tells a server
+            // someone here is running Firn.
+            char url[256];
+            std::snprintf(url, sizeof url, "%s", c.generate_url.c_str());
+            ImGui::SetNextItemWidth(320);
+            if (ImGui::InputTextWithHint("Image model server", "http://127.0.0.1:1234 (empty = off)", url, sizeof url)) c.generate_url = url;
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("A stable-diffusion.cpp server, on this machine or elsewhere.\nEdit > Generative Fill sends the selection to it.\nOff unless you fill this in.");
+            ImGui::SameLine();
+            ImGui::BeginDisabled(c.generate_url.empty());
+            if (ImGui::SmallButton("Test")) {
+                std::string err;
+                const std::string who = firn::genhttp::probe(c.generate_url, &err);
+                status = who.empty() ? "Image model: " + err : "Image model answered: " + who;
+            }
+            ImGui::EndDisabled();
+        }
         ImGui::SetNextItemWidth(160); ImGui::InputInt("New image width", &c.new_width);
         ImGui::SetNextItemWidth(160); ImGui::InputInt("New image height", &c.new_height);
         c.new_width = std::clamp(c.new_width, 1, 30000); c.new_height = std::clamp(c.new_height, 1, 30000);
@@ -1139,5 +1162,27 @@ void App::draw_tube_export_dialog() {
     } else if (cancel) {
         ImGui::CloseCurrentPopup();
     }
+    ImGui::EndPopup();
+}
+
+// Edit > Generative Fill. The prompt is all Firn asks for; everything else
+// about the model is the server's business, which is the point of treating
+// it as a service rather than a feature.
+void App::draw_generate_dialog() {
+    if (show_generate_dialog) { ImGui::OpenPopup("Generative Fill"); show_generate_dialog = false; }
+    if (!ImGui::BeginPopupModal("Generative Fill", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) return;
+    if (!doc) { ImGui::CloseCurrentPopup(); ImGui::EndPopup(); return; }
+    ImGui::TextDisabled("The selection is replaced; the rest of the picture is left alone.");
+    ImGui::SetNextItemWidth(420);
+    if (ImGui::IsWindowAppearing()) ImGui::SetKeyboardFocusHere();
+    const bool entered = ImGui::InputTextWithHint("##prompt", "What should be there", menu_state->generate_prompt,
+                                                  sizeof menu_state->generate_prompt, ImGuiInputTextFlags_EnterReturnsTrue);
+    ImGui::TextDisabled("%s", config.generate_url.c_str());
+    ImGui::Separator();
+    const bool go = ImGui::Button("Fill", ImVec2(90, 0)) || entered;
+    ImGui::SameLine();
+    const bool cancel = ImGui::Button("Cancel", ImVec2(90, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape, false);
+    if (go) { generative_fill(menu_state->generate_prompt); ImGui::CloseCurrentPopup(); }
+    else if (cancel) ImGui::CloseCurrentPopup();
     ImGui::EndPopup();
 }
