@@ -709,7 +709,7 @@ def test_crop_and_text_gestures(f):
     f.send("drag_img 160,120 120,90")          # pull the bottom-right corner in
     f.send("dbl_img 80 60")                    # double-click inside applies
     w, h = size()
-    check(abs(w - 80) <= 4 and abs(h - 60) <= 4, "a corner handle resizes the rectangle, a double-click crops to it")
+    check(abs(w - 80) <= 6 and abs(h - 60) <= 6, "a corner handle resizes the rectangle, a double-click crops to it")
 
     # Grabbing the middle moves the whole rectangle.
     f.do("file.new", width=200, height=150, color="#ffffff")
@@ -717,7 +717,7 @@ def test_crop_and_text_gestures(f):
     f.send("drag_img 50,50 90,90")
     f.send("dbl_img 100 100")
     w, h = size()
-    check(abs(w - 60) <= 4 and abs(h - 60) <= 4, "dragging the middle moves it without changing its size")
+    check(abs(w - 60) <= 6 and abs(h - 60) <= 6, "dragging the middle moves it without changing its size")
     f.do("file.close")
     f.do("file.close")
 

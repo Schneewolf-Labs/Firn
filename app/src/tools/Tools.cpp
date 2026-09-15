@@ -1338,6 +1338,7 @@ public:
         if (part_ >= 0) {
             start_ = app.crop_rect;
             grab_x_ = in.img_x; grab_y_ = in.img_y;
+            moved_ = false;
             dragging_ = true;
             return;
         }
@@ -1348,6 +1349,12 @@ public:
     void on_drag(App& app, const ToolInput& in, ImGuiMouseButton) override {
         if (!dragging_) return;
         if (part_ < 0) { update(app, in); return; }
+        // A press that has barely moved is a click, not a drag. Without this
+        // the first half of a double-click nudges the rectangle by a pixel
+        // or two before the second half crops to it.
+        const float slack = 3.0f / std::max(in.zoom, 0.05f);
+        if (!moved_ && std::hypot(in.img_x - grab_x_, in.img_y - grab_y_) < slack) return;
+        moved_ = true;
         const int dx = static_cast<int>(std::lround(in.img_x - grab_x_)), dy = static_cast<int>(std::lround(in.img_y - grab_y_));
         raster::Rect r = start_;
         if (part_ == 8) { r.x0 += dx; r.x1 += dx; r.y0 += dy; r.y1 += dy; }
@@ -1420,6 +1427,7 @@ private:
     bool dragging_ = false;
     float x0_ = 0, y0_ = 0;
     int part_ = -1;                 // which handle is being dragged, 8 = the whole rectangle
+    bool moved_ = false;            // the press has travelled far enough to be a drag
     raster::Rect start_{};          // the rectangle as it was when the drag began
     float grab_x_ = 0, grab_y_ = 0;
 };
