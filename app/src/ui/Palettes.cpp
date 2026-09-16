@@ -109,7 +109,7 @@ static void draw_tool_options(App& app) {
 
 
 static void draw_materials(App& app) {
-    ImGui::Begin("Materials");
+    if (ImGui::Begin("Materials")) app.config.right_palette = "Materials";
     draw_materials_header(app);
     if (app.material_view != 2) {
         if (!app.recent_colors.empty()) {
@@ -406,7 +406,9 @@ static void draw_history(App& app) {
 }
 
 static void draw_overview(App& app) {
-    ImGui::Begin("Overview");
+    // Begin returns false for a docked window that is not its node's
+    // selected tab, so this is also how the choice is noticed.
+    if (ImGui::Begin("Overview")) app.config.right_palette = "Overview";
     // Say so when there is nothing to show, rather than drawing an empty
     // panel. This is not only tidier: a docked window that puts no items on
     // the screen at all counts as appearing the first time it does, and

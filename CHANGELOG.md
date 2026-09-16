@@ -6,6 +6,17 @@ section into the next version.
 
 ## Unreleased
 
+### Fixed
+- The right-hand palette stays on whichever of Materials and Overview you
+  left it on, across restarts and across opening an image. ImGui keeps the
+  dock layout but not reliably this: with a saved workspace it gives the tab
+  to whichever of the pair drew last, which is why it kept reverting to
+  Overview however often you clicked Materials. Firn keeps the choice itself
+  now and asks for it back on the way in.
+- The workspace is written out when the program closes. ImGui only flushes
+  its layout every few seconds on its own, so anything rearranged shortly
+  before quitting was lost.
+
 ## 0.7.0 (2026-09-16)
 
 ### Fixed

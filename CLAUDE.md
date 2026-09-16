@@ -147,6 +147,15 @@ docs/    notes on the original: command inventory, module mapping, FORMAT.md
   while editing it), `App::paint_touched(layer)` after live edits, and
   `App::commit_pixels(...)` to record the gesture. That is what makes every
   painting tool work on masks for free.
+- **ImGui's dock layout does not reliably remember which tab of a stack was
+  selected.** With a saved workspace it hands the tab to whichever window in
+  the node drew last, whatever the ini says, so a pair like Materials and
+  Overview will not stay put on its own. Firn keeps the choice in
+  `Config::right_palette` and calls `SetWindowFocus` over the first few
+  frames (one frame is not enough; the tab bar settles over several). A
+  docked window's `Begin` returns false when it is not the selected tab,
+  which is how the live choice is noticed. The ini is also saved explicitly
+  on exit, since ImGui only flushes it every few seconds.
 - **A docked palette must always draw something.** A window that submits no
   items at all counts as appearing the first time it does and ImGui gives it
   the tab, so a panel that is blank until there is a document will steal the

@@ -32,6 +32,11 @@ struct Config {
     // request tells a server you are running Firn, so it is opt in like the
     // update check.
     std::string generate_url;
+    // Which of the two stacked right-hand palettes was last showing. ImGui
+    // keeps its own dock layout, but not reliably this: with a saved
+    // workspace it hands the tab to whichever window drew last, so the
+    // choice is kept here and put back on the way in.
+    std::string right_palette = "Materials";
     long long last_update_check = 0;     // unix time of the last automatic check
     std::string theme = "Firn";          // a built-in or user theme name (see app/src/ui/Theme.h)
     std::string extra_tube_dir, extra_brush_dir, extra_texture_dir;

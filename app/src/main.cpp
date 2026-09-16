@@ -238,6 +238,11 @@ int main(int argc, char** argv) {
     Driver driver;
     if (const char* sock = std::getenv("FIRN_DRIVE")) { if (!driver.start(sock)) return 1; }
     bool first_frame = true;
+    // What the palette pair should go back to, taken before the first frame
+    // because drawing them overwrites the live value with whatever is
+    // currently showing.
+    const std::string wanted_palette = app.config.right_palette;
+    int restore_palette = 3;   // frames over which the saved palette tab is asked for
     if (argc > 1) {
         if (!app.open_document(argv[1])) std::fprintf(stderr, "%s\n", app.status.c_str());
     }
@@ -319,9 +324,17 @@ int main(int argc, char** argv) {
 #endif
         app.draw_canvas();
         app.draw_palettes();
-        // Select Materials after both tabs exist; otherwise ImGui selects
-        // the newly added Overview tab. Saved workspace choices stay intact.
-        if (default_layout_created) ImGui::SetWindowFocus("Materials");
+        // Put the right-hand palette back where it was left. A fresh
+        // workspace starts on Materials; with a saved one ImGui restores the
+        // dock layout but hands the tab to whichever of the pair drew last,
+        // so it is asked for explicitly over the first few frames, after
+        // both windows exist. Doing it once is not enough: the tab bar
+        // settles over several frames.
+        if (restore_palette > 0) {
+            const std::string& want = default_layout_created ? std::string("Materials") : wanted_palette;
+            if (!want.empty()) ImGui::SetWindowFocus(want.c_str());
+            --restore_palette;
+        }
         app.draw_dialogs();
         if (app.show_imgui_demo) ImGui::ShowDemoWindow(&app.show_imgui_demo);
         if (driver.active()) driver.draw_cursor();
