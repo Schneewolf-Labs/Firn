@@ -6,6 +6,8 @@ section into the next version.
 
 ## Unreleased
 
+## 0.7.0 (2026-09-16)
+
 ### Fixed
 - Opening the first image no longer drags the workspace off Materials and
   onto Overview. A docked panel that puts nothing at all on the screen
