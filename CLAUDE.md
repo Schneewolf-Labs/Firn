@@ -147,6 +147,12 @@ docs/    notes on the original: command inventory, module mapping, FORMAT.md
   while editing it), `App::paint_touched(layer)` after live edits, and
   `App::commit_pixels(...)` to record the gesture. That is what makes every
   painting tool work on masks for free.
+- **A docked palette must always draw something.** A window that submits no
+  items at all counts as appearing the first time it does and ImGui gives it
+  the tab, so a panel that is blank until there is a document will steal the
+  workspace the moment one arrives -- which is how opening an image used to
+  pull the right-hand dock off Materials and onto Overview. Draw a disabled
+  line saying there is nothing to show.
 - **Say what a gesture will do before it happens.** `ImGui::SetMouseCursor`
   in a tool's `draw_overlay` is how: resize arrows on the crop and vector
   handles (`handle_cursor`), a move arrow inside a box, a hand for panning

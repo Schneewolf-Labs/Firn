@@ -407,6 +407,12 @@ static void draw_history(App& app) {
 
 static void draw_overview(App& app) {
     ImGui::Begin("Overview");
+    // Say so when there is nothing to show, rather than drawing an empty
+    // panel. This is not only tidier: a docked window that puts no items on
+    // the screen at all counts as appearing the first time it does, and
+    // ImGui selects its tab, which is how the first image opened used to
+    // pull the workspace off Materials and onto Overview.
+    if (!app.doc || !app.canvas_tex) ImGui::TextDisabled("No image");
     if (app.doc && app.canvas_tex) {
         const ImVec2 avail = ImGui::GetContentRegionAvail();
         const float aspect = static_cast<float>(app.doc->width()) / app.doc->height();

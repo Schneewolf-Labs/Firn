@@ -7,6 +7,12 @@ section into the next version.
 ## Unreleased
 
 ### Fixed
+- Opening the first image no longer drags the workspace off Materials and
+  onto Overview. A docked panel that puts nothing at all on the screen
+  counts as appearing the first time it does, and takes its tab with it, so
+  the Overview panel now says "No image" instead of being blank -- which is
+  what the original does too. The panel you leave selected is the one you
+  come back to, and Materials is what a new workspace starts on.
 - The crop rectangle can be adjusted instead of only redrawn: its corners
   and edges resize it, dragging the middle moves it, and a double-click
   inside crops, which is how the original ends the gesture. Before this,
