@@ -57,9 +57,25 @@ void App::draw_status_bar() {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(6, 2));
     ImGui::Begin("##status", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBringToFrontOnFocus);
     // Left: the last status message (first line only); right: cursor and image facts.
+    const bool more = status.find('\n') != std::string::npos;
     std::string first = status.substr(0, status.find('\n'));
+    if (status_severity == Severity::Error) {
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.42f, 0.38f, 1.0f));
+        first = "! " + first;
+    } else if (status_severity == Severity::Warning) {
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.72f, 0.35f, 1.0f));
+        first = "! " + first;
+    }
     ImGui::TextUnformatted(first.c_str());
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", status.c_str());
+    if (status_severity != Severity::Info) ImGui::PopStyleColor();
+    if (ImGui::IsItemHovered() && !status.empty()) ImGui::SetTooltip("%s", status.c_str());
+    // A message with more to it says so, instead of hiding the rest behind a
+    // hover on a thin grey line nobody thinks to try.
+    if (more) {
+        ImGui::SameLine(0.0f, 6.0f);
+        ImGui::TextDisabled("(details)");
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", status.c_str());
+    }
     if (doc) {
         char right[160];
         if (cursor_inside)

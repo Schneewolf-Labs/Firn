@@ -189,6 +189,14 @@ bool blend_combo(const char* label, BlendMode& mode) {
     return changed;
 }
 
+// ImGui::Indent(0) indents by the style's default rather than not at all
+// (imgui.cpp: `indent_w != 0.0f ? indent_w : IndentSpacing`), so a depth of
+// zero used to push a top level row 21px right while a group member one
+// level in went only 14px -- the nesting read backwards, and indentation is
+// the only cue the palette gives that a layer is inside a group.
+static void indent_depth(int depth, float step) { if (depth > 0) ImGui::Indent(depth * step); }
+static void unindent_depth(int depth, float step) { if (depth > 0) ImGui::Unindent(depth * step); }
+
 static void draw_layers(App& app) {
     ImGui::Begin("Layers");
     if (!app.doc) { ImGui::TextDisabled("No image"); ImGui::End(); return; }
@@ -243,7 +251,7 @@ static void draw_layers(App& app) {
         Layer& L = doc.layer(i);
         if (hidden[i]) continue;
         ImGui::PushID(i);
-        ImGui::Indent(L.depth * 14.0f);
+        indent_depth(L.depth, 14.0f);
         bool vis = L.visible;
         if (ImGui::Checkbox("##vis", &vis)) {
             LayerProps before = doc.props(i), after = before;
@@ -310,7 +318,7 @@ static void draw_layers(App& app) {
                 const int row_depth = L.depth;
                 app.layer_move_onto(from, i);
                 ImGui::EndDragDropTarget();
-                ImGui::Unindent(row_depth * 14.0f);
+                unindent_depth(row_depth, 14.0f);
                 ImGui::PopID();
                 break;   // the stack changed under us
             }
@@ -327,7 +335,7 @@ static void draw_layers(App& app) {
             builder.dispatch();
             // A menu action may replace the stack even when its count stays
             // the same. L and the visibility map then belong to the old stack.
-            if (app.doc.get() != &doc || doc.revision() != revision) { ImGui::Unindent(row_depth * 14.0f); ImGui::PopID(); break; }
+            if (app.doc.get() != &doc || doc.revision() != revision) { unindent_depth(row_depth, 14.0f); ImGui::PopID(); break; }
         }
         if (L.has_mask()) {
             ImGui::SameLine();
@@ -355,7 +363,7 @@ static void draw_layers(App& app) {
                 const int g = vec::group_of(objs, oi);
                 depth = 0;
                 for (int gg = g; gg >= 0; gg = vec::group_of(objs, static_cast<size_t>(gg))) ++depth;
-                ImGui::Indent(depth * 12.0f);
+                indent_depth(depth, 12.0f);
                 bool ovis = o.visible;
                 if (ImGui::Checkbox("##ovis", &ovis)) {
                     std::vector<vec::Object> before = objs;
@@ -371,13 +379,13 @@ static void draw_layers(App& app) {
                     app.select_objects({static_cast<size_t>(oi)}, ImGui::GetIO().KeyShift);
                     if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) app.open_vector_properties();
                 }
-                ImGui::Unindent(depth * 12.0f);
+                unindent_depth(depth, 12.0f);
                 ImGui::PopID();
             }
             if (objs.empty()) ImGui::TextDisabled("(no objects)");
             ImGui::Unindent(20.0f);
         }
-        ImGui::Unindent(L.depth * 14.0f);
+        unindent_depth(L.depth, 14.0f);
         ImGui::PopID();
     }
     ImGui::End();

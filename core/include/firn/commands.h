@@ -175,6 +175,28 @@ public:
     size_t memory_bytes() const override { return before_.size() + after_.size(); }
 };
 
+// Saved selections. They are part of the document and of its undo state, so
+// adding or removing one has to go through a command like every other
+// mutation: without this, saving a selection did not even mark the file
+// modified, and deleting them all could not be undone.
+class AlphaChannelCommand : public Command {
+public:
+    AlphaChannelCommand(std::string name, std::vector<Document::AlphaChannel> after)
+        : name_(std::move(name)), after_(std::move(after)) {}
+    std::string name() const override { return name_; }
+    void execute(Document& doc) override;
+    void undo(Document& doc) override;
+    size_t memory_bytes() const override {
+        size_t n = 0;
+        for (const auto& c : before_) n += c.mask.size();
+        for (const auto& c : after_) n += c.mask.size();
+        return n;
+    }
+private:
+    std::string name_;
+    std::vector<Document::AlphaChannel> before_, after_;
+};
+
 // Inserts a new raster layer holding `pixels` (document-sized) above the
 // active layer. Used by Paste As New Layer.
 class PasteLayerCommand : public Command {

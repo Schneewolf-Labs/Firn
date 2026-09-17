@@ -556,6 +556,7 @@ void Driver::before_frame(App& app, SDL_Window* window) {
                 else if (n == "shortcuts_dialog") app.show_shortcuts_dialog = true;
                 else if (n == "tube_export_dialog") app.show_tube_export_dialog = true;
                 else if (n == "generate_dialog") app.show_generate_dialog = true;
+                else if (n == "alpha_save_dialog") app.show_alpha_save_dialog = true;
                 else if (n == "brush_size") app.brush.size = v;
                 else if (n == "smooth_mode") app.smooth_mode = static_cast<int>(v);
                 else if (n == "smooth_amount") app.smooth_amount = v;

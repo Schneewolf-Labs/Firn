@@ -146,7 +146,14 @@ void App::draw_menu(MenuBuilder& m) {
         }
         m.item("Print...", "Ctrl+P", has_doc, [=, this] { show_print_dialog = true; });
         m.item("Close", "Ctrl+W", has_doc, [=, this] { close_document(current_doc); });
-        m.item("Close All", nullptr, has_doc, [=, this] { for (int i = static_cast<int>(docs.size()) - 1; i >= 0; --i) if (!document_modified(i)) close_document(i); if (!docs.empty()) close_document(0); });
+        // Closing every document means every document: the unmodified ones go
+        // at once and the rest are asked about one after another, rather than
+        // prompting once and leaving the others open while the menu says the
+        // work is done.
+        m.item("Close All", nullptr, has_doc, [=, this] {
+            for (int i = static_cast<int>(docs.size()) - 1; i >= 0; --i) if (!document_modified(i)) close_document(i);
+            if (!docs.empty()) { closing_all = true; close_document(0); }
+        });
         m.separator();
         m.item("Save", "Ctrl+S", has_doc, [=, this] { save(); });
         m.item("Save As...", "Ctrl+Shift+S", has_doc, [=, this] { request_save_as(); });
@@ -703,6 +710,7 @@ void App::draw_dialogs() {
 
     draw_tube_export_dialog();
     draw_generate_dialog();
+    draw_delete_alpha_prompt();
 
     if (show_new_dialog) { ImGui::OpenPopup("New Image"); show_new_dialog = false; }
     if (show_print_dialog) { ImGui::OpenPopup("Print"); show_print_dialog = false; }
@@ -816,7 +824,11 @@ void App::draw_dialogs() {
         const bool entered = ImGui::InputText("Name", alpha_name_buf, sizeof(alpha_name_buf), ImGuiInputTextFlags_EnterReturnsTrue);
         ImGui::TextDisabled("Saved with the image in the native format.");
         if ((ImGui::Button("OK") || entered) && doc && doc->has_selection()) {
-            doc->alpha_channels().push_back({alpha_name_buf, doc->selection()});
+            {
+                std::vector<Document::AlphaChannel> next = doc->alpha_channels();
+                next.push_back({alpha_name_buf, doc->selection()});
+                run(std::make_unique<AlphaChannelCommand>("Save Selection", std::move(next)));
+            }
             status = std::string("Saved selection as alpha channel \"") + alpha_name_buf + "\"";
             ImGui::CloseCurrentPopup();
         }
@@ -903,14 +915,23 @@ void App::draw_dialogs() {
         const int idx = pending_close;
         if (idx < 0 || idx >= static_cast<int>(docs.size())) { pending_close = -1; ImGui::CloseCurrentPopup(); }
         else {
+            // Show the document being asked about: with several open, the
+            // canvas was still on a different one and the name in the
+            // question meant nothing.
+            if (ImGui::IsWindowAppearing() && idx != current_doc) activate_document(idx);
+            const int remaining = [this] { int n = 0; for (int i = 0; i < static_cast<int>(docs.size()); ++i) if (document_modified(i)) ++n; return n; }();
             ImGui::Text("Save changes to \"%s\" before closing?", document_title(idx).c_str());
+            if (closing_all && remaining > 1) ImGui::TextDisabled("%d of %d still to answer for.", 1, remaining);
             if (ImGui::Button("Save", ImVec2(90, 0))) {
                 activate_document(idx);
                 pending_close = -1;
                 ImGui::CloseCurrentPopup();
-                // Saving may need a dialog; close afterwards only if it succeeded in place.
-                if (!doc_path.empty() && io::is_psp_extension(doc_path) ? save_document(doc_path) : false) close_document(idx, true);
-                else { request_save_as(); pending_quit = false; }
+                // A format that keeps everything can be written in place; any
+                // other needs the Save As dialog, which is asynchronous, so
+                // the close waits for it rather than being abandoned.
+                const bool in_place = !doc_path.empty() && (io::is_psp_extension(doc_path) || io::is_ora_extension(doc_path));
+                if (in_place && save_document(doc_path)) close_document(idx, true);
+                else { pending_close_after_save = idx; request_save_as(); }
             }
             ImGui::SameLine();
             if (ImGui::Button("Don't Save", ImVec2(90, 0))) {
@@ -918,11 +939,14 @@ void App::draw_dialogs() {
                 ImGui::CloseCurrentPopup();
                 close_document(idx, true);
                 if (pending_quit) request_quit();
+                else if (closing_all && !docs.empty()) close_document(0);
+                else closing_all = false;
             }
             ImGui::SameLine();
             if (ImGui::Button("Cancel", ImVec2(90, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape, false)) {
                 pending_close = -1;
                 pending_quit = false;
+                closing_all = false;
                 ImGui::CloseCurrentPopup();
             }
         }

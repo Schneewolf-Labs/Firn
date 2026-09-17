@@ -231,7 +231,15 @@ bool FileDialog::accept(const std::string& typed) {
         if (std::find(exts_.begin(), exts_.end(), ext) == exts_.end() && !exts_.empty())
             p += "." + exts_[type_ >= 0 && type_ < static_cast<int>(exts_.size()) ? type_ : 0];
         if (!fs::is_directory(p.parent_path(), ec)) { error_ = "No such folder: " + p.parent_path().string(); return false; }
+        // Replacing a file is worth one question. The amber line above is the
+        // early warning; this is the last one, and it is the difference
+        // between a finished file surviving a stray Enter and not.
+        if (fs::exists(p, ec) && p.string() != confirmed_overwrite_) {
+            pending_overwrite_ = p.string();
+            return false;
+        }
     }
+    confirmed_overwrite_.clear();
     result_ = p.string();
     return true;
 }
@@ -387,6 +395,25 @@ bool FileDialog::draw() {
     const char* ok = mode_ == Mode::Save ? "Save" : "Open";
     if (ImGui::Button(ok, ImVec2(100, 0))) {
         if (accept(name_buf_)) accepted = true;
+    }
+    if (!pending_overwrite_.empty() && !ImGui::IsPopupOpen("Replace file?")) ImGui::OpenPopup("Replace file?");
+    if (ImGui::BeginPopupModal("Replace file?", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        const fs::path p(pending_overwrite_);
+        ImGui::Text("\"%s\" already exists in %s.", p.filename().string().c_str(), p.parent_path().string().c_str());
+        ImGui::TextDisabled("Replacing it cannot be undone.");
+        ImGui::Separator();
+        if (ImGui::Button("Replace", ImVec2(100, 0))) {
+            confirmed_overwrite_ = pending_overwrite_;
+            pending_overwrite_.clear();
+            ImGui::CloseCurrentPopup();
+            if (accept(name_buf_)) accepted = true;
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel", ImVec2(100, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape, false)) {
+            pending_overwrite_.clear();
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
     }
     ImGui::SameLine();
     if (ImGui::Button("Cancel", ImVec2(100, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape, false)) {

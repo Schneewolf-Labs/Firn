@@ -92,6 +92,25 @@ void App::defloat() {
 
 // --- Menu ------------------------------------------------------------
 
+// Dropping every saved selection is the most destructive thing in the
+// Selections menu and used to happen on one click with no undo.
+void App::draw_delete_alpha_prompt() {
+    if (show_delete_alpha_prompt) { ImGui::OpenPopup("Delete Saved Selections"); show_delete_alpha_prompt = false; }
+    if (!ImGui::BeginPopupModal("Delete Saved Selections", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) return;
+    if (!doc) { ImGui::CloseCurrentPopup(); ImGui::EndPopup(); return; }
+    const size_t n = doc->alpha_channels().size();
+    ImGui::Text("Delete %zu saved selection%s from this image?", n, n == 1 ? "" : "s");
+    ImGui::TextDisabled("Undo brings them back.");
+    ImGui::Separator();
+    if (ImGui::Button("Delete", ImVec2(90, 0))) {
+        run(std::make_unique<AlphaChannelCommand>("Delete Saved Selections", std::vector<Document::AlphaChannel>{}));
+        ImGui::CloseCurrentPopup();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Cancel", ImVec2(90, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape, false)) ImGui::CloseCurrentPopup();
+    ImGui::EndPopup();
+}
+
 void App::draw_selections_menu(MenuBuilder& m) {
     if (!m.begin_menu("Selections")) return;
     const bool has_doc = doc != nullptr;
@@ -143,7 +162,7 @@ void App::draw_selections_menu(MenuBuilder& m) {
                 m.pop_id();
             }
             m.separator();
-            m.item("Delete All Alpha Channels", nullptr, true, [=, this] { doc->alpha_channels().clear(); });
+            m.item("Delete All Alpha Channels", nullptr, true, [=, this] { show_delete_alpha_prompt = true; });
             m.end_menu();
         }
         m.item("Save Selection To Alpha Channel...", nullptr, doc->has_selection(), [=, this] {

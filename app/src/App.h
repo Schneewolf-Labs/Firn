@@ -193,9 +193,12 @@ struct App {
     FileDialog file_dialog;
     enum class PendingFileOp { None, Open, SaveAs, LoadSelection, SaveSelection, LoadPalette, SavePalette, SavePdf, LoadSwatches, SaveSwatches, LoadProfile, ImportTheme, ExportTheme, ExportTube };
     PendingFileOp file_op = PendingFileOp::None;
+    bool closing_all = false;          // File > Close All is working through the stack
+    int pending_close_after_save = -1; // close this document once its Save As finishes
     bool show_new_dialog = false;
     bool show_tube_export_dialog = false;
     bool show_generate_dialog = false;
+    bool show_delete_alpha_prompt = false;   // confirm before dropping every saved selection
     // Adjustment / effect dialogs with live preview (ui/Adjust.cpp)
     enum class Adj { None, BrightnessContrast, Curves, Gamma, Levels, Threshold, ChannelMixer, Colorize, HSL,
                      Average, Gaussian, Posterize, Solarize, UnsharpMask, Median, MotionBlur, Mosaic, AddNoise, DropShadow,
@@ -565,6 +568,7 @@ struct App {
     bool export_tube(const std::string& path, const firn::io::TubeInfo& info);
     void draw_tube_export_dialog();
     void draw_generate_dialog();
+    void draw_delete_alpha_prompt();
     bool load_tube(int index);
     // Text tool
     std::vector<firn::text::FontInfo> fonts;
@@ -583,6 +587,14 @@ struct App {
     int new_w = 800, new_h = 600;
     float blur_radius = 3.0f;
     std::string status;
+    // How the status line should read. A failure that looks exactly like a
+    // success is how a save to a full disk goes unnoticed for an hour, so
+    // the severity travels with the text and the status bar colours it.
+    enum class Severity { Info, Warning, Error };
+    Severity status_severity = Severity::Info;
+    void say(std::string text, Severity how = Severity::Info) { status = std::move(text); status_severity = how; }
+    void warn(std::string text) { say(std::move(text), Severity::Warning); }
+    void fail(std::string text) { say(std::move(text), Severity::Error); }
     bool quit = false;
 
     // Actions (implemented in App.cpp)

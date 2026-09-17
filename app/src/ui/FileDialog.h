@@ -54,5 +54,7 @@ private:
     char dir_buf_[1024] = {};
     char name_buf_[1024] = {};
     std::string result_;
+    std::string pending_overwrite_;      // waiting on the Replace confirmation
+    std::string confirmed_overwrite_;    // the one path the user has agreed to replace
     std::string error_;
 };

@@ -7,6 +7,36 @@ section into the next version.
 ## Unreleased
 
 ### Fixed
+- Saving a layered image to a flat format no longer claims the image is
+  saved. Writing a three-layer picture to PNG used to mark the document
+  clean, so closing it asked nothing and every layer was gone: the file is
+  still written, but the image stays unsaved until it is put somewhere that
+  keeps all of it, and the status line says so rather than hiding it in a
+  second line only a hover revealed. Saving a genuinely flat image to PNG
+  counts as saved, as it always did.
+- Failures no longer look exactly like successes. The status line carries a
+  severity now, so a failed save is red and marked, and a message with more
+  to it offers "(details)" instead of relying on a hover. A save that fails
+  says what is actually wrong -- "there is no folder /x", "cannot write to
+  /proc" -- rather than "stbi_write_png failed".
+- Saving a selection to an alpha channel goes through the undo system like
+  every other change to a document: it marks the image modified, so closing
+  asks, and it can be undone. Delete All Alpha Channels asks first and is
+  undoable, where it used to drop them all on one click for good.
+- File > Close All closes all of them. It used to close the unmodified
+  documents, ask about exactly one more, and leave the rest open.
+- Replacing an existing file from the Save dialog asks first. The warning
+  line stays as the early notice; the confirmation is what stops a stray
+  Return destroying a finished file.
+- Group members in the Layers palette are indented further than the layers
+  around them, not less. ImGui's Indent(0) indents by the style default
+  rather than not at all, so the nesting read backwards -- and indentation
+  is the only cue the palette gives that a layer is inside a group.
+- Choosing Save in the unsaved-changes prompt saves .ora files in place
+  instead of opening a Save As dialog, and a Save As that the prompt asked
+  for now finishes the close it was for instead of abandoning it.
+
+### Fixed
 - The right-hand palette stays on whichever of Materials and Overview you
   left it on, across restarts and across opening an image. ImGui keeps the
   dock layout but not reliably this: with a saved workspace it gives the tab

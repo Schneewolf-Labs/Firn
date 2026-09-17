@@ -1,4 +1,5 @@
 #include "firn/io.h"
+#include <filesystem>
 #include <fstream>
 
 #include <algorithm>
@@ -334,10 +335,34 @@ bool embed_metadata(const std::string& path, const meta::Metadata& md, std::stri
     return false;
 }
 
+// Why a write failed, in terms of the thing the user chose rather than the
+// library that gave up. "stbi_write_png failed" tells nobody that the folder
+// does not exist.
+std::string why_unwritable(const std::string& path) {
+    namespace fs = std::filesystem;
+    std::error_code ec;
+    const fs::path file(path);
+    const fs::path dir = file.has_parent_path() ? file.parent_path() : fs::path(".");
+    if (!fs::exists(dir, ec)) return "there is no folder " + dir.string();
+    if (!fs::is_directory(dir, ec)) return dir.string() + " is not a folder";
+    // Probing beats reading permission bits, which do not account for the
+    // filesystem being read only or full.
+    const fs::path probe = dir / ".firn-write-test";
+    std::ofstream t(probe, std::ios::binary);
+    if (!t) return "cannot write to " + dir.string();
+    t.close();
+    fs::remove(probe, ec);
+    if (fs::exists(file, ec)) {
+        std::ofstream over(path, std::ios::binary | std::ios::app);
+        if (!over) return path + " cannot be replaced";
+    }
+    return "the disk may be full";
+}
+
 bool save_png(const Image& img, const std::string& path, std::string* err) {
     set_png_level_once();
     int ok = stbi_write_png(path.c_str(), img.width(), img.height(), 4, img.data(), img.width() * 4);
-    if (!ok && err) *err = "stbi_write_png failed";
+    if (!ok && err) *err = why_unwritable(path);
     return ok != 0;
 }
 

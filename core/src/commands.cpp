@@ -224,6 +224,17 @@ void MirrorCommand::execute(Document& doc) {
     doc.touch();
 }
 
+void AlphaChannelCommand::execute(Document& doc) {
+    before_ = doc.alpha_channels();
+    doc.alpha_channels() = after_;
+    doc.touch();
+}
+
+void AlphaChannelCommand::undo(Document& doc) {
+    doc.alpha_channels() = before_;
+    doc.touch();
+}
+
 void SelectionCommand::execute(Document& doc) {
     before_ = doc.selection();
     doc.set_selection(after_);

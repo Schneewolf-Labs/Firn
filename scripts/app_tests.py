@@ -743,6 +743,49 @@ def test_crop_and_text_gestures(f):
     f.do("file.close")
 
 
+def test_saving_honesty(f):
+    section("what a save claims to have done")
+    out = lambda n: os.path.join(OUT, n)
+    # A format that cannot hold the document has not really saved it, so the
+    # image stays modified and closing still asks.
+    f.do("file.new", width=40, height=30, color="#ffffff")
+    f.do("layer.new")
+    f.do("layer.new")
+    f.do("file.save_as", path=out("lossy.png"))
+    check(f.image()["modified"], "saving three layers to a PNG leaves the image unsaved")
+    check(os.path.exists(out("lossy.png")), "and still writes the file")
+    for ext in ("ora", "pspimage"):
+        f.do("file.save_as", path=out("keeps." + ext))
+        check(not f.image()["modified"], "saving to ." + ext + " does count as saved")
+    f.do("file.close")
+    # One flat layer to a flat format is a real save, not a lossy one.
+    f.do("file.new", width=40, height=30, color="#224466")
+    f.do("file.save_as", path=out("flat.png"))
+    check(not f.image()["modified"], "a flat image saved to PNG counts as saved")
+    f.do("file.close")
+
+    # Saved selections are part of the document: they mark it modified and
+    # they undo.
+    f.do("file.new", width=60, height=40, color="#ffffff")
+    f.do("file.save_as", path=out("sel.pspimage"))
+    f.do("select.rect", x0=5, y0=5, x1=40, y1=30)
+    f.step("set:alpha_save_dialog:1", "key:Enter")
+    check(f.image()["modified"], "saving a selection marks the image modified")
+    check(f.image()["last"] == "Save Selection", "and names its history entry")
+    f.do("edit.undo")
+    check(f.image()["last"] != "Save Selection", "and can be undone")
+    f.do("file.close")
+
+    # A failed save says so, and says why in terms of the folder.
+    f.do("file.new", width=20, height=20, color="#ffffff")
+    msg = f.send("save /nope/nowhere/x.png", quiet=True) or ""
+    if not msg:
+        msg = f.state().get("status", "")
+    check("no folder" in msg or "cannot write" in msg, "a failed save explains itself: " + msg[:60])
+    check("stbi" not in msg, "and does not name the library that gave up")
+    f.do("file.close")
+
+
 def test_interchange_formats(f):
     section("Photoshop and TIFF")
     f.do("file.new", width=80, height=60, color="#ffffff")
@@ -922,7 +965,7 @@ def main():
         drive.recv_line(sock)
         f = Firn(sock)
         for case in (test_ui_scaling, test_api_surface, test_documents, test_view, test_layers, test_selection,
-                     test_painting_and_materials, test_edit_actions, test_tools_and_history, test_image_geometry, test_clipping_masks, test_background_work, test_lock_transparency, test_pass_through_groups, test_blend_ranges, test_metadata, test_drawing_api, test_node_editing, test_generate_action, test_right_button_selection, test_crop_and_text_gestures, test_interchange_formats, test_tube_export, test_atomic_batches, test_discovery_v2):
+                     test_painting_and_materials, test_edit_actions, test_tools_and_history, test_image_geometry, test_clipping_masks, test_background_work, test_lock_transparency, test_pass_through_groups, test_blend_ranges, test_metadata, test_drawing_api, test_node_editing, test_generate_action, test_right_button_selection, test_crop_and_text_gestures, test_saving_honesty, test_interchange_formats, test_tube_export, test_atomic_batches, test_discovery_v2):
             case(f)
         sock.sendall(b"quit\n")
         sock.settimeout(10.0)

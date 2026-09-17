@@ -156,6 +156,21 @@ docs/    notes on the original: command inventory, module mapping, FORMAT.md
   docked window's `Begin` returns false when it is not the selected tab,
   which is how the live choice is noticed. The ini is also saved explicitly
   on exit, since ImGui only flushes it every few seconds.
+- **A save that loses something has not saved the document.** `after_saved`
+  clears the modified flag only for a format that can hold what the document
+  holds (`.ora`, `.pspimage`) or for a document with nothing to lose;
+  anything else writes the file, warns, and leaves the image modified so
+  closing still asks. Marking it clean is how a layered picture could go to
+  a PNG and be closed without a prompt.
+- **A failure must not look like a success.** `App::say` / `warn` / `fail`
+  set the status text and its severity together; the status bar colours
+  errors and marks them, and a multi-line message shows "(details)". Use
+  `fail()` for anything the user explicitly asked for that did not happen.
+  Error text names what the user chose, not the library that gave up:
+  `io::why_unwritable` turns a failed write into "there is no folder X".
+- **`ImGui::Indent(0)` indents by the style default**, not zero
+  (`imgui.cpp`: `indent_w != 0.0f ? indent_w : IndentSpacing`). Use
+  `indent_depth`/`unindent_depth` in Palettes.cpp for anything depth-driven.
 - **A docked palette must always draw something.** A window that submits no
   items at all counts as appearing the first time it does and ImGui gives it
   the tab, so a panel that is blank until there is a document will steal the

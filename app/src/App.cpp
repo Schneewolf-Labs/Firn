@@ -271,12 +271,12 @@ bool App::open_document(const std::string& path) {
     std::string err;
     std::vector<std::string> warnings;
     if (!std::filesystem::exists(path)) {
-        status = "Open failed: no such file: " + path;
+        fail("Open failed: no such file: " + path);
         return false;
     }
     auto loaded = io::load_document(path, &err, &warnings);
     if (!loaded) {
-        status = "Open failed: " + err;
+        fail("Open failed: " + err);
         return false;
     }
     add_document(std::move(loaded), path);
@@ -289,7 +289,7 @@ bool App::open_document(const std::string& path) {
 
 void App::open_document_async(const std::string& path) {
     if (job) { status = job->name + " is still running."; return; }
-    if (!std::filesystem::exists(path)) { status = "Open failed: no such file: " + path; return; }
+    if (!std::filesystem::exists(path)) { fail("Open failed: no such file: " + path); return; }
     job = std::make_unique<BackgroundJob>();
     job->kind = BackgroundJob::Kind::Open;
     job->name = "Opening";
@@ -322,7 +322,7 @@ bool App::save_document(const std::string& path) {
     }
     std::string err;
     if (!io::save_document(*doc, path, &err, jpeg_quality)) {
-        status = "Save failed: " + err;
+        fail("Save failed: " + err);
         return false;
     }
     after_saved(path);
@@ -335,16 +335,43 @@ bool App::save_document(const std::string& path) {
 void App::after_saved(const std::string& path) {
     doc_path = path;
     { const auto slash = path.find_last_of("/\\"); doc_title = slash == std::string::npos ? path : path.substr(slash + 1); }
-    saved_state = history.state_id();
-    if (current_doc >= 0 && current_doc < static_cast<int>(docs.size())) { docs[current_doc].autosave_state = saved_state; autosave_forget(docs[current_doc].uid); }
+    // A format that cannot hold what the document holds has not really saved
+    // it. Marking the document clean there is how a layered image could be
+    // written to a PNG and then closed, without a prompt, losing every layer
+    // -- so the file is written, said to be written, and the document stays
+    // modified until it is put somewhere that keeps all of it.
+    const bool keeps_everything = io::is_psp_extension(path) || io::is_ora_extension(path);
+    const bool lossy = !keeps_everything && (doc->layer_count() > 1 || doc->bit_depth() == 16 || !doc->alpha_channels().empty());
+    if (!lossy) {
+        saved_state = history.state_id();
+        if (current_doc >= 0 && current_doc < static_cast<int>(docs.size())) { docs[current_doc].autosave_state = saved_state; autosave_forget(docs[current_doc].uid); }
+    }
     config.touch_recent(path);
-    status = "Saved " + path;
-    if (!io::is_psp_extension(path) && !io::is_ora_extension(path) && doc->layer_count() > 1) status += "\nFlattened: only .ora and .pspimage keep layers.";
-    else if (io::is_psp_extension(path)) {
+    say("Saved " + path);
+    if (lossy) {
+        status_severity = Severity::Warning;
+        status += " - the file is flat; this image is still unsaved";
+        status += "\nOnly .ora and .pspimage keep layers, 16-bit channels and saved selections.";
+    }
+    if (io::is_psp_extension(path)) {
         bool extras = false;
         for (size_t i = 0; i < doc->layer_count(); ++i) extras |= doc->layer(i).style.any() || (doc->layer(i).is_adjustment() && doc->layer(i).adjustment.is_filter());
         if (extras) status += "\nClassic format: filter layers and layer styles are kept for Firn only; the original shows the layers without them.";
         if (!doc->icc().empty()) status += "\nClassic format: the color profile is not stored (.ora keeps it).";
+    }
+    // A close that was waiting on this Save As can go ahead now.
+    if (pending_close_after_save >= 0) {
+        const int idx = pending_close_after_save;
+        pending_close_after_save = -1;
+        if (!lossy && idx < static_cast<int>(docs.size())) {
+            close_document(idx, true);
+            if (pending_quit) request_quit();
+            else if (closing_all && !docs.empty()) close_document(0);
+            else closing_all = false;
+        } else {
+            closing_all = false;
+            pending_quit = false;
+        }
     }
 }
 
@@ -413,7 +440,7 @@ void App::save() {
 
 void App::run(std::unique_ptr<Command> cmd) {
     if (!doc) return;
-    status = cmd->name();
+    say(cmd->name());
     const int a = active_layer();
     const bool was_deep = a >= 0 && doc->layer(a).is_deep();
     history.run(*doc, std::move(cmd));
@@ -423,7 +450,7 @@ void App::run(std::unique_ptr<Command> cmd) {
 
 void App::commit(std::unique_ptr<Command> cmd) {
     if (!doc) return;
-    status = cmd->name();
+    say(cmd->name());
     history.push_applied(std::move(cmd));
 }
 
@@ -781,10 +808,10 @@ void App::draw_background_job() {
     const bool finished = job->done.get();
     if (job->kind == BackgroundJob::Kind::Save) {
         if (finished) after_saved(job->path);
-        else status = "Save failed: " + (job->error.empty() ? std::string("unknown error") : job->error);
+        else fail("Save failed: " + (job->error.empty() ? std::string("unknown error") : job->error));
     } else if (job->kind == BackgroundJob::Kind::Open) {
         if (!finished) {
-            status = "Open failed: " + (job->error.empty() ? std::string("unknown error") : job->error);
+            fail("Open failed: " + (job->error.empty() ? std::string("unknown error") : job->error));
         } else {
             add_document(std::move(job->loaded), job->path);
             config.touch_recent(job->path);
