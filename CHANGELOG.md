@@ -7,6 +7,12 @@ section into the next version.
 ## Unreleased
 
 ### Added
+- The Layers palette shows a small picture of each layer. Six layers called
+  "Raster 1" through "Raster 6" were six identical lines, and the only way
+  to tell them apart was to toggle each one's visibility and watch the
+  canvas. Transparency reads as a checkerboard rather than as black. They
+  are built a couple per frame and only when that layer has changed, so a
+  deep stack does not cost anything to scroll.
 - Ctrl+K finds any command by typing part of its name. "mosgl" reaches
   Effects > Texture Effects > Mosaic - Glass, which is otherwise three
   hovers and a scan of sixteen similar names. The list is built by walking

@@ -5,6 +5,8 @@
 #include <memory>
 #include <vector>
 
+#include <SDL_opengl.h>
+
 #include "App.h"
 #include "ui/ImGuiMenuBuilder.h"
 #include "ui/PaletteState.h"
@@ -194,6 +196,70 @@ bool blend_combo(const char* label, BlendMode& mode) {
 // zero used to push a top level row 21px right while a group member one
 // level in went only 14px -- the nesting read backwards, and indentation is
 // the only cue the palette gives that a layer is inside a group.
+
+// A small picture of a layer, so a stack of six "Raster N" rows is not six
+// identical lines. Built at most a couple per frame, the way the file
+// dialog budgets its own thumbnails, and rebuilt only when that layer's
+// pixels have actually changed.
+static constexpr int kThumbPx = 26;
+
+static ImTextureID layer_thumb(App& app, const Layer& L, int* out_w, int* out_h, int* budget) {
+    auto& cache = app.palette_state->layer_thumbs;
+    const void* key = static_cast<const void*>(&L);
+    auto it = cache.find(key);
+    const uint64_t rev = app.doc ? app.doc->revision() : 0;
+    if (it != cache.end() && it->second.revision == rev) {
+        *out_w = it->second.w; *out_h = it->second.h;
+        return (ImTextureID)(intptr_t)it->second.tex;
+    }
+    if (*budget <= 0 && it != cache.end()) {   // stale but usable until its turn comes
+        *out_w = it->second.w; *out_h = it->second.h;
+        return (ImTextureID)(intptr_t)it->second.tex;
+    }
+    if (*budget <= 0 || L.pixels.empty()) return 0;
+    --*budget;
+
+    const float scale = std::min(1.0f, std::min(static_cast<float>(kThumbPx) / L.pixels.width(),
+                                                static_cast<float>(kThumbPx) / L.pixels.height()));
+    const int tw = std::max(1, static_cast<int>(L.pixels.width() * scale));
+    const int th = std::max(1, static_cast<int>(L.pixels.height() * scale));
+    Image small = scale < 1.0f ? raster::resample(L.pixels, tw, th, raster::Filter::Bilinear) : L.pixels;
+    // Over a checkerboard, so a transparent layer reads as transparent
+    // rather than as black.
+    for (int y = 0; y < small.height(); ++y)
+        for (int x = 0; x < small.width(); ++x) {
+            const Color c = small.get(x, y);
+            if (c.a == 255) continue;
+            const uint8_t g = ((x / 4 + y / 4) & 1) ? 150 : 200;
+            const int a = c.a;
+            small.set(x, y, Color{static_cast<uint8_t>((c.r * a + g * (255 - a)) / 255),
+                                  static_cast<uint8_t>((c.g * a + g * (255 - a)) / 255),
+                                  static_cast<uint8_t>((c.b * a + g * (255 - a)) / 255), 255});
+        }
+
+    PaletteState::LayerThumb t = it != cache.end() ? it->second : PaletteState::LayerThumb{};
+    if (!t.tex) {
+        GLuint id = 0;
+        glGenTextures(1, &id);
+        glBindTexture(GL_TEXTURE_2D, id);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        t.tex = id;
+    } else {
+        glBindTexture(GL_TEXTURE_2D, t.tex);
+    }
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, small.width(), small.height(), 0, GL_RGBA, GL_UNSIGNED_BYTE, small.data());
+    t.revision = rev;
+    t.w = small.width();
+    t.h = small.height();
+    cache[key] = t;
+    *out_w = t.w; *out_h = t.h;
+    return (ImTextureID)(intptr_t)t.tex;
+}
+
 static void indent_depth(int depth, float step) { if (depth > 0) ImGui::Indent(depth * step); }
 static void unindent_depth(int depth, float step) { if (depth > 0) ImGui::Unindent(depth * step); }
 
@@ -243,6 +309,17 @@ static void draw_layers(App& app) {
 
     // Top of stack first, like every layer palette ever. Members of a
     // collapsed group are skipped (they sit above their group header).
+    // At most two thumbnails are (re)built per frame: a deep stack after a
+    // big edit would otherwise rescale every layer in one go.
+    int thumb_budget = 2;
+    // The cache is keyed on layer identity and nothing tells it when a layer
+    // goes away, so it is emptied wholesale once it has clearly outgrown the
+    // document rather than leaking a texture per deleted layer.
+    if (app.palette_state->layer_thumbs.size() > doc.layer_count() + 32) {
+        for (auto& [key, t] : app.palette_state->layer_thumbs)
+            if (t.tex) { const GLuint id = t.tex; glDeleteTextures(1, &id); }
+        app.palette_state->layer_thumbs.clear();
+    }
     std::vector<bool> hidden(doc.layer_count(), false);
     for (size_t g = 0; g < doc.layer_count(); ++g)
         if (doc.layer(g).type == LayerType::Group && !doc.layer(g).expanded)
@@ -265,6 +342,22 @@ static void draw_layers(App& app) {
         if (L.type == LayerType::Group) {
             if (ImGui::ArrowButton("##exp", L.expanded ? ImGuiDir_Up : ImGuiDir_Right)) L.expanded = !L.expanded;
             ImGui::SameLine();
+        }
+        if (L.type != LayerType::Group) {
+            int tw = 0, th = 0;
+            if (const ImTextureID t = layer_thumb(app, L, &tw, &th, &thumb_budget)) {
+                const float s = static_cast<float>(kThumbPx);
+                const ImVec2 at = ImGui::GetCursorScreenPos();
+                ImGui::Dummy(ImVec2(s, s));
+                ImGui::SameLine(0.0f, 4.0f);
+                // Centred in a fixed square, so rows line up whatever the
+                // picture's shape.
+                const float f = std::min(s / std::max(tw, 1), s / std::max(th, 1));
+                const float w = tw * f, h = th * f;
+                const ImVec2 p0(at.x + (s - w) * 0.5f, at.y + (s - h) * 0.5f);
+                ImGui::GetWindowDrawList()->AddImage(t, p0, ImVec2(p0.x + w, p0.y + h));
+                ImGui::GetWindowDrawList()->AddRect(p0, ImVec2(p0.x + w, p0.y + h), IM_COL32(0, 0, 0, 120));
+            }
         }
         if (L.is_vector()) {
             if (ImGui::ArrowButton("##exp", L.expanded ? ImGuiDir_Down : ImGuiDir_Right)) L.expanded = !L.expanded;
@@ -304,7 +397,8 @@ static void draw_layers(App& app) {
         // The whole row selects, not just the width of the text: a click in
         // the empty space to the right of a short layer name used to do
         // nothing at all, and that is where a pointer comes to rest.
-        } else if (ImGui::Selectable(label, active == i, ImGuiSelectableFlags_AllowDoubleClick, ImVec2(-FLT_MIN, 0))) {
+        } else if (ImGui::Selectable(label, active == i, ImGuiSelectableFlags_AllowDoubleClick,
+                                     ImVec2(std::max(ImGui::GetContentRegionAvail().x, ImGui::CalcTextSize(label).x + 8.0f), 0))) {
             doc.set_active_layer(i);
             if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
                 app.palette_state->rename_layer = i;

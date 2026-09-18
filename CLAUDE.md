@@ -171,6 +171,13 @@ docs/    notes on the original: command inventory, module mapping, FORMAT.md
 - **`ImGui::Indent(0)` indents by the style default**, not zero
   (`imgui.cpp`: `indent_w != 0.0f ? indent_w : IndentSpacing`). Use
   `indent_depth`/`unindent_depth` in Palettes.cpp for anything depth-driven.
+- **Layer thumbnails** (`layer_thumb` in Palettes.cpp) are one GL texture
+  per layer, keyed on the layer's address and the document revision, rebuilt
+  at most twice a frame the way `FileDialog::load_thumbnail` budgets its
+  own. Nothing tells the cache when a layer is deleted, so it is emptied
+  wholesale once it outgrows the document rather than leaking a texture per
+  layer. A row's `Selectable` needs an explicitly computed width: passing
+  `-FLT_MIN` after a `SameLine` clipped every layer name to one character.
 - **A docked palette must always draw something.** A window that submits no
   items at all counts as appearing the first time it does and ImGui gives it
   the tab, so a panel that is blank until there is a document will steal the
