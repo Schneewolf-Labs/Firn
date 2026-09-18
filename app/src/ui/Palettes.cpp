@@ -254,10 +254,12 @@ static void draw_layers(App& app) {
         indent_depth(L.depth, 14.0f);
         bool vis = L.visible;
         if (ImGui::Checkbox("##vis", &vis)) {
+            // Showing or hiding a layer is not choosing it: hiding one to see
+            // what is under it used to move the active layer, so the next
+            // brush stroke landed somewhere else.
             LayerProps before = doc.props(i), after = before;
             after.visible = vis;
-            doc.set_active_layer(i);
-            app.layer_set_props(before, after);
+            app.layer_set_props_at(i, before, after);
         }
         ImGui::SameLine();
         if (L.type == LayerType::Group) {
@@ -299,7 +301,10 @@ static void draw_layers(App& app) {
                 }
                 app.palette_state->rename_layer = -1;
             }
-        } else if (ImGui::Selectable(label, active == i, ImGuiSelectableFlags_AllowDoubleClick, ImVec2(ImGui::CalcTextSize(label).x + 8.0f, 0))) {
+        // The whole row selects, not just the width of the text: a click in
+        // the empty space to the right of a short layer name used to do
+        // nothing at all, and that is where a pointer comes to rest.
+        } else if (ImGui::Selectable(label, active == i, ImGuiSelectableFlags_AllowDoubleClick, ImVec2(-FLT_MIN, 0))) {
             doc.set_active_layer(i);
             if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
                 app.palette_state->rename_layer = i;
@@ -408,8 +413,14 @@ static void draw_history(App& app) {
             while (app.history.cursor() < i + 1) app.redo();
         }
         if (!applied) ImGui::PopStyleColor();
+        // Follow the cursor when it moves, so the palette shows where you
+        // are rather than the top of a list you stopped looking at twelve
+        // strokes ago. Only when it has actually moved, so scrolling back
+        // through history by hand is not fought.
+        if (i + 1 == h.cursor() && h.cursor() != app.palette_state->history_shown) ImGui::SetScrollHereY(0.6f);
         ImGui::PopID();
     }
+    app.palette_state->history_shown = h.cursor();
     ImGui::End();
 }
 

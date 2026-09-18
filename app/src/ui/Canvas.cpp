@@ -284,7 +284,7 @@ void App::upload_document_texture(DocState& s) {
     if (!s.tex) {
         glGenTextures(1, &s.tex);
         glBindTexture(GL_TEXTURE_2D, s.tex);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
@@ -454,7 +454,10 @@ void App::draw_canvas_view(ImVec2 view_pos, ImVec2 view_size) {
             active_button = -1;
         }
     }
-    if (ImGui::IsKeyPressed(ImGuiKey_Escape, false) && active_button >= 0) {
+    // Escape is the universal way out, and it used to reach a tool only
+    // while a button was still held -- so a crop rectangle, a deform session
+    // or a mesh warp could not be abandoned once the mouse was released.
+    if (ImGui::IsKeyPressed(ImGuiKey_Escape, false) && !ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId)) {
         tool().cancel(*this);
         active_button = -1;
     }

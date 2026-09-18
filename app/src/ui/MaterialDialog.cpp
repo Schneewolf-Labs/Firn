@@ -93,6 +93,15 @@ void frame_picker(App& app, float size) {
                              ImVec2(c.x + std::cos(a1) * r_out, c.y + std::sin(a1) * r_out), ImVec2(c.x + std::cos(a1) * r_in, c.y + std::sin(a1) * r_in)};
         dl->AddConvexPolyFilled(q, 4, IM_COL32(static_cast<int>(r * 255), static_cast<int>(g * 255), static_cast<int>(b * 255), 255));
     }
+    // The square follows the current foreground unless the ring is being
+    // dragged. Without this it kept whatever hue was last dragged -- so a
+    // colour arriving from the dropper, a swatch, the hex field or a script
+    // left a red square behind a green colour, and nudging that colour
+    // "slightly darker" jumped it to red.
+    float cur_h, cur_s, cur_v;
+    ImGui::ColorConvertRGBtoHSV(app.fg_color[0], app.fg_color[1], app.fg_color[2], cur_h, cur_s, cur_v);
+    if (!app.material_dialog_state->frame_ring_drag && cur_s > 0.02f) app.material_dialog_state->frame_hue = cur_h;
+
     const float half = r_in * 0.68f;
     const ImVec2 s0(c.x - half, c.y - half), s1(c.x + half, c.y + half);
     float hr, hg, hb;
@@ -103,10 +112,17 @@ void frame_picker(App& app, float size) {
     dl->AddRect(s0, s1, IM_COL32(0, 0, 0, 255));
     // Hue marker.
     dl->AddCircle(ImVec2(c.x + std::cos(app.material_dialog_state->frame_hue * 6.2832f) * (r_in + r_out) * 0.5f, c.y + std::sin(app.material_dialog_state->frame_hue * 6.2832f) * (r_in + r_out) * 0.5f), 4.0f, IM_COL32(0, 0, 0, 255), 0, 2.0f);
+    // Where the current colour sits in the square, so the picker says what
+    // is selected rather than only accepting a new choice.
+    {
+        const ImVec2 at(s0.x + cur_s * (s1.x - s0.x), s0.y + (1.0f - cur_v) * (s1.y - s0.y));
+        dl->AddCircle(at, 5.0f, IM_COL32(0, 0, 0, 200), 0, 2.0f);
+        dl->AddCircle(at, 4.0f, IM_COL32(255, 255, 255, 230), 0, 1.5f);
+    }
     ImGui::InvisibleButton("##frame", ImVec2(size, size), ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonRight);
     const bool left = ImGui::IsItemActive() && ImGui::IsMouseDown(ImGuiMouseButton_Left);
     const bool right = ImGui::IsItemActive() && ImGui::IsMouseDown(ImGuiMouseButton_Right);
-    if (!left && !right) return;
+    if (!left && !right) { app.material_dialog_state->frame_ring_drag = false; return; }
     const ImVec2 mp = ImGui::GetIO().MousePos;
     const float dx = mp.x - c.x, dy = mp.y - c.y, dist = std::sqrt(dx * dx + dy * dy);
     float* target = left ? app.fg_color : app.bg_color;
@@ -120,6 +136,7 @@ void frame_picker(App& app, float size) {
         float hue = std::atan2(dy, dx) / 6.2832f;
         if (hue < 0) hue += 1.0f;
         app.material_dialog_state->frame_hue = hue;
+        app.material_dialog_state->frame_ring_drag = true;
         float h, s, v;
         ImGui::ColorConvertRGBtoHSV(target[0], target[1], target[2], h, s, v);
         if (s < 0.05f) s = 1.0f;

@@ -402,7 +402,19 @@ public:
     // `before` is explicit because palettes preview the change live before committing.
     LayerPropertiesCommand(size_t index, LayerProps before, LayerProps after)
         : index_(index), before_(std::move(before)), after_(std::move(after)) {}
-    std::string name() const override { return "Layer Properties"; }
+    // Say which property changed, so a run of these in the History palette
+    // can be told apart. "Layer Properties" twelve times over tells nobody
+    // which one was the visibility flick and which was the rename.
+    std::string name() const override {
+        if (before_.name != after_.name) return "Rename to " + after_.name;
+        if (before_.visible != after_.visible) return (after_.visible ? "Show " : "Hide ") + after_.name;
+        if (before_.opacity != after_.opacity) return "Opacity " + std::to_string(static_cast<int>(after_.opacity * 100.0f + 0.5f)) + "%";
+        if (before_.blend != after_.blend) return std::string("Blend: ") + blend_mode_name(after_.blend);
+        if (before_.clipped != after_.clipped) return after_.clipped ? "Create Clipping Mask" : "Release Clipping Mask";
+        if (before_.pass_through != after_.pass_through) return after_.pass_through ? "Pass Through On" : "Pass Through Off";
+        if (before_.lock_alpha != after_.lock_alpha) return after_.lock_alpha ? "Lock Transparency" : "Unlock Transparency";
+        return "Layer Properties";
+    }
     void execute(Document& doc) override { doc.set_props(index_, after_); }
     void undo(Document& doc) override { doc.set_props(index_, before_); }
 private:

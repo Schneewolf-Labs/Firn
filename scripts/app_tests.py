@@ -743,6 +743,48 @@ def test_crop_and_text_gestures(f):
     f.do("file.close")
 
 
+def test_interaction_polish(f):
+    section("interaction polish")
+    # A history entry says which property changed, so a run of them can be
+    # told apart instead of reading "Layer Properties" twelve times.
+    f.do("file.new", width=100, height=80, color="#ffffff")
+    f.do("layer.new")
+    f.do("layer.new")
+    f.do("layer.select", index=2)
+    active = f.image()["active_layer"]
+    for params, want in ((dict(visible=False), "Hide"), (dict(opacity=50), "Opacity 50%"),
+                         (dict(blend="Multiply"), "Blend: Multiply"), (dict(name="Sky"), "Rename to Sky")):
+        f.do("layer.properties", **params)
+        check(f.image()["last"].startswith(want), "a %s is named \"%s\"" % (list(params)[0], f.image()["last"]))
+    check(f.image()["active_layer"] == active, "changing a layer's properties does not move the active layer")
+    f.do("file.close")
+
+    # Escape abandons a gesture after the button is released, not only during.
+    f.do("file.new", width=200, height=150, color="#ffffff")
+    f.step("tool:Crop")
+    f.send("drag_img 40,30 160,120")
+    f.send("key Escape")
+    f.send("dbl_img 80 60")            # would crop if the rectangle survived
+    check((f.image()["width"], f.image()["height"]) == (200, 150), "Escape drops the crop rectangle once the mouse is up")
+
+    # A new text block starts empty rather than holding the last one typed.
+    # The dialog keeps a live placeholder object while it is open, so its
+    # text is what the field currently holds.
+    f.do("layer.new_vector")
+    f.step("tool:Text", "set:create_as_vector:1")
+    f.send("click_img 20 20")
+    f.send("type Leftover")
+    typed = json.loads(f.do("object.list"))["objects"]
+    check(typed and typed[0].get("text", "").startswith("Leftover"), "the dialog previews what is typed")
+    f.send("key Escape")
+    check(not json.loads(f.do("object.list"))["objects"], "cancelling leaves nothing behind")
+    f.send("click_img 150 120")        # a fresh block somewhere else
+    fresh = json.loads(f.do("object.list"))["objects"]
+    check(not fresh or not fresh[0].get("text"), "a new text block starts empty, not holding the last one")
+    f.send("key Escape")
+    f.do("file.close")
+
+
 def test_saving_honesty(f):
     section("what a save claims to have done")
     out = lambda n: os.path.join(OUT, n)
@@ -965,7 +1007,7 @@ def main():
         drive.recv_line(sock)
         f = Firn(sock)
         for case in (test_ui_scaling, test_api_surface, test_documents, test_view, test_layers, test_selection,
-                     test_painting_and_materials, test_edit_actions, test_tools_and_history, test_image_geometry, test_clipping_masks, test_background_work, test_lock_transparency, test_pass_through_groups, test_blend_ranges, test_metadata, test_drawing_api, test_node_editing, test_generate_action, test_right_button_selection, test_crop_and_text_gestures, test_saving_honesty, test_interchange_formats, test_tube_export, test_atomic_batches, test_discovery_v2):
+                     test_painting_and_materials, test_edit_actions, test_tools_and_history, test_image_geometry, test_clipping_masks, test_background_work, test_lock_transparency, test_pass_through_groups, test_blend_ranges, test_metadata, test_drawing_api, test_node_editing, test_generate_action, test_right_button_selection, test_crop_and_text_gestures, test_interaction_polish, test_saving_honesty, test_interchange_formats, test_tube_export, test_atomic_batches, test_discovery_v2):
             case(f)
         sock.sendall(b"quit\n")
         sock.settimeout(10.0)

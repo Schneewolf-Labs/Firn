@@ -177,6 +177,16 @@ docs/    notes on the original: command inventory, module mapping, FORMAT.md
   workspace the moment one arrives -- which is how opening an image used to
   pull the right-hand dock off Materials and onto Overview. Draw a disabled
   line saying there is nothing to show.
+- **A tool with on-canvas state needs `overlay_always()`**, or its overlay
+  disappears the moment the pointer leaves the image and the work looks
+  lost. Escape reaches `tool().cancel()` whenever no popup is open, not only
+  mid-drag.
+- **`GL_TEXTURE_MIN_FILTER` and `MAG_FILTER` are separate**: linear when
+  zoomed out (which is what Fit does), nearest when zoomed in. One value for
+  both made every fit-to-window photograph alias.
+- **The Layers palette must not move the active layer** for something that
+  is not a choice of layer. `layer_set_props_at` exists so a row's own
+  widgets can change that row without selecting it.
 - **Say what a gesture will do before it happens.** `ImGui::SetMouseCursor`
   in a tool's `draw_overlay` is how: resize arrows on the crop and vector
   handles (`handle_cursor`), a move arrow inside a box, a hand for panning

@@ -6,6 +6,35 @@ section into the next version.
 
 ## Unreleased
 
+### Fixed
+- The crop rectangle stays on screen when the pointer leaves the image.
+  Reaching for Apply used to make the whole crop vanish, which reads as the
+  program having lost it; every other tool with on-canvas state already
+  behaved this way.
+- Escape abandons a gesture after the mouse button is released, not only
+  while it is held. A crop rectangle, a deform session or a mesh warp could
+  not be called off once the mouse was up, and Deform's only other exit is a
+  Cancel button that a narrow window pushes off the end of the options row.
+- The colour wheel shows the colour that is actually selected. Its square
+  kept whatever hue was last dragged on the ring, so a colour arriving from
+  the dropper, a swatch, the hex field or a script left a red square behind
+  a green colour -- and nudging that colour darker jumped it to red. There
+  is a marker in the square now as well, so the picker says where you are.
+- A zoomed-out picture is smoothed rather than point-sampled. The default
+  Fit view of a photograph was aliased and crawled; hard pixel edges are
+  kept above 100%, where the work is pixel work.
+- Hiding a layer no longer makes it the active one. Hiding something to see
+  what is under it used to move the selection, so the next brush stroke
+  landed on the wrong layer.
+- A layer row selects across its whole width instead of only the width of
+  its name, which is where a pointer comes to rest.
+- History entries say which property changed -- "Hide Sky", "Opacity 50%",
+  "Blend: Multiply", "Rename to Sky" -- rather than a column of identical
+  "Layer Properties" lines, and the palette follows the cursor instead of
+  staying at the top of a list you stopped looking at.
+- The Text tool starts a new block empty. It used to reopen holding the last
+  thing typed and preview it at the new point.
+
 ## 0.7.1 (2026-09-18)
 
 ### Fixed

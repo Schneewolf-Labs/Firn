@@ -707,6 +707,7 @@ struct App {
     void paint_touched(size_t layer, const firn::raster::Rect* rect = nullptr);  // after live edits to paint_pixels()
     void commit_pixels(size_t layer, const std::string& name, firn::Image before, const firn::Image& after);
     void layer_set_props(const firn::LayerProps& before, const firn::LayerProps& after);
+    void layer_set_props_at(size_t index, const firn::LayerProps& before, const firn::LayerProps& after);
     void open_layer_properties();
 
     // Geometry

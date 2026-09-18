@@ -1302,6 +1302,11 @@ public:
     bool wants_snap() const override { return true; }
     const char* name() const override { return "Crop"; }
     const char* shortcut() const override { return "R"; }
+    // Keep the rectangle, its shading and its handles on screen while the
+    // pointer is away from the image -- reaching for Apply used to make the
+    // whole crop disappear, which reads as the program losing it. Every
+    // other tool with on-canvas state already does this.
+    bool overlay_always() const override { return true; }
     // Which part of an existing rectangle the cursor is on: 0..3 the corners,
     // 4..7 the edges, 8 the inside, -1 nothing.
     int part_at(const App& app, const ToolInput& in) const {
@@ -1401,7 +1406,10 @@ public:
         in.dl->AddRectFilled(ImVec2(b.x, a.y), ImVec2(big1.x, b.y), shade);
         in.dl->AddRect(a, b, IM_COL32(255, 255, 255, 255));
         in.dl->AddRect(ImVec2(a.x - 1, a.y - 1), ImVec2(b.x + 1, b.y + 1), IM_COL32(0, 0, 0, 255));
-        if (const int part = dragging_ ? part_ : part_at(app, in); part >= 0) ImGui::SetMouseCursor(handle_cursor(part));
+        // Only hint at a handle when the pointer is actually over the image:
+        // the overlay now draws while the cursor is away on a palette, and a
+        // resize cursor out there would be nonsense.
+        if (const int part = dragging_ ? part_ : (in.inside ? part_at(app, in) : -1); part >= 0) ImGui::SetMouseCursor(handle_cursor(part));
         // The handles that say the rectangle can be adjusted rather than
         // only redrawn.
         const ImVec2 mid((a.x + b.x) * 0.5f, (a.y + b.y) * 0.5f);

@@ -1383,8 +1383,15 @@ void App::layer_toggle_clipped() {
 }
 
 void App::layer_set_props(const LayerProps& before, const LayerProps& after) {
-    if (doc && active_layer() >= 0 && !(before == after))
-        run(std::make_unique<LayerPropertiesCommand>(active_layer(), before, after));
+    if (doc && active_layer() >= 0) layer_set_props_at(static_cast<size_t>(active_layer()), before, after);
+}
+
+// The same, on a layer that is not necessarily the active one -- the Layers
+// palette changes properties of whatever row was clicked without making it
+// the active layer.
+void App::layer_set_props_at(size_t index, const LayerProps& before, const LayerProps& after) {
+    if (doc && index < doc->layer_count() && !(before == after))
+        run(std::make_unique<LayerPropertiesCommand>(index, before, after));
 }
 
 void App::open_layer_properties() {
@@ -1534,7 +1541,11 @@ void App::sync_canvas_texture() {
     if (!canvas_tex) {
         glGenTextures(1, &canvas_tex);
         glBindTexture(GL_TEXTURE_2D, canvas_tex);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        // Minification and magnification are separate: smooth the picture
+        // when it is zoomed out, which is what Fit does by default and where
+        // point sampling made a photograph crawl and alias, and keep hard
+        // pixel edges above 100% where the work is pixel work.
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
@@ -1564,7 +1575,7 @@ void App::sync_overlay_texture() {
     if (!overlay_tex) {
         glGenTextures(1, &overlay_tex);
         glBindTexture(GL_TEXTURE_2D, overlay_tex);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);

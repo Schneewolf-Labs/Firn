@@ -11,5 +11,6 @@ struct PaletteState {
     float options_content_height = 0;
     firn::LayerProps layer_props_before; // props at the start of a live slider drag
     int rename_layer = -1;
+    size_t history_shown = 0;   // cursor the History palette last scrolled to
     char rename_buf[128] = {};
 };

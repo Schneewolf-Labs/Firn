@@ -113,6 +113,10 @@ void render_preview(App& app) {
 void App::draw_text_dialog() {
     if (show_text_dialog) {
         show_text_dialog = false;
+        // A new text block starts empty. Only the re-edit path below fills
+        // the buffer, so without this the dialog reopened holding the last
+        // thing typed and previewed it at the new point.
+        if (text_edit_object < 0) text_dialog_state->text_buf[0] = 0;
         if (doc) {
             ensure_fonts();
             if (!fonts.empty()) {
