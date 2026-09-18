@@ -1590,11 +1590,25 @@ void App::sync_overlay_texture() {
 void App::handle_shortcuts() {
     ImGuiIO& io = ImGui::GetIO();
     if (io.WantTextInput) return;
-    if (ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId)) return;  // dialogs own the keyboard
+    if (ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId)) {
+        // Dialogs own the keyboard, with one exception: while an Adjust or
+        // Effects dialog is previewing on the canvas, the view controls have
+        // to keep working. Judging a blur radius or an unsharp mask means
+        // looking at 1:1, and cancelling to zoom loses the settings.
+        if (!preview.active) return;
+        const bool view_ctrl = io.KeyCtrl || (io.ConfigMacOSXBehaviors && io.KeySuper);
+        if (view_ctrl && ImGui::IsKeyPressed(ImGuiKey_0, false)) { if (io.KeyAlt) { zoom = 1.0f; pan_x = pan_y = 0.0f; } else fit_requested = true; }
+        if (!view_ctrl) {
+            if (ImGui::IsKeyPressed(ImGuiKey_Equal, false) || ImGui::IsKeyPressed(ImGuiKey_KeypadAdd, false)) zoom_about(canvas_center, 1.25f);
+            if (ImGui::IsKeyPressed(ImGuiKey_Minus, false) || ImGui::IsKeyPressed(ImGuiKey_KeypadSubtract, false)) zoom_about(canvas_center, 0.8f);
+        }
+        return;
+    }
     // ImGui does not swap Cmd and Ctrl itself: io.ConfigMacOSXBehaviors only
     // changes widget-internal editing keys. A physical Cmd press only sets
     // io.KeySuper, so on macOS the app's own Ctrl+ shortcuts must accept it too.
     const bool ctrl = io.KeyCtrl || (io.ConfigMacOSXBehaviors && io.KeySuper);
+    if (ctrl && ImGui::IsKeyPressed(ImGuiKey_K, false)) { open_command_palette(); return; }
     if (ctrl && ImGui::IsKeyPressed(ImGuiKey_Z, false)) { io.KeyShift ? redo() : undo(); }
     if (ctrl && ImGui::IsKeyPressed(ImGuiKey_Y, false)) redo();
     if (ctrl && ImGui::IsKeyPressed(ImGuiKey_N, false)) show_new_dialog = true;

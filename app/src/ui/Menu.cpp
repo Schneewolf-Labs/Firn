@@ -572,6 +572,7 @@ void App::draw_menu(MenuBuilder& m) {
         m.end_menu();
     }
     if (m.begin_menu("Help")) {
+        m.item("Find a Command...", "Ctrl+K", true, [=, this] { open_command_palette(); });
         m.item("Keyboard Shortcuts...", nullptr, true, [=, this] { show_shortcuts_dialog = true; });
         m.separator();
         m.item("Check for Updates...", nullptr, !update_checking, [=, this] { start_update_check(true); show_about_dialog = true; });
@@ -710,6 +711,7 @@ void App::draw_dialogs() {
 
     draw_tube_export_dialog();
     draw_generate_dialog();
+    draw_command_palette();
     draw_delete_alpha_prompt();
 
     if (show_new_dialog) { ImGui::OpenPopup("New Image"); show_new_dialog = false; }

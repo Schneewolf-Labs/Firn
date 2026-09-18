@@ -198,6 +198,7 @@ struct App {
     bool show_new_dialog = false;
     bool show_tube_export_dialog = false;
     bool show_generate_dialog = false;
+    bool show_command_palette = false;
     bool show_delete_alpha_prompt = false;   // confirm before dropping every saved selection
     // Adjustment / effect dialogs with live preview (ui/Adjust.cpp)
     enum class Adj { None, BrightnessContrast, Curves, Gamma, Levels, Threshold, ChannelMixer, Colorize, HSL,
@@ -568,6 +569,8 @@ struct App {
     bool export_tube(const std::string& path, const firn::io::TubeInfo& info);
     void draw_tube_export_dialog();
     void draw_generate_dialog();
+    void open_command_palette();
+    void draw_command_palette();
     void draw_delete_alpha_prompt();
     bool load_tube(int index);
     // Text tool

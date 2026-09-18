@@ -6,6 +6,21 @@ section into the next version.
 
 ## Unreleased
 
+### Added
+- Ctrl+K finds any command by typing part of its name. "mosgl" reaches
+  Effects > Texture Effects > Mosaic - Glass, which is otherwise three
+  hovers and a scan of sixteen similar names. The list is built by walking
+  the real menu tree, so it cannot fall behind what the menus offer, and
+  entries that are unavailable right now are shown greyed rather than
+  hidden, so a search never comes up empty because of what is selected.
+  Also under Help > Find a Command.
+
+### Fixed
+- The canvas can still be zoomed and panned while an Adjust or Effects
+  dialog is previewing on it. Judging a blur radius or an unsharp mask means
+  looking at 1:1, and the only way to get there was to cancel the dialog,
+  zoom, and start again.
+
 ### Fixed
 - The crop rectangle stays on screen when the pointer leaves the image.
   Reaching for Apply used to make the whole crop vanish, which reads as the

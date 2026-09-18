@@ -8,6 +8,7 @@
 #include "App.h"
 #include "firn/icc.h"
 #include "imgui.h"
+#include "imgui_internal.h"   // ImGuiWindow, to tell the canvas from the dialog over it
 #include "ui/Shortcut.h"
 
 // The image window. Draws the composite texture with zoom/pan, a checkerboard
@@ -371,7 +372,23 @@ void App::draw_canvas_view(ImVec2 view_pos, ImVec2 view_size) {
     const bool active = ImGui::IsItemActive();
     ImGuiIO& io = ImGui::GetIO();
 
-    if (hovered && io.MouseWheel != 0.0f) zoom_about(io.MousePos, std::pow(1.15f, io.MouseWheel));
+    // While an Adjust or Effects dialog is previewing, the modal swallows
+    // hover, so the wheel is routed by position instead: anywhere over the
+    // canvas and outside the dialog still zooms. Judging a preview without
+    // being able to zoom is most of the reason these dialogs were awkward.
+    bool wheel_here = hovered;
+    if (!wheel_here && preview.active && io.MouseWheel != 0.0f) {
+        const ImVec2 lo = ImGui::GetItemRectMin(), hi = ImGui::GetItemRectMax();
+        const ImVec2 m = io.MousePos;
+        if (m.x >= lo.x && m.x <= hi.x && m.y >= lo.y && m.y <= hi.y) {
+            const ImGuiWindow* top = ImGui::GetCurrentContext()->NavWindow;
+            const bool over_dialog = top && top->Flags & ImGuiWindowFlags_Modal &&
+                                     m.x >= top->Pos.x && m.x <= top->Pos.x + top->Size.x &&
+                                     m.y >= top->Pos.y && m.y <= top->Pos.y + top->Size.y;
+            wheel_here = !over_dialog;
+        }
+    }
+    if (wheel_here && io.MouseWheel != 0.0f) zoom_about(io.MousePos, std::pow(1.15f, io.MouseWheel));
 
     const bool space = ImGui::IsKeyDown(ImGuiKey_Space);
     // Panning says so: with the Pan tool, while space is held, and while a

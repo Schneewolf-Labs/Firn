@@ -743,6 +743,44 @@ def test_crop_and_text_gestures(f):
     f.do("file.close")
 
 
+def test_command_palette(f):
+    section("command palette")
+    f.do("file.new", width=120, height=90, color="#ffffff")
+    f.step("set:command_palette:1")
+    check(f.state()["popup"], "Ctrl+K opens the palette")
+    # Letters in order, across the whole menu path: this is three hovers and
+    # a scan of sixteen similar names in the menus.
+    f.send("type mosgl")
+    f.send("key Enter")
+    check(f.state()["popup"], "running an entry from the palette opens its dialog")
+    f.send("key Escape")
+    # Something with no dialog, to prove the action really runs.
+    before = f.image()["history_cursor"]
+    f.step("set:command_palette:1")
+    f.send("type newrasterlayer")
+    f.send("key Enter")
+    check(f.image()["history_cursor"] == before + 1, "and a plain menu command just runs")
+    check(f.image()["last"] == "Add Layer", "with the right command: " + f.image()["last"])
+    f.do("file.close")
+
+
+def test_adjust_preview_view(f):
+    section("the view while a preview is up")
+    f.do("file.new", width=400, height=300, color="#8899aa")
+    z0 = f.image()["zoom"]
+    f.step("adjust:Gaussian Blur")
+    check(f.state()["popup"], "the dialog is open")
+    f.send("key Equal")
+    check(f.image()["zoom"] > z0, "the keyboard can still zoom while a preview is showing")
+    check(f.state()["popup"], "and the dialog stays open")
+    z1 = f.image()["zoom"]
+    f.send("mv 600 500")
+    f.send("wheel 3")
+    check(f.image()["zoom"] > z1, "so can the wheel over the canvas")
+    f.send("key Escape")
+    f.do("file.close")
+
+
 def test_interaction_polish(f):
     section("interaction polish")
     # A history entry says which property changed, so a run of them can be
@@ -1007,7 +1045,7 @@ def main():
         drive.recv_line(sock)
         f = Firn(sock)
         for case in (test_ui_scaling, test_api_surface, test_documents, test_view, test_layers, test_selection,
-                     test_painting_and_materials, test_edit_actions, test_tools_and_history, test_image_geometry, test_clipping_masks, test_background_work, test_lock_transparency, test_pass_through_groups, test_blend_ranges, test_metadata, test_drawing_api, test_node_editing, test_generate_action, test_right_button_selection, test_crop_and_text_gestures, test_interaction_polish, test_saving_honesty, test_interchange_formats, test_tube_export, test_atomic_batches, test_discovery_v2):
+                     test_painting_and_materials, test_edit_actions, test_tools_and_history, test_image_geometry, test_clipping_masks, test_background_work, test_lock_transparency, test_pass_through_groups, test_blend_ranges, test_metadata, test_drawing_api, test_node_editing, test_generate_action, test_right_button_selection, test_crop_and_text_gestures, test_command_palette, test_adjust_preview_view, test_interaction_polish, test_saving_honesty, test_interchange_formats, test_tube_export, test_atomic_batches, test_discovery_v2):
             case(f)
         sock.sendall(b"quit\n")
         sock.settimeout(10.0)
