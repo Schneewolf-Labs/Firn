@@ -702,27 +702,42 @@ def test_crop_and_text_gestures(f):
     # The crop rectangle can be adjusted rather than only redrawn, and a
     # double-click inside it crops, which is how the original ends the
     # gesture.
+    def crop():
+        return f.image().get("crop")
+
     f.do("file.new", width=200, height=150, color="#ffffff")
     f.step("tool:Crop")
     f.send("drag_img 40,30 160,120")
     check(size() == (200, 150), "drawing the rectangle does not crop on its own")
+    r = crop()
+    # The rectangle itself, not what a later crop produced: when this goes
+    # wrong the numbers say which of the two gestures the tool saw.
+    check(r is not None and r[2] - r[0] > 100 and r[3] - r[1] > 70,
+          "the drag leaves a rectangle behind: %s at zoom %.2f origin %s"
+          % (r, f.image()["zoom"], f.image()["origin"]))
     f.send("drag_img 160,120 120,90")          # pull the bottom-right corner in
+    r = crop()
+    # Adjusting gives about 40,30..120,90; starting a fresh rectangle from
+    # that same drag would give 120,90..160,120. The check is which of the
+    # two happened, not the exact pixel count, which moves with how a
+    # platform rounds screen coordinates to image ones.
+    check(r is not None and r[0] < 60 and r[1] < 50 and r[2] - r[0] > 60 and r[3] - r[1] > 45,
+          "a corner handle resizes the rectangle rather than starting a new one: %s" % (r,))
     f.send("dbl_img 80 60")                    # double-click inside applies
     w, h = size()
-    # Adjusting the rectangle gives about 80x60; the old behaviour of
-    # starting a fresh rectangle from that same drag would give 40x30. The
-    # check is which of the two happened, not the exact pixel count, which
-    # moves with how a platform rounds screen coordinates to image ones.
-    check(w > 60 and h > 45 and w < 200, "a corner handle resizes the rectangle, a double-click crops to it")
+    check(w > 60 and h > 45 and w < 200, "a double-click inside crops to it: %dx%d" % (w, h))
 
     # Grabbing the middle moves the whole rectangle.
     f.do("file.new", width=200, height=150, color="#ffffff")
     f.send("drag_img 20,20 80,80")
     f.send("drag_img 50,50 90,90")
+    r = crop()
+    # Moving keeps the 60x60 size; redrawing from that drag would give 40x40.
+    check(r is not None and r[2] - r[0] > 50 and r[3] - r[1] > 50,
+          "dragging the middle moves it without changing its size: %s" % (r,))
     f.send("dbl_img 100 100")
     w, h = size()
-    # Moving keeps the 60x60 size; redrawing from that drag would give 40x40.
-    check(w > 50 and h > 50 and w < 200, "dragging the middle moves it without changing its size")
+    check(w > 50 and h > 50 and w < 200, "and the moved rectangle is what gets cropped: %dx%d" % (w, h))
     f.do("file.close")
     f.do("file.close")
 

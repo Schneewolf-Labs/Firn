@@ -344,6 +344,16 @@ std::string Driver::state_json(App& app) const {
         o.push(Value::number(origin.x));
         o.push(Value::number(origin.y));
         d.set("origin", std::move(o));
+        // The crop rectangle, so a test can see what the Crop tool did rather
+        // than infer it from whatever the crop produced afterwards.
+        if (!app.crop_rect.empty()) {
+            Value c = Value::array();
+            c.push(Value::number(app.crop_rect.x0));
+            c.push(Value::number(app.crop_rect.y0));
+            c.push(Value::number(app.crop_rect.x1));
+            c.push(Value::number(app.crop_rect.y1));
+            d.set("crop", std::move(c));
+        }
         d.set("history", Value::number(static_cast<double>(app.history.size())));
         d.set("history_cursor", Value::number(static_cast<double>(app.history.cursor())));
         if (app.history.cursor() > 0) d.set("last", Value::string(app.history.at(app.history.cursor() - 1).name()));
