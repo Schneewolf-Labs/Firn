@@ -16,6 +16,12 @@ section into the next version.
   Also under Help > Find a Command.
 
 ### Fixed
+- Applying an effect to a large image no longer freezes the window. The
+  exact, full-resolution pass ran on the interface thread, so pressing OK on
+  a big layer locked everything up for as long as it took with nothing on
+  screen to say why -- a blur at radius 40 on a 27 megapixel layer measures
+  over ten seconds. It runs on a worker behind the usual progress window
+  now, and still lands as one undo step.
 - The canvas can still be zoomed and panned while an Adjust or Effects
   dialog is previewing on it. Judging a blur radius or an unsharp mask means
   looking at 1:1, and the only way to get there was to cancel the dialog,

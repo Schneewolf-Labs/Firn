@@ -11,7 +11,7 @@ refactor that changes behaviour fails here rather than in someone's hands.
 
 Needs a display (a real one or Xvfb) and no other Firn using the socket.
 """
-import json, os, re, struct, subprocess, sys, tempfile, zlib
+import json, os, time, re, struct, subprocess, sys, tempfile, zlib
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import drive  # noqa: E402
@@ -781,6 +781,26 @@ def test_adjust_preview_view(f):
     f.do("file.close")
 
 
+def test_effects_off_the_ui_thread(f):
+    section("a big effect does not freeze the window")
+    big = os.path.join(OUT, "bigfx.png")
+    if not os.path.exists(big):
+        f.do("file.new", width=2400, height=1600, color="#335577")
+        f.do("file.save_as", path=big)
+        f.do("file.close")
+    f.do("file.open", path=big)
+    before = f.image()["history_cursor"]
+    f.step("adjust:Gaussian Blur")
+    t0 = time.time()
+    f.send("key Enter")
+    took = time.time() - t0
+    check(took < 2.0, "OK returns at once rather than blocking (%.2fs)" % took)
+    f.send("wait 400")
+    check(f.image()["history_cursor"] == before + 1, "and the result lands as one history entry")
+    check(f.image()["last"] == "Gaussian Blur", "named after the effect: " + f.image()["last"])
+    f.do("file.close")
+
+
 def test_interaction_polish(f):
     section("interaction polish")
     # A history entry says which property changed, so a run of them can be
@@ -1045,7 +1065,7 @@ def main():
         drive.recv_line(sock)
         f = Firn(sock)
         for case in (test_ui_scaling, test_api_surface, test_documents, test_view, test_layers, test_selection,
-                     test_painting_and_materials, test_edit_actions, test_tools_and_history, test_image_geometry, test_clipping_masks, test_background_work, test_lock_transparency, test_pass_through_groups, test_blend_ranges, test_metadata, test_drawing_api, test_node_editing, test_generate_action, test_right_button_selection, test_crop_and_text_gestures, test_command_palette, test_adjust_preview_view, test_interaction_polish, test_saving_honesty, test_interchange_formats, test_tube_export, test_atomic_batches, test_discovery_v2):
+                     test_painting_and_materials, test_edit_actions, test_tools_and_history, test_image_geometry, test_clipping_masks, test_background_work, test_lock_transparency, test_pass_through_groups, test_blend_ranges, test_metadata, test_drawing_api, test_node_editing, test_generate_action, test_right_button_selection, test_crop_and_text_gestures, test_command_palette, test_adjust_preview_view, test_effects_off_the_ui_thread, test_interaction_polish, test_saving_honesty, test_interchange_formats, test_tube_export, test_atomic_batches, test_discovery_v2):
             case(f)
         sock.sendall(b"quit\n")
         sock.settimeout(10.0)

@@ -420,6 +420,11 @@ docs/    notes on the original: command inventory, module mapping, FORMAT.md
   Keep the code portable: no GCC-only flags outside the `if(NOT MSVC)`
   blocks, NOMINMAX is defined project-wide, `main()` is plain (SDL's
   entry point is disabled).
+- **An effect's final apply goes to a worker** above about 3 megapixels
+  (`App::preview_commit_async`): the exact pass is seconds of work on a big
+  layer and used to run inside the ImGui frame. Small layers and 16-bit
+  layers with an `op16` still commit inline, where a thread would only add a
+  flicker or duplicate the deep re-run.
 - **Slow work off the interface thread**: `App::job` (`BackgroundJob.h`) is
   one operation on a worker, behind a modal that shows progress and offers
   Cancel. The modal is load-bearing: the document cannot change while the

@@ -248,6 +248,10 @@ struct App {
     void preview_begin(const char* name);
     void preview_update(const std::function<void(firn::Image&)>& op, bool force = false);
     void preview_commit(const std::function<void(firn::Image16&)>& op16 = nullptr);   // with op16, 16-bit layers get an exact re-run
+    // The same, on a worker, when the layer is big enough that the exact
+    // apply would otherwise freeze the window. False means it was not worth
+    // it and the caller should commit inline.
+    bool preview_commit_async(std::function<void(firn::Image&)> op, const std::function<void(firn::Image16&)>& op16);
     void preview_cancel();
     void draw_adjust_dialogs();
     bool open_adjust_by_title(const char* title);   // opens an adjust/effect dialog by its title (scripting, driver)

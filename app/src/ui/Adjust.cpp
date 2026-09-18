@@ -6,6 +6,7 @@
 #include <cstring>
 
 #include "App.h"
+#include "BackgroundJob.h"
 #include "ui/EffectState.h"
 #include "AdjustState.h"
 #include "firn/adjust.h"
@@ -95,6 +96,38 @@ void App::preview_commit(const std::function<void(Image16&)>& op16) {
     preview = Preview{};
 }
 
+// Applies the dialog's operation at full resolution on a worker thread and
+// commits it when it lands. Returns false when it is not worth the trouble
+// (a small layer, or a 16-bit layer, whose path re-runs the operation on the
+// deep data and is left alone), in which case the caller does it inline.
+bool App::preview_commit_async(std::function<void(Image&)> op, const std::function<void(Image16&)>& op16) {
+    if (!preview.active || !doc || job) return false;
+    Layer& L = doc->layer(preview.layer);
+    if (L.is_deep() && op16) return false;
+    // Below a few megapixels the work is over before a modal could usefully
+    // appear, and going through a thread would only add a flicker.
+    if (static_cast<size_t>(preview.before.width()) * preview.before.height() < 3u * 1000u * 1000u) return false;
+
+    const std::string name = preview.name;
+    const size_t layer = preview.layer;
+    const Image before = preview.before;
+    // Leave the approximate preview on screen while the exact one computes.
+    preview = Preview{};
+
+    job = std::make_unique<BackgroundJob>();
+    job->name = name;
+    job->layer = layer;
+    job->result = before;
+    job->cancellable = false;   // an effect has no progress to report or safe point to stop at
+    BackgroundJob* j = job.get();
+    j->done = std::async(std::launch::async, [j, op = std::move(op)]() mutable {
+        op(j->result);
+        return true;
+    });
+    status = name + "...";
+    return true;
+}
+
 void App::preview_cancel() {
     if (preview.active && doc && preview.layer < doc->layer_count()) {
         doc->layer(preview.layer).pixels = preview.before;
@@ -121,13 +154,20 @@ void adjust_modal(App& app, const char* title, Body body, Op op, std::function<v
     ImGui::SameLine();
     const bool cancel = ImGui::Button("Cancel", ImVec2(80, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape, false);
     if (ok) {
-        app.preview_update(op, true);
-        app.preview_commit(op16);
-        // Edit > Repeat re-applies this one; the op reads the dialog's
-        // settings, which stay as they were left.
+        // The exact, full-resolution apply. On a big layer this is seconds of
+        // work, and running it here froze the window with nothing on screen
+        // to say why, so it goes to a worker with the usual progress modal.
+        // Edit > Repeat is recorded either way.
         app.last_effect = title;
         app.last_effect_op = std::function<void(Image&)>(op);
         app.last_effect_op16 = op16;
+        if (app.preview_commit_async(std::function<void(Image&)>(op), op16)) {
+            ImGui::CloseCurrentPopup();
+            ImGui::EndPopup();
+            return;
+        }
+        app.preview_update(op, true);
+        app.preview_commit(op16);
         ImGui::CloseCurrentPopup();
     } else if (cancel) {
         app.preview_cancel();
