@@ -36,7 +36,6 @@ section into the next version.
   instead of opening a Save As dialog, and a Save As that the prompt asked
   for now finishes the close it was for instead of abandoning it.
 
-### Fixed
 - The right-hand palette stays on whichever of Materials and Overview you
   left it on, across restarts and across opening an image. ImGui keeps the
   dock layout but not reliably this: with a saved workspace it gives the tab
