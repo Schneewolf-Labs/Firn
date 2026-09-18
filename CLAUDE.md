@@ -333,7 +333,7 @@ docs/    notes on the original: command inventory, module mapping, FORMAT.md
   dispatch through it, and `App::do_command` falls through to it after the
   original's command names. Add new UI here as well as in the menu, or the
   API falls behind. See `docs/API.md`.
-- **The menu bar is one shared body, two renderers.** `App::draw_menu`
+- **The menu bar is one shared body, three renderers.** `App::draw_menu`
   (`app/src/ui/Menu.cpp`, plus `draw_selections_menu` and
   `draw_layer_menu_items`) describes the whole tree — File through Help —
   by calling a `MenuBuilder&` (`app/src/ui/MenuBuilder.h`) instead of
@@ -347,6 +347,12 @@ docs/    notes on the original: command inventory, module mapping, FORMAT.md
   exactly like `ImGui::BeginMenu` — bodies dereference `doc`/`layer`
   unconditionally past their enabled check. New menu items go through `m.`,
   never `ImGui::`, in these three functions.
+  The third renderer is `CollectorMenuBuilder`, which records the tree
+  instead of drawing it; the Ctrl+K command palette
+  (`app/src/ui/CommandPalette.cpp`) searches what it collects, which is what
+  keeps the palette from drifting from the menus. Do not build a palette on
+  the action table instead: that covers only what is scriptable and would
+  miss every effect, Canvas Size, layer styles, masks and guides.
 - **Scripting** (`app/src/Script.cpp`): `App::do_command(name, json)`
   implements the original's `App.Do` commands with its parameter names
   (the command API reference is linked from `docs/FORMAT.md`). The driver
