@@ -6,6 +6,8 @@ section into the next version.
 
 ## Unreleased
 
+## 0.7.1 (2026-09-18)
+
 ### Fixed
 - Saving a layered image to a flat format no longer claims the image is
   saved. Writing a three-layer picture to PNG used to mark the document
