@@ -582,6 +582,14 @@ python scripts\app_tests.py build          # Windows: no Xvfb, a small window ap
 ```
 
 
+A scripted double-click (`dbl` / `dbl_img`) widens `io.MouseDoubleClickTime`
+between its two clicks and puts it back afterwards. ImGui pairs clicks by
+wall clock, a script's two clicks are four frames apart, and a runner
+rendering below about thirteen frames a second therefore delivers two single
+clicks instead -- which is exactly what the macOS job did, and why the crop
+checks failed there and nowhere else. Emulate that locally with an
+`SDL_Delay` in `Driver::before_frame` rather than guessing at the platform.
+
 Unit tests cover the core. For the app, use the in-app driver
 (`app/src/Drive.cpp`): with `FIRN_DRIVE=<socket>` set, the app listens on a
 Unix socket (on Windows a token-guarded loopback port named by an address

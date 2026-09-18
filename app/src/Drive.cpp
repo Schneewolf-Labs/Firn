@@ -411,8 +411,13 @@ bool Driver::parse_line(const std::string& line, App& app) {
     } else if (base == "click" && a.size() >= 3) {
         pos(point(a[1] + "," + a[2], img)); wait(1); down(button(3)); wait(2); up(button(3)); settle();
     } else if (base == "dbl" && a.size() >= 3) {
+        auto dbl_window = [&](double secs) { Step s{Step::DblWindow}; s.seconds = secs; steps_.push_back(s); };
         pos(point(a[1] + "," + a[2], img)); wait(1);
-        down(0); wait(1); up(0); wait(1); down(0); wait(1); up(0); settle();
+        down(0); wait(1); up(0); wait(1);
+        dbl_window(30.0);
+        down(0); wait(1); up(0);
+        dbl_window(0.0);
+        settle();
     } else if (base == "down" ) { down(button(1)); wait(2);
     } else if (base == "up") { up(button(1)); settle();
     } else if (base == "drag" && a.size() >= 3) {
@@ -548,6 +553,17 @@ void Driver::before_frame(App& app, SDL_Window* window) {
                 consumed_frame = true;
                 break;
             }
+            // ImGui reads a double-click off the wall clock, and a script's
+            // two clicks are four frames apart. A runner rendering slower
+            // than about fifteen frames a second therefore turns every
+            // scripted double-click into two single ones. The window is
+            // widened between the first release and the second press, so the
+            // press that has to pair up is judged generously while every
+            // other press in the run is still judged normally.
+            case Step::DblWindow:
+                if (s.seconds > 0.0) { dbl_time_ = io.MouseDoubleClickTime; io.MouseDoubleClickTime = static_cast<float>(s.seconds); }
+                else if (dbl_time_ > 0.0f) { io.MouseDoubleClickTime = dbl_time_; dbl_time_ = 0.0f; }
+                break;
             case Step::Shot: pending_shot_ = s.text; shot_after_render_ = true; steps_.pop_front(); return;   // ack after the render
             case Step::Tool: {
                 bool found = false;

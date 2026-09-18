@@ -30,7 +30,7 @@ public:
 
 private:
     struct Step {
-        enum Kind { MousePos, MouseDown, MouseUp, KeyDown, KeyUp, Chars, Wheel, Wait, Shot, Tool, Ack, Layer, Quit, Set, Save, Open, Adjust, Do, Profile, Drop } kind = MousePos;
+        enum Kind { MousePos, MouseDown, MouseUp, KeyDown, KeyUp, Chars, Wheel, Wait, Shot, Tool, Ack, Layer, Quit, Set, Save, Open, Adjust, Do, Profile, Drop, DblWindow } kind = MousePos;
         Step() = default;
         Step(Kind k) : kind(k) {}   // NOLINT: implicit on purpose, steps_.push_back({Step::Ack})
         float x = 0, y = 0;
@@ -38,7 +38,8 @@ private:
         ImGuiKey key = ImGuiKey_None;
         std::string text;
         int frames = 0;
-        double seconds = 0;      // Wait: minimum wall time as well (double-click separation)
+        double seconds = 0;      // Wait: minimum wall time as well (double-click separation).
+                                 // DblWindow: the double-click time to impose, 0 to restore.
         double deadline = 0;
     };
     void poll_socket();
@@ -48,6 +49,7 @@ private:
     std::string state_text(App& app) const;
     std::string state_json(App& app) const;   // the same facts, for clients that parse JSON
     bool state_json_ = false;
+    float dbl_time_ = 0.0f;   // io.MouseDoubleClickTime as it was before DblWindow widened it
     ImVec2 image_to_window(const App& app, float x, float y) const;
 
     SDL_Window* window_ = nullptr;
