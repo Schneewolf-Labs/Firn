@@ -32,8 +32,6 @@ section into the next version.
   dialog is previewing on it. Judging a blur radius or an unsharp mask means
   looking at 1:1, and the only way to get there was to cancel the dialog,
   zoom, and start again.
-
-### Fixed
 - The crop rectangle stays on screen when the pointer leaves the image.
   Reaching for Apply used to make the whole crop vanish, which reads as the
   program having lost it; every other tool with on-canvas state already
