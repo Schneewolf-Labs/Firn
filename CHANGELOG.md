@@ -6,6 +6,8 @@ section into the next version.
 
 ## Unreleased
 
+## 0.8.0 (2026-09-19)
+
 ### Added
 - The Layers palette shows a small picture of each layer. Six layers called
   "Raster 1" through "Raster 6" were six identical lines, and the only way
