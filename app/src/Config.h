@@ -31,7 +31,21 @@ struct Config {
     // Where to send generative work. Empty means the feature is off: a
     // request tells a server you are running Firn, so it is opt in like the
     // update check.
+    //
+    // A server holds one model, so switching model means switching server:
+    // the addresses are a named list and `generate_url` is whichever of them
+    // is in use. Everything else in the program reads `generate_url` alone
+    // and does not care that there is a list behind it.
+    struct GenServer { std::string name, url; };
+    std::vector<GenServer> generate_servers;
     std::string generate_url;
+    // Points `generate_url` at one of the list, and does nothing if the
+    // index is not one of them. Returns whether anything changed.
+    bool use_generate_server(size_t index);
+    int current_generate_server() const;   // -1 when the address is not one of the list
+    // A readable default name for an address: the host and port, without
+    // the scheme. Also used when a config written before the list is read.
+    static std::string server_name_for(const std::string& url);
     // Which of the two stacked right-hand palettes was last showing. ImGui
     // keeps its own dock layout, but not reliably this: with a saved
     // workspace it hands the tab to whichever window drew last, so the

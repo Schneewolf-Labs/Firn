@@ -515,6 +515,22 @@
       "input_schema": {
         "additionalProperties": false,
         "properties": {
+          "name": {
+            "description": "Which server to use; left out, the list is reported unchanged",
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "name": "generate.server",
+      "summary": "List the image model servers, or switch to one of them by name"
+    },
+    {
+      "batch_safe": false,
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {
           "height": {
             "description": "How tall; left out, the size of the image",
             "maximum": 4096,

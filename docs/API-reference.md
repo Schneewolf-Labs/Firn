@@ -12,7 +12,7 @@ machine-readable JSON Schema, one schema per action.
 Replies are JSON. Success is `{"ok":true}` and whatever the action returns;
 a refusal comes back as a message and a non-zero exit from `firn-cli`.
 
-70 actions and 165 inherited command names.
+71 actions and 165 inherited command names.
 
 ## Documents
 
@@ -1138,6 +1138,15 @@ Make a new layer from a prompt alone, for models that generate as well as edit.
 | `width` | number | no | the image width | How wide; left out, the size of the image |
 | `height` | number | no | the image height | How tall; left out, the size of the image |
 | `seed` | number | no | a fresh one each time | Pin the result; left out, every call differs |
+
+
+### `generate.server`
+
+List the image model servers, or switch to one of them by name.
+
+| parameter | type | required | default | meaning |
+|---|---|---|---|---|
+| `name` | string | no |  | Which server to use; left out, the list is reported unchanged |
 
 
 ### `object.add_path`

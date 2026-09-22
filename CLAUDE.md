@@ -546,10 +546,26 @@ docs/    notes on the original: command inventory, module mapping, FORMAT.md
   column. A palette added after a workspace was saved has no entry in the
   ini and would arrive floating, so `dock_new_palette` in main.cpp puts it
   beside a palette that is already there, once.
-  `model.name` from the server is **not** reliable evidence of what is
-  loaded: started with `--diffusion-model`, this server reported an
-  unrelated checkpoint from its models folder until the first generation
-  had run.
+  **A server holds one model, so the model picker is a server picker**:
+  `Config::generate_servers` is a named list and `Config::generate_url` is
+  whichever is in use, which is the only thing the rest of the program
+  reads. Switching writes the address and the panel's own
+  address-has-changed check re-asks for capabilities, so no other code has
+  to know. A config from before the list is migrated on load, named after
+  its own address.
+  **A LoRA is listed by name and requested by path**: the server's parser
+  wants `{"path": ..., "multiplier": ...}` and refuses the whole request as
+  "invalid lora" for anything else, without saying which field was wrong.
+  The API document does not give these names; `parse_lora_json_field` in
+  the server's `examples/common/common.cpp` is the authority.
+  What the server reports in `capabilities` is mostly a property of the
+  **build**, not of the loaded model: two servers from the same binary, one
+  holding Qwen-Image-2.1 and one an SDXL checkpoint, returned identical
+  sampler and scheduler lists, identical defaults, and `init_image`,
+  `mask_image` and `ref_images` all true. So the panel follows the server
+  faithfully, but do not expect it to tell you what a model actually wants
+  -- which is why `gen::Conditioning` still lives in Firn. `model.name` and
+  `loras` are the parts that do follow the server.
 - **Talking to an image model** is `app/src/GenerateBackend.cpp`, a
   `gen::Backend` over the native async API (`/sdcpp/v1/img_gen`, poll,
   cancel). It shells out to curl or PowerShell like `UpdateCheck` rather

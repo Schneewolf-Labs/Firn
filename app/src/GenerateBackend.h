@@ -26,7 +26,12 @@ struct Capabilities {
     std::string model;                        // the loaded model, for the panel to name
     std::vector<std::string> samplers;
     std::vector<std::string> schedulers;
-    std::vector<std::string> loras;           // names, as `lora[].name` wants them
+    // A LoRA is listed by name but requested by path: the server's own
+    // parser takes `{"path": ..., "multiplier": ...}` and resolves the path
+    // against its LoRA folder. Sending the name, or `strength`, is refused
+    // outright with "invalid lora" and no clue which field was wrong.
+    struct Lora { std::string name, path; };
+    std::vector<Lora> loras;
     // What the current mode can be given. A model that takes reference
     // images is a unified or instruction model; one that takes a mask can
     // inpaint. The panel enables its controls from these rather than from

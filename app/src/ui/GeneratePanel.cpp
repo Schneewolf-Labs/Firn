@@ -61,8 +61,8 @@ json::Value panel_params(const GenerateState& g) {
     for (size_t i = 0; i < g.caps.loras.size() && i < g.lora_strength.size(); ++i) {
         if (g.lora_strength[i] == 0.0f) continue;
         json::Value e = json::Value::object();
-        e.set("name", json::Value::string(g.caps.loras[i]));
-        e.set("strength", json::Value::number(g.lora_strength[i]));
+        e.set("path", json::Value::string(g.caps.loras[i].path));
+        e.set("multiplier", json::Value::number(g.lora_strength[i]));
         loras.push(std::move(e));
     }
     if (loras.size() > 0) p.set("lora", std::move(loras));
@@ -121,9 +121,32 @@ void draw_generate_panel(App& app) {
 
     if (app.config.generate_url.empty()) {
         ImGui::TextDisabled("No image model.");
-        ImGui::TextWrapped("Set a server address in File > Preferences to generate, fill and edit with a model.");
+        ImGui::TextWrapped("Add a server in File > Preferences to generate, fill and edit with a model.");
         ImGui::End();
         return;
+    }
+
+    // One server holds one model, so the model picker is a server picker.
+    // Switching address is all it takes: the capabilities are asked for
+    // again and the panel rebuilds itself around whatever answers, so the
+    // samplers, the LoRAs and even which of the three buttons can work
+    // follow the model rather than being carried over from the last one.
+    if (app.config.generate_servers.size() > 1) {
+        const int current = app.config.current_generate_server();
+        const char* label = current >= 0 ? app.config.generate_servers[static_cast<size_t>(current)].name.c_str()
+                                         : app.config.generate_url.c_str();
+        ImGui::SetNextItemWidth(-FLT_MIN);
+        if (ImGui::BeginCombo("##server", label)) {
+            for (size_t i = 0; i < app.config.generate_servers.size(); ++i) {
+                const Config::GenServer& srv = app.config.generate_servers[i];
+                if (srv.url.empty()) continue;
+                const std::string name = srv.name.empty() ? srv.url : srv.name;
+                if (ImGui::Selectable(name.c_str(), static_cast<int>(i) == current) && app.config.use_generate_server(i))
+                    app.config.save();
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", srv.url.c_str());
+            }
+            ImGui::EndCombo();
+        }
     }
     // The panel docks into a narrow column, so everything here has to read
     // at that width: names wrap rather than running under the next control.
@@ -267,7 +290,7 @@ void draw_generate_panel(App& app) {
                 ImGui::BeginDisabled(!on);
                 ImGui::SetNextItemWidth(-FLT_MIN);
                 ImGui::SliderFloat("##strength", &g.lora_strength[i], 0.05f, 2.0f,
-                                   (g.caps.loras[i] + "  %.2f").c_str());
+                                   (g.caps.loras[i].name + "  %.2f").c_str());
                 ImGui::EndDisabled();
                 ImGui::PopID();
             }

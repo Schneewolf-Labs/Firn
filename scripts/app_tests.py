@@ -663,6 +663,12 @@ def test_generate_action(f):
     # The selection earlier is a history step of its own; what matters is
     # that none of the three refusals added one.
     check(f.image()["history_cursor"] == 1, "no refusal added a history step")
+    # One server holds one model, so switching model means switching server.
+    # Nothing is configured in CI, so the list is empty and asking for one
+    # by name is refused rather than silently doing nothing.
+    servers = json.loads(f.do("generate.server"))
+    check(servers["servers"] == [], "no servers are configured to begin with")
+    check(f.refused("generate.server", name="Nothing"), "switching to a server that is not listed is refused")
     f.do("file.close")
 
 

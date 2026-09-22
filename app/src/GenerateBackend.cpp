@@ -184,7 +184,13 @@ bool capabilities(const std::string& base, Capabilities* out, std::string* err) 
     };
     strings(v.get("samplers"), &out->samplers, "name");
     strings(v.get("schedulers"), &out->schedulers, "name");
-    strings(v.get("loras"), &out->loras, "name");
+    for (size_t i = 0; i < v.get("loras").size(); ++i) {
+        const json::Value& e = v.get("loras")[i];
+        Capabilities::Lora lora{e.get("name").as_string(""), e.get("path").as_string("")};
+        if (lora.path.empty()) lora.path = lora.name;
+        if (lora.name.empty()) lora.name = lora.path;
+        if (!lora.path.empty()) out->loras.push_back(std::move(lora));
+    }
 
     // The mode-aware fields are the real ones; the top-level trio are
     // documented as deprecated mirrors of whichever mode is current, so they

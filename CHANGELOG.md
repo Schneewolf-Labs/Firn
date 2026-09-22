@@ -20,8 +20,21 @@ section into the next version.
   layer being edited is the first picture, and the instruction can then say
   "the compass from the second picture". Verified against Qwen-Image-2.1 on
   stable-diffusion.cpp.
-- `generate.image` makes a layer from a prompt for scripts, and
-  `generate.edit` takes a `references` list of layer indexes.
+- Several image model servers, named, with a picker at the top of the
+  Generate palette. A server holds one model, so this is how you keep Qwen
+  for editing and an SDXL checkpoint for illustration and move between them:
+  switching re-asks the new server what it is and rebuilds the panel around
+  the answer, so its LoRAs appear and the old one's stop being offered. An
+  existing single address is kept and named after itself.
+- `generate.image` makes a layer from a prompt for scripts,
+  `generate.edit` takes a `references` list of layer indexes, and
+  `generate.server` lists the servers or switches between them.
+
+### Fixed
+- LoRAs are actually applied. Firn named them the way the capability list
+  names them, and the server wants the path and the word "multiplier"; the
+  whole request came back refused as "invalid lora" with no indication of
+  which field was wrong.
 
 ## 0.8.0 (2026-09-19)
 

@@ -2,6 +2,7 @@
 #include "ui/MenuBuilder.h"
 #include "imgui.h"
 #include <filesystem>
+#include <fstream>
 #include <functional>
 #include <iostream>
 #include <stdexcept>
@@ -124,6 +125,55 @@ static void ui_scaling(const std::filesystem::path&) {
     app.set_auto_ui_scale(2.0f);
     check(!app.font_pending, "unchanged DPI queued a font rebuild");
 }
+// The server list: several addresses with names, one of them in use, and a
+// config written by a Firn that only knew about a single address.
+static void generate_servers(const std::filesystem::path&) {
+    {
+        Config c;
+        c.generate_servers = {{"Qwen 2.1", "http://127.0.0.1:1234"}, {"SDXL", "http://127.0.0.1:1235"}};
+        check(c.use_generate_server(1), "selecting the second server did nothing");
+        check(!c.use_generate_server(1), "selecting the one already in use reported a change");
+        check(!c.use_generate_server(9), "an index off the end was accepted");
+        check(c.generate_url == "http://127.0.0.1:1235", "the address in use did not follow the selection");
+        check(c.current_generate_server() == 1, "the selected server was not reported back");
+        c.save();
+    }
+    {
+        Config c;
+        c.load();
+        check(c.generate_servers.size() == 2, "the server list did not survive a save and load");
+        check(c.generate_servers[0].name == "Qwen 2.1", "a name with a space did not round trip");
+        check(c.generate_servers[1].url == "http://127.0.0.1:1235", "an address did not round trip");
+        check(c.current_generate_server() == 1, "which server was in use did not round trip");
+    }
+    // What a config from before the list looks like: one address, no names.
+    {
+        std::ofstream f(std::filesystem::path(Config::directory()) / "firn.cfg");
+        f << "generate_url=http://192.168.1.9:1234\n";
+    }
+    {
+        Config c;
+        c.load();
+        check(c.generate_servers.size() == 1, "an older config's single address was dropped");
+        check(c.generate_servers[0].url == "http://192.168.1.9:1234", "the older address was not kept");
+        check(c.generate_servers[0].name == "192.168.1.9:1234", "the older address got no usable name");
+        check(c.generate_url == "http://192.168.1.9:1234", "the older address stopped being the one in use");
+    }
+    // A list with no address in use falls back to the first, rather than
+    // leaving the feature switched off with servers configured.
+    {
+        std::ofstream f(std::filesystem::path(Config::directory()) / "firn.cfg");
+        f << "generate_server=A|http://a:1\ngenerate_server=B|http://b:2\ngenerate_url=\n";
+    }
+    {
+        Config c;
+        c.load();
+        check(c.generate_url == "http://a:1", "no address in use did not fall back to the first server");
+        check(c.generate_servers.size() == 2, "the list was not read without an address in use");
+    }
+    std::filesystem::remove(std::filesystem::path(Config::directory()) / "firn.cfg");
+}
+
 int main(int argc, char** argv) {
     const auto dir=std::filesystem::temp_directory_path()/("firn-state-test-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
     std::filesystem::create_directories(dir);
@@ -135,7 +185,7 @@ int main(int argc, char** argv) {
     ImGui::CreateContext();
     int failures=0;
     const std::map<std::string,void(*)(const std::filesystem::path&)> tests={
-        {"ui_scaling",ui_scaling},
+        {"ui_scaling",ui_scaling},{"generate_servers",generate_servers},
         {"dirty_branch",dirty_branch},{"dirty_trim",dirty_trim},{"switch_selection",switch_selection},{"close_mask",close_mask},{"deferred_menu",deferred_menu},{"trim_redo",trim_redo},{"parked_saved_state",parked_saved_state},{"pending_selection_save",pending_selection_save},{"pending_selection_close",pending_selection_close},{"context_flatten",context_flatten},{"untouched_selection_redo",untouched_selection_redo}};
     for (const auto& [name,test] : tests) {
         if (argc>1 && name!=argv[1]) continue;

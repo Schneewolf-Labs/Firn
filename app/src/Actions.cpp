@@ -307,6 +307,30 @@ std::vector<Action> build() {
             app.generate_seed = seed_before;
             return worked ? ok_json() : fail(ok, why);
         });
+    add("generate.server", "List the image model servers, or switch to one of them by name",
+        {{"name", "string", "Which server to use; left out, the list is reported unchanged"}},
+        [](App& app, const Value& p, bool* ok) {
+            const std::string want = str(p, "name");
+            if (!want.empty()) {
+                size_t i = 0;
+                for (; i < app.config.generate_servers.size(); ++i)
+                    if (app.config.generate_servers[i].name == want) break;
+                if (i == app.config.generate_servers.size()) return fail(ok, "no image model server called " + want);
+                if (app.config.use_generate_server(i)) app.config.save();
+            }
+            Value list = Value::array();
+            for (const auto& g : app.config.generate_servers) {
+                Value e = Value::object();
+                e.set("name", Value::string(g.name));
+                e.set("url", Value::string(g.url));
+                e.set("active", Value::boolean(g.url == app.config.generate_url));
+                list.push(std::move(e));
+            }
+            Value r = Value::object();
+            r.set("ok", Value::boolean(true));
+            r.set("servers", std::move(list));
+            return firn::json::dump(r);
+        });
     add("generate.image", "Make a new layer from a prompt alone, for models that generate as well as edit",
         {{"prompt", "string", "What to make", true},
          {"width", "number", "How wide; left out, the size of the image", false, nullptr, "the image width", R"({"minimum":64,"maximum":4096})"},

@@ -749,23 +749,55 @@ void App::draw_dialogs() {
         if (ImGui::IsItemHovered())
             ImGui::SetTooltip("Asks GitHub once a day whether a newer release exists, and says so.\nIt never downloads or installs anything. Off unless you turn it on,\nbecause a check tells a server that someone here is running Firn.");
         {
-            // Where generative work goes. Empty means the feature is off,
-            // the same posture as the update check: a request tells a server
-            // someone here is running Firn.
-            char url[256];
-            std::snprintf(url, sizeof url, "%s", c.generate_url.c_str());
-            ImGui::SetNextItemWidth(320);
-            if (ImGui::InputTextWithHint("Image model server", "http://127.0.0.1:1234 (empty = off)", url, sizeof url)) c.generate_url = url;
+            // Where generative work goes. An empty list means the feature is
+            // off, the same posture as the update check: a request tells a
+            // server someone here is running Firn. One server holds one
+            // model, so switching model means switching address, and the
+            // addresses are a named list rather than a single field.
+            ImGui::TextUnformatted("Image model servers");
             if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("A stable-diffusion.cpp server, on this machine or elsewhere.\nEdit > Generative Fill sends the selection to it.\nOff unless you fill this in.");
-            ImGui::SameLine();
-            ImGui::BeginDisabled(c.generate_url.empty());
-            if (ImGui::SmallButton("Test")) {
-                std::string err;
-                const std::string who = firn::genhttp::probe(c.generate_url, &err);
-                status = who.empty() ? "Image model: " + err : "Image model answered: " + who;
+                ImGui::SetTooltip("stable-diffusion.cpp servers, on this machine or elsewhere.\nOne holds one model, so list the ones you use and pick\nbetween them in the Generate palette. Off while empty.");
+            if (c.generate_servers.empty()) ImGui::TextDisabled("None: generation, fill and edit are off.");
+            int remove = -1;
+            for (size_t i = 0; i < c.generate_servers.size(); ++i) {
+                Config::GenServer& g = c.generate_servers[i];
+                ImGui::PushID(static_cast<int>(i));
+                char name[128], url[256];
+                std::snprintf(name, sizeof name, "%s", g.name.c_str());
+                std::snprintf(url, sizeof url, "%s", g.url.c_str());
+                ImGui::SetNextItemWidth(130);
+                if (ImGui::InputTextWithHint("##name", "name", name, sizeof name)) {
+                    g.name = name;
+                    g.name.erase(std::remove(g.name.begin(), g.name.end(), '|'), g.name.end());
+                }
+                ImGui::SameLine();
+                ImGui::SetNextItemWidth(260);
+                if (ImGui::InputTextWithHint("##url", "http://127.0.0.1:1234", url, sizeof url)) {
+                    // The address in use follows the entry being edited, so
+                    // correcting a typo does not silently leave the old one
+                    // selected.
+                    if (c.generate_url == g.url) c.generate_url = url;
+                    g.url = url;
+                }
+                ImGui::SameLine();
+                ImGui::BeginDisabled(g.url.empty());
+                if (ImGui::SmallButton("Test")) {
+                    std::string err;
+                    const std::string who = firn::genhttp::probe(g.url, &err);
+                    if (who.empty()) fail(g.name + ": " + err); else say(g.name + " answered: " + who);
+                }
+                ImGui::EndDisabled();
+                ImGui::SameLine();
+                if (ImGui::SmallButton("Remove")) remove = static_cast<int>(i);
+                ImGui::PopID();
             }
-            ImGui::EndDisabled();
+            if (remove >= 0) {
+                const std::string gone = c.generate_servers[static_cast<size_t>(remove)].url;
+                c.generate_servers.erase(c.generate_servers.begin() + remove);
+                if (c.generate_url == gone)
+                    c.generate_url = c.generate_servers.empty() ? std::string() : c.generate_servers.front().url;
+            }
+            if (ImGui::SmallButton("Add server")) c.generate_servers.push_back({"", ""});
         }
         ImGui::SetNextItemWidth(160); ImGui::InputInt("New image width", &c.new_width);
         ImGui::SetNextItemWidth(160); ImGui::InputInt("New image height", &c.new_height);
