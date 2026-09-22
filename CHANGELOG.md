@@ -6,6 +6,8 @@ section into the next version.
 
 ## Unreleased
 
+## 0.9.0 (2026-09-22)
+
 ### Added
 - A Generate palette, beside Materials and Overview. Type a prompt and the
   answer arrives as a layer: "Generate" makes one from the words alone,
