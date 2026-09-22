@@ -674,6 +674,11 @@ struct App {
     // instruction understands the first far better; one that only inpaints
     // needs the second.
     bool generate_instruct = true;
+    // Enlarging the picture with one of the server's upscaler models. The
+    // model is three-channel, so each layer's own alpha is resampled here
+    // and put back: an ESRGAN answer has no transparency of its own.
+    void upscale_image(const std::string& upscaler, int repeats = 1, bool background = true);
+    std::string generate_upscaler;   // which model; empty means the server's first
     bool generate_configured() const;
     void revert();               // reloads the file from disk, dropping every change
     bool show_revert_prompt = false;

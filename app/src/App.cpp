@@ -885,6 +885,78 @@ void App::generate_image(const std::string& prompt, int w, int h, bool backgroun
     run_generation(std::move(req), background);
 }
 
+// Enlarging the whole picture with a model. Every raster layer goes to the
+// server on its own -- the model has no notion of a layer stack -- and the
+// alpha it cannot see is resampled here and put back, so a layer with soft
+// edges does not come back opaque. The work is finished before any command
+// is made, because undo and redo run a command's transform again and a
+// network round trip has no business happening there.
+void App::upscale_image(const std::string& upscaler, int repeats, bool background) {
+    if (!doc) { status = "Upscale needs an image."; return; }
+    if (config.generate_url.empty()) { status = "Upscale: set a server address in Preferences first."; return; }
+    if (!firn::genhttp::available()) { status = "Upscale needs curl, which is not installed."; return; }
+    if (job) { status = job->name + " is still running."; return; }
+
+    const std::string url = config.generate_url;
+    const int old_w = doc->width(), old_h = doc->height();
+    std::vector<Image> sources;
+    std::vector<size_t> indexes;
+    for (size_t i = 0; i < doc->layer_count(); ++i)
+        if (doc->layer(i).is_raster() && !doc->layer(i).pixels.empty()) {
+            sources.push_back(doc->layer(i).pixels);
+            indexes.push_back(i);
+        }
+    if (sources.empty()) { status = "Upscale needs a raster layer."; return; }
+    const size_t layer_count = doc->layer_count();
+
+    auto work = [url, upscaler, repeats, sources, indexes, layer_count, old_w, old_h]
+                (std::vector<Image>& ready, int& new_w, int& new_h, std::string& err) {
+        ready.assign(layer_count, Image());
+        for (size_t k = 0; k < sources.size(); ++k) {
+            Image answer;
+            if (!firn::genhttp::upscale(url, sources[k], upscaler, repeats, &answer, &err)) return false;
+            if (k == 0) { new_w = answer.width(); new_h = answer.height(); }
+            if (answer.width() != new_w || answer.height() != new_h) {
+                err = "the server returned pictures of different sizes";
+                return false;
+            }
+            // The model saw no alpha, so the layer's own is carried across.
+            Image alpha = raster::resample(sources[k], new_w, new_h, raster::Filter::Bicubic);
+            for (int y = 0; y < new_h; ++y)
+                for (int x = 0; x < new_w; ++x) {
+                    Color c = answer.get(x, y);
+                    c.a = alpha.get(x, y).a;
+                    answer.set(x, y, c);
+                }
+            ready[indexes[k]] = std::move(answer);
+        }
+        return new_w > 0 && new_h > 0;
+    };
+
+    if (!background) {
+        std::vector<Image> ready;
+        int w = 0, h = 0;
+        std::string err;
+        if (!work(ready, w, h, err)) { fail("Upscale: " + (err.empty() ? std::string("no result") : err)); return; }
+        run(std::make_unique<ResizeToCommand>(w, h, std::move(ready), raster::Filter::Bicubic, "Upscale"));
+        say("Upscaled to " + std::to_string(w) + "x" + std::to_string(h));
+        return;
+    }
+
+    job = std::make_unique<BackgroundJob>();
+    job->kind = BackgroundJob::Kind::Upscale;
+    job->name = "Upscale";
+    job->cancellable = false;   // the server takes no cancel for this
+    BackgroundJob* j = job.get();
+    j->done = std::async(std::launch::async, [j, work = std::move(work)]() mutable {
+        std::string err;
+        const bool ok = work(j->upscaled, j->upscale_w, j->upscale_h, err);
+        if (!ok) j->error = err;
+        return ok;
+    });
+    status = "Upscaling " + std::to_string(old_w) + "x" + std::to_string(old_h) + "...";
+}
+
 void App::draw_background_job() {
     if (!job) return;
     if (!job->opened) { ImGui::OpenPopup("Working"); job->opened = true; }
@@ -922,6 +994,14 @@ void App::draw_background_job() {
             config.last_directory = file_dialog.directory();
             status = "Opened " + job->path;
             for (const std::string& w : job->warnings) status += "\n" + w;
+        }
+    } else if (job->kind == BackgroundJob::Kind::Upscale) {
+        if (!finished) fail("Upscale: " + (job->error.empty() ? std::string("no result") : job->error));
+        else if (!doc) status = "Upscale: the image is gone";
+        else {
+            run(std::make_unique<ResizeToCommand>(job->upscale_w, job->upscale_h, std::move(job->upscaled),
+                                                  raster::Filter::Bicubic, "Upscale"));
+            say("Upscaled to " + std::to_string(job->upscale_w) + "x" + std::to_string(job->upscale_h));
         }
     } else if (job->kind == BackgroundJob::Kind::NewLayer) {
         if (!finished) status = job->error.empty() ? job->name + " cancelled" : job->name + ": " + job->error;

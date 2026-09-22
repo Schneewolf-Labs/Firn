@@ -38,6 +38,11 @@ struct Capabilities {
     // a list of model names that would go out of date.
     bool takes_init = false, takes_mask = false, takes_refs = false, takes_lora = false;
     int min_width = 0, max_width = 0, min_height = 0, max_height = 0, max_batch = 0;
+    // Model-backed upscalers, and whether this server has the route that
+    // runs one on its own. An older server lists upscalers it can only use
+    // as the second stage of a generation, so the two are separate answers.
+    std::vector<std::string> upscalers;
+    bool can_upscale = false;
     // The server's own defaults, which are a better starting point than
     // anything hardcoded here: they follow the loaded model.
     int width = 0, height = 0, steps = 0;
@@ -48,6 +53,13 @@ struct Capabilities {
 // Asks the server what it is. False with `err` set when the address does not
 // answer or does not speak this API.
 bool capabilities(const std::string& base, Capabilities* out, std::string* err);
+
+// Runs one of the server's upscaler models over a picture and returns the
+// result. Synchronous: this is a couple of seconds' work with no model
+// loading behind it, unlike a generation. Alpha is not sent -- the models
+// are three-channel -- so the caller keeps its own.
+bool upscale(const std::string& base, const Image& src, const std::string& upscaler, int repeats,
+             Image* out, std::string* err);
 
 // A one-off reachability check: returns the server's model name, or an empty
 // string with `err` set. Used by Preferences to say whether the address works.

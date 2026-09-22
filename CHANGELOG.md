@@ -6,6 +6,15 @@ section into the next version.
 
 ## Unreleased
 
+### Added
+- Image > Upscale with Model enlarges the picture with an ESRGAN model on
+  the image model server -- 512 to 2048 in about two seconds a layer, and
+  far better than any filter on drawn and anime artwork. Every raster layer
+  goes over separately and the alpha the model cannot see is resampled and
+  put back, so a layer with soft edges does not come back opaque. The menu
+  item is there only when the server actually has an upscaler model.
+  `image.upscale` does the same from a script.
+
 ### Changed
 - Generative Fill sends a window around the selection instead of the whole
   layer. The service resizes whatever it is given to what the model works

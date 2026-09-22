@@ -531,6 +531,20 @@ docs/    notes on the original: command inventory, module mapping, FORMAT.md
   work is out, so a `Request` records the `revision` and `layer` it was built
   from; a result that comes back to a document that moved must degrade
   visibly rather than paint into the wrong place.
+- **Upscaling with a model** (`App::upscale_image`, `genhttp::upscale`) goes
+  to `POST /sdcpp/v1/upscale`, which is **a route this project added to
+  stable-diffusion.cpp** (branch `upscale-endpoint` in the local checkout);
+  a stock server does not have it and `capabilities.upscale` says so, which
+  is why the menu item is enabled from that flag rather than from the
+  presence of an upscaler in the list. Do not reach for the `hires` stage
+  instead: it cannot express a plain upscale (denoising must be > 0) and a
+  hires request against Qwen-Image-2.1 dies in a ggml assertion, taking the
+  server with it. The models are three-channel, so each layer's own alpha is
+  resampled here and put back; and because undo and redo run a command's
+  `transform` again, the round trips all happen first and
+  `ResizeToCommand` only hands the finished pixels over.
+  The `upscalers` list in capabilities also carries the plain scaling
+  filters, so take only the entries marked `"model": true`.
 - **A masked fill sends a window, not the layer**
   (`gen::context_window`, used by `App::generative_fill`). The service
   resizes whatever it is given to the model's working size, so sending a

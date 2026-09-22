@@ -183,6 +183,15 @@ bool capabilities(const std::string& base, Capabilities* out, std::string* err) 
         }
     };
     strings(v.get("samplers"), &out->samplers, "name");
+    // Only the model-backed ones: the list also carries the plain scaling
+    // filters ("None", "Lanczos", the latent modes), which are choices for
+    // the second stage of a generation and not things to run on their own.
+    for (size_t i = 0; i < v.get("upscalers").size(); ++i) {
+        const json::Value& e = v.get("upscalers")[i];
+        if (!e.get("model").as_bool(false)) continue;
+        if (std::string name = e.get("name").as_string(""); !name.empty()) out->upscalers.push_back(std::move(name));
+    }
+    out->can_upscale = v.get("upscale").as_bool(false) && !out->upscalers.empty();
     strings(v.get("schedulers"), &out->schedulers, "name");
     for (size_t i = 0; i < v.get("loras").size(); ++i) {
         const json::Value& e = v.get("loras")[i];
@@ -224,6 +233,36 @@ bool capabilities(const std::string& base, Capabilities* out, std::string* err) 
     out->txt_cfg = static_cast<float>(sp.get("guidance").get("txt_cfg").as_number(0));
     out->sampler = sp.get("sample_method").as_string("");
     out->scheduler = sp.get("scheduler").as_string("");
+    return true;
+}
+
+bool upscale(const std::string& base, const Image& src, const std::string& upscaler, int repeats,
+             Image* out, std::string* err) {
+    if (!out) return false;
+    if (!available()) { if (err) *err = "curl is not installed"; return false; }
+    if (src.empty()) { if (err) *err = "there is nothing to upscale"; return false; }
+    json::Value body = json::Value::object();
+    body.set("image", json::Value::string(base64(io::encode_png(src))));
+    if (!upscaler.empty()) body.set("upscaler", json::Value::string(upscaler));
+    body.set("repeats", json::Value::number(std::max(1, repeats)));
+
+    const std::string reply = post_json(base + "/sdcpp/v1/upscale", json::dump(body));
+    json::Value v;
+    if (!json::parse(reply, v)) {
+        if (err) *err = reply.empty() ? "no answer from " + base
+                                      : "this server has no upscale route (it needs a newer stable-diffusion.cpp)";
+        return false;
+    }
+    if (!v.get("error").as_string("").empty()) { if (err) *err = v.get("error").as_string(""); return false; }
+    const json::Value& images = v.get("images");
+    if (images.size() == 0) { if (err) *err = "the server returned no image"; return false; }
+    std::string data = images[0].get("b64_json").as_string("");
+    if (data.empty()) data = images[0].as_string("");
+    const std::vector<uint8_t> png = unbase64(data);
+    std::string e;
+    auto img = io::load_memory(png.data(), png.size(), &e);
+    if (!img) { if (err) *err = "the server's image could not be read: " + e; return false; }
+    *out = std::move(*img);
     return true;
 }
 

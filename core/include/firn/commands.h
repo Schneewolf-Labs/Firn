@@ -586,6 +586,29 @@ protected:
     raster::Filter filter_;
 };
 
+// A resize whose new pixels were produced somewhere else -- by a model on a
+// server, which is a network round trip and must not happen inside a command
+// that undo and redo will run again. The work is done first and handed over;
+// layers with no picture supplied (and every mask, selection and vector
+// layer) are resampled the ordinary way.
+class ResizeToCommand : public GeometryCommand {
+public:
+    ResizeToCommand(int w, int h, std::vector<Image> ready, raster::Filter fallback, std::string name)
+        : w_(w), h_(h), ready_(std::move(ready)), fallback_(fallback), name_(std::move(name)) {}
+    std::string name() const override { return name_; }
+    size_t memory_bytes() const override {
+        size_t n = GeometryCommand::memory_bytes();
+        for (const Image& i : ready_) n += i.size_bytes();
+        return n;
+    }
+protected:
+    void transform(const Document::State& in, Document::State& out) override;
+    int w_, h_;
+    std::vector<Image> ready_;   // by layer index; empty entries fall back to resampling
+    raster::Filter fallback_;
+    std::string name_;
+};
+
 // New canvas of (w, h); the old content is placed at (offset_x, offset_y).
 // Background layers are padded with `fill`, others with transparency.
 class CanvasSizeCommand : public GeometryCommand {

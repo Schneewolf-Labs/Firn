@@ -669,6 +669,10 @@ def test_generate_action(f):
     servers = json.loads(f.do("generate.server"))
     check(servers["servers"] == [], "no servers are configured to begin with")
     check(f.refused("generate.server", name="Nothing"), "switching to a server that is not listed is refused")
+    # Upscaling goes to the same server, so it refuses the same way.
+    check(f.refused("image.upscale"), "upscaling refuses with no model configured")
+    up = json.loads(f.do("app.describe", name="image.upscale"))["actions"][0]
+    check(set(up["input_schema"]["properties"]) == {"model", "repeats"}, "upscaling takes a model and a repeat count")
     f.do("file.close")
 
 

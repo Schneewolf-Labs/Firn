@@ -231,6 +231,13 @@ void App::draw_menu(MenuBuilder& m) {
         m.separator();
         m.item("Crop to Selection", "Ctrl+Shift+R", has_doc && doc->has_selection(), [=, this] { crop_to_selection(); });
         m.item("Resize...", nullptr, has_doc, [=, this] { open_resize_dialog(); });
+        // Enlarging with a model rather than a filter. Only offered when the
+        // configured server actually has one, since it is the server that
+        // decides whether this is possible at all.
+        m.item("Upscale with Model", nullptr, has_doc && generate_configured() && !generate_upscaler.empty(),
+               [=, this] { upscale_image(generate_upscaler); }, false,
+               generate_upscaler.empty() ? "No upscaler model on the image model server."
+                                         : generate_upscaler.c_str());
         m.item("Canvas Size...", nullptr, has_doc, [=, this] { open_canvas_dialog(); });
         m.separator();
         m.item("Add Borders...", nullptr, has_doc, [=, this] { show_borders_dialog = true; });

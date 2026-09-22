@@ -631,6 +631,31 @@ void ResizeCommand::transform(const Document::State& in, Document::State& out) {
     }
 }
 
+void ResizeToCommand::transform(const Document::State& in, Document::State& out) {
+    out.width = w_;
+    out.height = h_;
+    const float sx = in.width > 0 ? static_cast<float>(w_) / in.width : 1.0f;
+    const float sy = in.height > 0 ? static_cast<float>(h_) / in.height : 1.0f;
+    for (size_t i = 0; i < in.layers.size(); ++i) {
+        const Layer& L = in.layers[i];
+        Layer n = L;
+        n.style.scale(sx, sy);
+        const bool supplied = i < ready_.size() && !ready_[i].empty() &&
+                              ready_[i].width() == w_ && ready_[i].height() == h_;
+        if (L.is_raster()) n.pixels = supplied ? ready_[i] : raster::resample(L.pixels, w_, h_, fallback_);
+        // A deep layer's own 16-bit pixels are not what the model saw, so
+        // they are resampled rather than quietly replaced by an 8-bit answer.
+        if (L.is_deep()) n.deep = std::make_shared<const Image16>(raster16::resample(*L.deep, w_, h_, fallback_));
+        if (L.has_mask()) { Mask m(w_, h_); raster::resample_mask(L.mask.data(), in.width, in.height, m.data(), w_, h_); n.mask = std::move(m); }
+        out.layers.push_back(std::move(n));
+    }
+    if (!in.selection.empty()) {
+        Mask m(w_, h_);
+        raster::resample_mask(in.selection.data(), in.width, in.height, m.data(), w_, h_);
+        out.selection = std::move(m);
+    }
+}
+
 void CanvasSizeCommand::transform(const Document::State& in, Document::State& out) {
     out.width = w_;
     out.height = h_;

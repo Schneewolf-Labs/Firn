@@ -531,6 +531,29 @@
       "input_schema": {
         "additionalProperties": false,
         "properties": {
+          "model": {
+            "description": "Which upscaler; left out, the server's first",
+            "type": "string"
+          },
+          "repeats": {
+            "default": 1,
+            "description": "Run it more than once for a larger factor",
+            "maximum": 4,
+            "minimum": 1,
+            "type": "number"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "name": "image.upscale",
+      "summary": "Enlarge the picture with an upscaler model on the image model server"
+    },
+    {
+      "batch_safe": false,
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {
           "height": {
             "description": "How tall; left out, the size of the image",
             "maximum": 4096,

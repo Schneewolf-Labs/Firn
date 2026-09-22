@@ -331,6 +331,22 @@ std::vector<Action> build() {
             r.set("servers", std::move(list));
             return firn::json::dump(r);
         });
+    add("image.upscale", "Enlarge the picture with an upscaler model on the image model server",
+        {{"model", "string", "Which upscaler; left out, the server's first"},
+         {"repeats", "number", "Run it more than once for a larger factor", false, nullptr, "1", R"({"minimum":1,"maximum":4})"}},
+        [](App& app, const Value& p, bool* ok) {
+            std::string e;
+            if (!need_doc(app, ok, e)) return e;
+            if (!app.generate_configured()) return fail(ok, "no image model is configured; set one in Preferences");
+            const std::string before = app.status;
+            app.status.clear();
+            app.upscale_image(str(p, "model").empty() ? app.generate_upscaler : str(p, "model"),
+                              static_cast<int>(p.get("repeats").as_number(1)), false);
+            const bool worked = app.status.compare(0, 9, "Upscaled ") == 0;
+            const std::string why = app.status;
+            app.status = before;
+            return worked ? ok_json() : fail(ok, why);
+        });
     add("generate.image", "Make a new layer from a prompt alone, for models that generate as well as edit",
         {{"prompt", "string", "What to make", true},
          {"width", "number", "How wide; left out, the size of the image", false, nullptr, "the image width", R"({"minimum":64,"maximum":4096})"},

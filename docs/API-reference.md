@@ -12,7 +12,7 @@ machine-readable JSON Schema, one schema per action.
 Replies are JSON. Success is `{"ok":true}` and whatever the action returns;
 a refusal comes back as a message and a non-zero exit from `firn-cli`.
 
-71 actions and 165 inherited command names.
+72 actions and 165 inherited command names.
 
 ## Documents
 
@@ -335,6 +335,18 @@ Batch-safe: no.
 | parameter | type | required | default | meaning |
 |---|---|---|---|---|
 | `what` | string (all, private) | no | `"all"` | everything, or only what identifies the photographer and the place |
+
+
+### `image.upscale`
+
+Enlarge the picture with an upscaler model on the image model server.
+
+Batch-safe: no.
+
+| parameter | type | required | default | meaning |
+|---|---|---|---|---|
+| `model` | string | no |  | Which upscaler; left out, the server's first |
+| `repeats` | number | no | `1` | Run it more than once for a larger factor |
 
 
 ## Selections

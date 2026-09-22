@@ -93,6 +93,8 @@ void collect_capabilities(App& app, GenerateState& g) {
     g.have_caps = err.empty();
     if (!g.have_caps) return;
     g.caps = std::move(caps);
+    // The menu's Upscale item reads this: what the server has, if anything.
+    app.generate_upscaler = g.caps.can_upscale && !g.caps.upscalers.empty() ? g.caps.upscalers.front() : std::string();
     g.lora_strength.assign(g.caps.loras.size(), 0.0f);
     // The server's own defaults are a better starting point than anything
     // written here: they follow whichever model is loaded.
@@ -110,14 +112,15 @@ void collect_capabilities(App& app, GenerateState& g) {
 }  // namespace
 
 void draw_generate_panel(App& app) {
-    if (!ImGui::Begin("Generate")) { ImGui::End(); return; }
-    app.config.right_palette = "Generate";
     GenerateState& g = *app.generate_state;
-
-    // A changed address means the answers on screen belong to a different
-    // server, so they are asked for again.
+    // Asked for before the window, and so even when this tab is not the one
+    // showing: the Image menu's Upscale item has to know whether the server
+    // has an upscaler, and a docked window that is not selected never draws.
     if (!app.config.generate_url.empty() && app.config.generate_url != g.asked_url && !g.asking) refresh_capabilities(app, g);
     collect_capabilities(app, g);
+
+    if (!ImGui::Begin("Generate")) { ImGui::End(); return; }
+    app.config.right_palette = "Generate";
 
     if (app.config.generate_url.empty()) {
         ImGui::TextDisabled("No image model.");
