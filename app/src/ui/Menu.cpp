@@ -1058,14 +1058,22 @@ void App::draw_dialogs() {
         if (ImGui::InputFloat("Width", &ms.new_dim_w, 0, 0, fmt)) ms.new_preset = 0;
         ImGui::SameLine();
         ImGui::SetNextItemWidth(130);
-        if (ImGui::Combo("Units", &ms.new_units, unit_names, 3)) {
-            // Changing units keeps the picture the same size rather than
-            // reinterpreting the number, which would silently resize it.
-            const float px_w = ms.new_dim_w * per_unit(ms.new_units == 0 ? 1 : 0);
-            (void)px_w;
+        {
+            // Changing units restates the same picture, it does not
+            // reinterpret the number: going from pixels to inches must not
+            // turn an 800 pixel image into an 800 inch one.
+            const int was = ms.new_units;
+            if (ImGui::Combo("Units", &ms.new_units, unit_names, 3) && ms.new_units != was) {
+                const float from = per_unit(was), to = per_unit(ms.new_units);
+                ms.new_dim_w = ms.new_dim_w * from / to;
+                ms.new_dim_h = ms.new_dim_h * from / to;
+            }
         }
         ImGui::SetNextItemWidth(120);
         if (ImGui::InputFloat("Height", &ms.new_dim_h, 0, 0, fmt)) ms.new_preset = 0;
+        // In real units a new resolution changes how many pixels the same
+        // piece of paper comes to; in pixels it changes the paper the same
+        // pixels make. Both are right, so the typed number simply stands.
         ImGui::SetNextItemWidth(120);
         if (ImGui::InputFloat("Resolution", &ms.new_resolution, 0, 0, "%.0f")) ms.new_preset = 0;
         ImGui::SameLine();
