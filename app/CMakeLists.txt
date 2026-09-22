@@ -58,6 +58,7 @@ add_library(firn_app OBJECT
   src/Tablet.cpp
   src/ui/Canvas.cpp
   src/ui/Palettes.cpp
+  src/ui/GeneratePanel.cpp
   src/ui/CommandPalette.cpp
   src/ui/Menu.cpp
   src/ui/FileDialog.cpp

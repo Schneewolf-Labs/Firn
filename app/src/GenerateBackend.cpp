@@ -150,18 +150,81 @@ bool available() {
 #endif
 }
 
-std::string probe(const std::string& base, std::string* err) {
-    if (!available()) { if (err) *err = "curl is not installed"; return {}; }
+bool capabilities(const std::string& base, Capabilities* out, std::string* err) {
+    if (!out) return false;
+    *out = Capabilities{};
+    if (!available()) { if (err) *err = "curl is not installed"; return false; }
     const std::string body = get(base + "/sdcpp/v1/capabilities", 4u << 20);
-    if (body.empty()) { if (err) *err = "no answer from " + base; return {}; }
+    if (body.empty()) { if (err) *err = "no answer from " + base; return false; }
     json::Value v;
-    if (!json::parse(body, v) || !v.is_object()) { if (err) *err = "the address answered, but not with capabilities"; return {}; }
+    if (!json::parse(body, v) || !v.is_object()) { if (err) *err = "the address answered, but not with capabilities"; return false; }
     // Any of these means we are talking to something that understands the
     // native API rather than to an unrelated web server.
-    if (!v.find("features") && !v.find("defaults")) { if (err) *err = "not a stable-diffusion.cpp server"; return {}; }
-    std::string name = v.get("model").as_string("");
-    if (name.empty()) name = v.get("current_mode").as_string("ready");
-    return name;
+    if (!v.find("features") && !v.find("defaults") && !v.find("features_by_mode")) {
+        if (err) *err = "not a stable-diffusion.cpp server";
+        return false;
+    }
+
+    // The model block is an object on current servers and was a bare string
+    // on older ones.
+    if (const json::Value& m = v.get("model"); m.is_object()) {
+        out->model = m.get("name").as_string("");
+        if (out->model.empty()) out->model = m.get("stem").as_string("");
+    } else {
+        out->model = m.as_string("");
+    }
+    if (out->model.empty()) out->model = v.get("current_mode").as_string("ready");
+
+    auto strings = [](const json::Value& a, std::vector<std::string>* dst, const char* key) {
+        for (size_t i = 0; i < a.size(); ++i) {
+            const json::Value& e = a[i];
+            std::string s = e.is_object() ? e.get(key).as_string("") : e.as_string("");
+            if (!s.empty()) dst->push_back(std::move(s));
+        }
+    };
+    strings(v.get("samplers"), &out->samplers, "name");
+    strings(v.get("schedulers"), &out->schedulers, "name");
+    strings(v.get("loras"), &out->loras, "name");
+
+    // The mode-aware fields are the real ones; the top-level trio are
+    // documented as deprecated mirrors of whichever mode is current, so they
+    // are the fallback rather than the source.
+    const json::Value& feat = v.find("features_by_mode") ? v.get("features_by_mode").get("img_gen") : v.get("features");
+    auto feature = [&feat](const char* name) {
+        // Reported either as a list of names or as an object of flags,
+        // depending on the build.
+        if (feat.is_object()) return feat.get(name).as_bool(false) || feat.find(name) != nullptr;
+        for (size_t i = 0; i < feat.size(); ++i)
+            if (feat[i].as_string("") == name) return true;
+        return false;
+    };
+    out->takes_init = feature("init_image");
+    out->takes_mask = feature("mask_image");
+    out->takes_refs = feature("ref_images");
+    out->takes_lora = feature("lora");
+
+    const json::Value& lim = v.get("limits");
+    out->min_width = static_cast<int>(lim.get("min_width").as_number(0));
+    out->max_width = static_cast<int>(lim.get("max_width").as_number(0));
+    out->min_height = static_cast<int>(lim.get("min_height").as_number(0));
+    out->max_height = static_cast<int>(lim.get("max_height").as_number(0));
+    out->max_batch = static_cast<int>(lim.get("max_batch_count").as_number(0));
+
+    const json::Value& def = v.find("defaults_by_mode") ? v.get("defaults_by_mode").get("img_gen") : v.get("defaults");
+    out->width = static_cast<int>(def.get("width").as_number(0));
+    out->height = static_cast<int>(def.get("height").as_number(0));
+    const json::Value& sp = def.get("sample_params");
+    out->steps = static_cast<int>(sp.get("sample_steps").as_number(0));
+    out->txt_cfg = static_cast<float>(sp.get("guidance").get("txt_cfg").as_number(0));
+    out->sampler = sp.get("sample_method").as_string("");
+    out->scheduler = sp.get("scheduler").as_string("");
+    return true;
+}
+
+std::string probe(const std::string& base, std::string* err) {
+    Capabilities c;
+    if (!capabilities(base, &c, err)) return {};
+    return c.model;
 }
 
 gen::Backend backend(const std::string& base) {
@@ -169,23 +232,32 @@ gen::Backend backend(const std::string& base) {
         using namespace std::chrono_literals;
         gen::Result out;
         if (!available()) { out.error = "curl is not installed"; return out; }
-        if (req.init.empty()) { out.error = "nothing to work from"; return out; }
+        // No picture at all is a text-to-image request, which a unified
+        // model answers and an inpainting one does not. It still has to say
+        // how big, since there is nothing to take a size from.
+        const bool from_nothing = req.init.empty() && req.refs.empty();
+        if (from_nothing && (req.width <= 0 || req.height <= 0)) { out.error = "nothing to work from"; return out; }
 
-        const int w = req.init.width(), h = req.init.height();
+        const int w = !req.init.empty() ? req.init.width() : req.width > 0 ? req.width : req.refs[0].width();
+        const int h = !req.init.empty() ? req.init.height() : req.height > 0 ? req.height : req.refs[0].height();
         json::Value body = json::Value::object();
         // The caller's parameters go through untouched; only the pieces the
         // document owns are filled in here.
         for (const auto& [k, v] : req.params.obj) body.set(k, v);
-        const std::string picture = base64(io::encode_png(req.init));
         if (req.conditioning == gen::Conditioning::Reference) {
             // An instruction model takes the picture as what it is editing,
             // not as noise to work back from, and a mask only crops whatever
-            // it decided to imagine.
+            // it decided to imagine. The layer being edited goes first and
+            // anything else the caller offered follows, because the order is
+            // what the instruction refers to ("put the object from the
+            // second picture into the first").
             json::Value refs = json::Value::array();
-            refs.push(json::Value::string(picture));
-            body.set("ref_images", std::move(refs));
-        } else {
-            body.set("init_image", json::Value::string(picture));
+            if (!req.init.empty()) refs.push(json::Value::string(base64(io::encode_png(req.init))));
+            for (const Image& r : req.refs)
+                if (!r.empty()) refs.push(json::Value::string(base64(io::encode_png(r))));
+            if (refs.size() > 0) body.set("ref_images", std::move(refs));
+        } else if (!req.init.empty()) {
+            body.set("init_image", json::Value::string(base64(io::encode_png(req.init))));
             if (!req.region.empty()) body.set("mask_image", json::Value::string(base64(mask_png(req.region, w, h))));
         }
         body.set("width", json::Value::number(w));

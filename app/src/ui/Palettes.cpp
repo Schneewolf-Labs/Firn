@@ -540,6 +540,8 @@ static void draw_overview(App& app) {
     ImGui::End();
 }
 
+void draw_generate_panel(App& app);   // ui/GeneratePanel.cpp
+
 void App::draw_palettes() {
     draw_tools(*this);
     draw_tool_options(*this);
@@ -547,4 +549,5 @@ void App::draw_palettes() {
     draw_layers(*this);
     draw_history(*this);
     draw_overview(*this);
+    draw_generate_panel(*this);
 }

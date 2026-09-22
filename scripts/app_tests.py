@@ -650,8 +650,19 @@ def test_generate_action(f):
     check(f.refused("generate.edit", prompt="remove the dog"), "generative edit refuses with no model configured")
     check(f.refused("generate.edit"), "and refuses without an instruction")
     edit = json.loads(f.do("app.describe", name="generate.edit"))["actions"][0]
-    check(set(edit["input_schema"]["properties"]) == {"prompt", "seed"}, "editing takes an instruction and a seed, no strength")
+    check(set(edit["input_schema"]["properties"]) == {"prompt", "references", "seed"},
+          "editing takes an instruction, reference layers and a seed, no strength")
     check("prompt" in edit["input_schema"].get("required", []), "the instruction is required")
+    # A unified model generates as well as edits, so there is a third thing
+    # to ask for: a layer from the words alone, with no picture going out.
+    check(f.refused("generate.image", prompt="a teapot"), "generating refuses with no model configured")
+    check(f.refused("generate.image"), "and refuses without a prompt")
+    make = json.loads(f.do("app.describe", name="generate.image"))["actions"][0]
+    check(set(make["input_schema"]["properties"]) == {"prompt", "width", "height", "seed"},
+          "generating takes a prompt and a size")
+    # The selection earlier is a history step of its own; what matters is
+    # that none of the three refusals added one.
+    check(f.image()["history_cursor"] == 1, "no refusal added a history step")
     f.do("file.close")
 
 

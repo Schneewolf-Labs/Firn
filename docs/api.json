@@ -515,9 +515,57 @@
       "input_schema": {
         "additionalProperties": false,
         "properties": {
+          "height": {
+            "description": "How tall; left out, the size of the image",
+            "maximum": 4096,
+            "minimum": 64,
+            "type": "number",
+            "x-default-description": "the image height"
+          },
+          "prompt": {
+            "description": "What to make",
+            "type": "string"
+          },
+          "seed": {
+            "description": "Pin the result; left out, every call differs",
+            "maximum": 2147483647,
+            "minimum": 0,
+            "type": "number",
+            "x-default-description": "a fresh one each time"
+          },
+          "width": {
+            "description": "How wide; left out, the size of the image",
+            "maximum": 4096,
+            "minimum": 64,
+            "type": "number",
+            "x-default-description": "the image width"
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "type": "object"
+      },
+      "name": "generate.image",
+      "summary": "Make a new layer from a prompt alone, for models that generate as well as edit"
+    },
+    {
+      "batch_safe": false,
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {
           "prompt": {
             "description": "What to change, as an instruction: \"remove the dog\"",
             "type": "string"
+          },
+          "references": {
+            "description": "Other layers to show the model, by index, in the order the instruction refers to them",
+            "items": {
+              "minimum": 0,
+              "type": "integer"
+            },
+            "type": "array",
+            "x-default-description": "none"
           },
           "seed": {
             "description": "Pin the result; left out, every call differs",

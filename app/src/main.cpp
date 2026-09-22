@@ -84,10 +84,23 @@ static bool build_default_layout(App& app, ImGuiID dockspace_id) {
     ImGui::DockBuilderDockWindow("Image", center);
     ImGui::DockBuilderDockWindow("Materials", right_top);
     ImGui::DockBuilderDockWindow("Overview", right_top);
+    ImGui::DockBuilderDockWindow("Generate", right_top);
     ImGui::DockBuilderDockWindow("Layers", right_bottom);
     ImGui::DockBuilderDockWindow("History", right_bottom);
     ImGui::DockBuilderFinish(dockspace_id);
     return true;
+}
+
+// A palette added after a workspace was saved has no entry in the layout and
+// would arrive floating over the picture, which reads as a stray window
+// rather than as part of the program. It is docked alongside a palette that
+// is already there, once, the first time it is seen.
+static void dock_new_palette(const char* window, const char* beside) {
+    ImGuiWindow* w = ImGui::FindWindowByName(window);
+    ImGuiWindow* n = ImGui::FindWindowByName(beside);
+    if (!w || !n || w->DockId != 0 || n->DockId == 0) return;
+    ImGui::DockBuilderDockWindow(window, n->DockId);
+    ImGui::DockBuilderFinish(n->DockId);
 }
 
 // The icon is embedded at build time from assets/icon-128.png (see
@@ -238,6 +251,7 @@ int main(int argc, char** argv) {
     Driver driver;
     if (const char* sock = std::getenv("FIRN_DRIVE")) { if (!driver.start(sock)) return 1; }
     bool first_frame = true;
+    int layout_frames = 0;   // see dock_new_palette
     // What the palette pair should go back to, taken before the first frame
     // because drawing them overwrites the live value with whatever is
     // currently showing.
@@ -324,6 +338,10 @@ int main(int argc, char** argv) {
 #endif
         app.draw_canvas();
         app.draw_palettes();
+        // A palette added since this workspace was saved joins the tabs it
+        // belongs with rather than floating over the picture. It can only be
+        // found once it has drawn itself, so not on the first frame.
+        if (!default_layout_created && layout_frames < 4) { dock_new_palette("Generate", "Materials"); ++layout_frames; }
         // Put the right-hand palette back where it was left. A fresh
         // workspace starts on Materials; with a saved one ImGui restores the
         // dock layout but hands the tab to whichever of the pair drew last,

@@ -201,9 +201,12 @@ private:
 // active layer. Used by Paste As New Layer.
 class PasteLayerCommand : public Command {
 public:
-    PasteLayerCommand(std::string layer_name, Image pixels, bool floating = false)
-        : layer_name_(std::move(layer_name)), pixels_(std::move(pixels)), floating_(floating) {}
-    std::string name() const override { return floating_ ? "Float" : "Paste As New Layer"; }
+    // `history` names the step when the layer did not arrive from the
+    // clipboard: a generated layer in the History palette should say what
+    // made it, not "Paste As New Layer".
+    PasteLayerCommand(std::string layer_name, Image pixels, bool floating = false, std::string history = {})
+        : layer_name_(std::move(layer_name)), pixels_(std::move(pixels)), floating_(floating), history_(std::move(history)) {}
+    std::string name() const override { return !history_.empty() ? history_ : floating_ ? "Float" : "Paste As New Layer"; }
     void execute(Document& doc) override;
     void undo(Document& doc) override;
     size_t memory_bytes() const override { return pixels_.size_bytes(); }
@@ -211,6 +214,7 @@ private:
     std::string layer_name_;
     Image pixels_;
     bool floating_ = false;
+    std::string history_;
     size_t index_ = 0;
     int prev_active_ = -1;
 };

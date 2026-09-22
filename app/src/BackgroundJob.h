@@ -15,7 +15,7 @@
 
 struct BackgroundJob {
     // What the main thread does with the result when the worker is done.
-    enum class Kind { Fill, Save, Open };
+    enum class Kind { Fill, NewLayer, Save, Open };
 
     Kind kind = Kind::Fill;
     std::string name;              // the dialog's title and the history entry
@@ -27,6 +27,7 @@ struct BackgroundJob {
 
     firn::Image result;            // Fill: the worker's buffer, read once `done` is ready
     size_t layer = 0;              // Fill: where it goes
+    std::string layer_name;        // NewLayer: what to call the layer it arrives as
     std::string path, error;       // Save and Open
     std::unique_ptr<firn::Document> loaded;      // Open: the worker's document
     std::vector<std::string> warnings;           // Open

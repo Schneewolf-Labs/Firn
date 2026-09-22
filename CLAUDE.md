@@ -531,6 +531,25 @@ docs/    notes on the original: command inventory, module mapping, FORMAT.md
   work is out, so a `Request` records the `revision` and `layer` it was built
   from; a result that comes back to a document that moved must degrade
   visibly rather than paint into the wrong place.
+- **The Generate palette** (`app/src/ui/GeneratePanel.cpp`, state in
+  `ui/GenerateState.h`) asks the server what it is
+  (`genhttp::capabilities`, `GET /sdcpp/v1/capabilities`) and builds itself
+  from the answer: sampler and scheduler lists, the LoRA folder, the size
+  limits, and whether this model takes a mask or reference images at all.
+  Do not hardcode any of that -- a build of stable-diffusion.cpp ships
+  whichever samplers it was compiled with and the loaded model decides the
+  rest. The question goes to a worker, because a wrong address makes curl
+  wait out its timeout. Two layout rules the panel learned the hard way: the
+  prompt and its three buttons come first and the settings scroll below
+  them, or expanding a section pushes the buttons out of a short dock; and
+  the numbers live in a two-column table so their labels survive a narrow
+  column. A palette added after a workspace was saved has no entry in the
+  ini and would arrive floating, so `dock_new_palette` in main.cpp puts it
+  beside a palette that is already there, once.
+  `model.name` from the server is **not** reliable evidence of what is
+  loaded: started with `--diffusion-model`, this server reported an
+  unrelated checkpoint from its models folder until the first generation
+  had run.
 - **Talking to an image model** is `app/src/GenerateBackend.cpp`, a
   `gen::Backend` over the native async API (`/sdcpp/v1/img_gen`, poll,
   cancel). It shells out to curl or PowerShell like `UpdateCheck` rather
@@ -550,6 +569,14 @@ docs/    notes on the original: command inventory, module mapping, FORMAT.md
   stuck: seed 42 on one model returned flat colour where a random seed
   returned the scene. `generate.fill` takes an optional seed so a script can
   pin what the interface varies.
+  **A unified model generates as well as edits** (Qwen-Image-2.1 and its
+  kind): a request with no init image and no references is text to image,
+  which is why `gen::Request` carries a `width`/`height` of its own -- there
+  is no picture to take a size from. Several reference images go in
+  `ref_images` in order, the layer being edited first, because that order is
+  what an instruction means by "the second picture". Verified on this
+  machine: two references at 1024 put the object from one layer into
+  another's scene and kept its lighting.
   The address lives in `Config::generate_url` and is empty by default: a
   request tells a server someone here is running Firn, the same reasoning as
   the update check.

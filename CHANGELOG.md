@@ -6,6 +6,23 @@ section into the next version.
 
 ## Unreleased
 
+### Added
+- A Generate palette, beside Materials and Overview. Type a prompt and the
+  answer arrives as a layer: "Generate" makes one from the words alone,
+  "Fill" replaces a selection and leaves the rest of the picture untouched,
+  and "Edit layer" changes the whole layer by instruction. Everything it
+  offers -- the samplers, the schedulers, the LoRAs, the sizes it will take,
+  whether the model can use a mask or a reference at all -- is read from the
+  server rather than written into Firn, so it follows whatever model is
+  loaded instead of going stale.
+- Reference layers. A unified model can be shown several pictures at once,
+  so the panel lists the other layers and numbers the ones you tick: the
+  layer being edited is the first picture, and the instruction can then say
+  "the compass from the second picture". Verified against Qwen-Image-2.1 on
+  stable-diffusion.cpp.
+- `generate.image` makes a layer from a prompt for scripts, and
+  `generate.edit` takes a `references` list of layer indexes.
+
 ## 0.8.0 (2026-09-19)
 
 ### Added

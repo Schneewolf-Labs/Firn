@@ -53,6 +53,11 @@ struct DocState {
     uint64_t autosave_state = static_cast<size_t>(-1);   // history state at the last autosave
 };
 
+// Declared rather than included: generate.h is only needed by the few
+// translation units that actually build a request, and App.h is included by
+// two dozen.
+namespace firn::gen { struct Request; }
+
 struct App {
     App();
     ~App();   // defined in App.cpp, where AdjustState is complete
@@ -105,6 +110,7 @@ struct App {
     std::unique_ptr<struct EffectBrowserState> fx_browser;   // app/src/ui/EffectBrowserState.h
     std::unique_ptr<struct VectorDialogState> vector_dialog_state;   // app/src/ui/VectorDialogState.h
     std::unique_ptr<struct PaletteState> palette_state;   // app/src/ui/PaletteState.h
+    std::unique_ptr<struct GenerateState> generate_state;   // app/src/ui/GenerateState.h
     std::unique_ptr<struct AdjustLayerState> adjust_layer_state;   // app/src/ui/AdjustLayerState.h
     Config config;
     bool show_rulers = true, show_grid = false, show_guides = true;
@@ -644,10 +650,16 @@ struct App {
     // Hands the selection to an image model and composites what comes back.
     // An empty prompt is allowed: some services take the instruction from
     // the picture alone.
-    void generative_fill(const std::string& prompt, bool background = true);
+    void generative_fill(const std::string& prompt, bool background = true, const firn::json::Value* extra = nullptr);
     // Instruction editing: the whole layer goes as a reference, the model
     // returns the edited picture, and there is no selection involved.
-    void generative_edit(const std::string& prompt, bool background = true);
+    void generative_edit(const std::string& prompt, bool background = true, const std::vector<int>& refs = {},
+                         const firn::json::Value* extra = nullptr);
+    // Text to image, arriving as a new layer.
+    void generate_image(const std::string& prompt, int width = 0, int height = 0, bool background = true,
+                        const firn::json::Value* extra = nullptr);
+    void run_generation(firn::gen::Request req, bool background);
+    firn::Image fit_to_document(const firn::Image& generated) const;
     float generate_strength = 0.9f;   // how far from the original to go
     int generate_seed = -1;           // -1 asks for a fresh one each time
     bool generate_configured() const;

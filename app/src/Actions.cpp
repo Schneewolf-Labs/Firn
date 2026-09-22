@@ -307,19 +307,45 @@ std::vector<Action> build() {
             app.generate_seed = seed_before;
             return worked ? ok_json() : fail(ok, why);
         });
+    add("generate.image", "Make a new layer from a prompt alone, for models that generate as well as edit",
+        {{"prompt", "string", "What to make", true},
+         {"width", "number", "How wide; left out, the size of the image", false, nullptr, "the image width", R"({"minimum":64,"maximum":4096})"},
+         {"height", "number", "How tall; left out, the size of the image", false, nullptr, "the image height", R"({"minimum":64,"maximum":4096})"},
+         {"seed", "number", "Pin the result; left out, every call differs", false, nullptr, "a fresh one each time", R"({"minimum":0,"maximum":2147483647})"}},
+        [](App& app, const Value& p, bool* ok) {
+            std::string e;
+            if (!need_doc(app, ok, e)) return e;
+            if (!app.generate_configured()) return fail(ok, "no image model is configured; set one in Preferences");
+            if (str(p, "prompt").empty()) return fail(ok, "generate.image needs a prompt");
+            const int seed_before = app.generate_seed;
+            app.generate_seed = p.find("seed") ? static_cast<int>(p.get("seed").as_number(-1)) : -1;
+            const std::string before = app.status;
+            app.status.clear();
+            app.generate_image(str(p, "prompt"), static_cast<int>(p.get("width").as_number(0)),
+                               static_cast<int>(p.get("height").as_number(0)), false);
+            const bool worked = app.status == "Generate done";
+            const std::string why = app.status;
+            app.status = before;
+            app.generate_seed = seed_before;
+            return worked ? ok_json() : fail(ok, why);
+        });
     add("generate.edit", "Edit the whole layer by instruction, for models that take a reference image",
         {{"prompt", "string", "What to change, as an instruction: \"remove the dog\"", true},
+         {"references", "array", "Other layers to show the model, by index, in the order the instruction refers to them",
+          false, nullptr, "none", R"({"type":"array","items":{"type":"integer","minimum":0}})"},
          {"seed", "number", "Pin the result; left out, every call differs", false, nullptr, "a fresh one each time", R"({"minimum":0,"maximum":2147483647})"}},
         [](App& app, const Value& p, bool* ok) {
             std::string e;
             if (!need_doc(app, ok, e)) return e;
             if (!app.generate_configured()) return fail(ok, "no image model is configured; set one in Preferences");
             if (str(p, "prompt").empty()) return fail(ok, "generate.edit needs an instruction");
+            std::vector<int> refs;
+            for (const Value& r : p.get("references").arr) refs.push_back(static_cast<int>(r.as_number(-1)));
             const int seed_before = app.generate_seed;
             app.generate_seed = p.find("seed") ? static_cast<int>(p.get("seed").as_number(-1)) : -1;
             const std::string before = app.status;
             app.status.clear();
-            app.generative_edit(str(p, "prompt"), false);
+            app.generative_edit(str(p, "prompt"), false, refs);
             const bool worked = app.status == "Generative Edit done";
             const std::string why = app.status;
             app.status = before;

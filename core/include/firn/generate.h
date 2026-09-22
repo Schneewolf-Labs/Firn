@@ -55,8 +55,19 @@ struct Request {
     json::Value params = json::Value::object();   // passed through untouched
 
     Image init;                      // the picture to work from, when there is one
+    // Further pictures for the model to look at, in order. A unified model
+    // takes several (Qwen-Image-2.1 takes ten), which is how one layer's
+    // subject is put into another layer's scene. Only meaningful alongside
+    // Conditioning::Reference: an inpainting model has one hole to fill and
+    // nothing to compare it with.
+    std::vector<Image> refs;
     Conditioning conditioning = Conditioning::Init;
     Mask region;                     // where it applies; empty means the whole image
+    // What size to ask for when there is no picture to take it from. A
+    // unified model generates as well as edits, and a request with neither
+    // an init image nor a reference is a text-to-image request, which has
+    // to say how big the answer should be.
+    int width = 0, height = 0;
     Disposition disposition = Disposition::NewLayer;
     float feather = 3.0f;            // softening applied when compositing into a region
 

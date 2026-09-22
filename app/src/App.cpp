@@ -3,6 +3,7 @@
 #include "ui/AdjustState.h"
 #include "ui/AdjustLayerState.h"
 #include "ui/PaletteState.h"
+#include "ui/GenerateState.h"
 #include "ui/VectorDialogState.h"
 #include "ui/EffectBrowserState.h"
 #include "ui/SelectionMenuState.h"
@@ -43,6 +44,7 @@ App::~App() {
 App::App() : tools(make_default_tools()) {
     adjust_layer_state = std::make_unique<AdjustLayerState>();
     palette_state = std::make_unique<PaletteState>();
+    generate_state = std::make_unique<GenerateState>();
     vector_dialog_state = std::make_unique<VectorDialogState>();
     fx_browser = std::make_unique<EffectBrowserState>();
     selection_menu_state = std::make_unique<SelectionMenuState>();
@@ -664,45 +666,42 @@ bool App::generate_configured() const {
     return !config.generate_url.empty() && firn::genhttp::available();
 }
 
-void App::generative_fill(const std::string& prompt, bool background) {
-    if (!doc || !active_is_raster()) { status = "Generative Fill needs a raster layer."; return; }
-    if (!doc->has_selection() || !doc->selection().any()) { status = "Generative Fill needs a selection."; return; }
-    if (config.generate_url.empty()) { status = "Generative Fill: set a server address in Preferences first."; return; }
-    if (!firn::genhttp::available()) { status = "Generative Fill needs curl, which is not installed."; return; }
-    if (job) { status = job->name + " is still running."; return; }
-
-    const size_t layer = static_cast<size_t>(active_layer());
-    gen::Request req;
-    req.name = "Generative Fill";
-    req.init = doc->layer(layer).pixels;
-    req.region = doc->selection();
-    req.disposition = gen::Disposition::IntoRegion;
-    req.feather = 6.0f;
-    req.revision = doc->revision();
-    req.layer = static_cast<int>(layer);
-    if (!prompt.empty()) req.params.set("prompt", json::Value::string(prompt));
-    req.params.set("strength", json::Value::number(generate_strength));
-    if (generate_seed >= 0) req.params.set("seed", json::Value::number(generate_seed));
-
+// The plumbing every generation request shares: hand it to the backend on a
+// worker, relay progress and cancellation both ways, and leave the answer
+// where draw_background_job can put it into the document. The three things
+// that differ -- what is sent, what it is called, and what the answer means
+// -- are all in the Request.
+void App::run_generation(gen::Request req, bool background) {
+    const bool new_layer = req.disposition == gen::Disposition::NewLayer;
+    const size_t layer = req.layer >= 0 ? static_cast<size_t>(req.layer) : 0;
+    const std::string name = req.name;
+    Image before = req.init;
     gen::Backend send = firn::genhttp::backend(config.generate_url);
+
     if (!background) {
         // A script wants the work finished when the call returns.
         gen::Progress p;
         gen::Result r = send(req, p);
-        if (!r.ok) { status = "Generative Fill: " + (r.error.empty() ? std::string("no result") : r.error); return; }
-        Image out = req.init;
-        gen::composite_into(out, r.image, req.region, req.feather);
-        run(std::make_unique<AdjustCommand>(layer, "Generative Fill", [img = std::move(out)](Image& i) { i = img; }));
-        status = "Generative Fill done";
+        if (!r.ok) { fail(name + ": " + (r.error.empty() ? std::string("no result") : r.error)); return; }
+        if (new_layer) {
+            run(std::make_unique<PasteLayerCommand>(name, fit_to_document(r.image), false, name));
+        } else {
+            Image out = std::move(before);
+            gen::composite_into(out, r.image, req.region, req.feather);
+            run(std::make_unique<AdjustCommand>(layer, name, [img = std::move(out)](Image& i) { i = img; }));
+        }
+        say(name + " done");
         return;
     }
 
     job = std::make_unique<BackgroundJob>();
-    job->name = "Generative Fill";
+    job->kind = new_layer ? BackgroundJob::Kind::NewLayer : BackgroundJob::Kind::Fill;
+    job->name = name;
+    job->layer_name = name;
     job->layer = layer;
-    job->result = req.init;
+    job->result = std::move(before);
     BackgroundJob* j = job.get();
-    j->done = std::async(std::launch::async, [j, req = std::move(req), send = std::move(send)]() mutable {
+    j->done = std::async(std::launch::async, [j, new_layer, req = std::move(req), send = std::move(send), this]() mutable {
         gen::Progress p;
         // The service decides whether it will still take a cancel; the
         // button follows what it says rather than the other way round.
@@ -718,13 +717,51 @@ void App::generative_fill(const std::string& prompt, bool background) {
         p.status.store(gen::Status::Done);
         relay.join();
         if (!r.ok) { j->error = r.error; return false; }
-        gen::composite_into(j->result, r.image, req.region, req.feather);
+        if (new_layer) j->result = fit_to_document(r.image);
+        else gen::composite_into(j->result, r.image, req.region, req.feather);
         return true;
     });
     status = "Asking the model...";
 }
 
-void App::generative_edit(const std::string& prompt, bool background) {
+// A generated picture is whatever size was asked for, which need not be the
+// size of the document it is arriving in. Rather than a layer that does not
+// line up with the image, it is placed at the top left of a document-sized
+// layer -- cropped if it is larger, transparent around it if smaller.
+Image App::fit_to_document(const Image& generated) const {
+    if (!doc || generated.empty()) return generated;
+    if (generated.width() == doc->width() && generated.height() == doc->height()) return generated;
+    Image out(doc->width(), doc->height(), {0, 0, 0, 0});
+    const int w = std::min(generated.width(), out.width()), h = std::min(generated.height(), out.height());
+    for (int y = 0; y < h; ++y)
+        for (int x = 0; x < w; ++x) out.set(x, y, generated.get(x, y));
+    return out;
+}
+
+void App::generative_fill(const std::string& prompt, bool background, const json::Value* extra) {
+    if (!doc || !active_is_raster()) { status = "Generative Fill needs a raster layer."; return; }
+    if (!doc->has_selection() || !doc->selection().any()) { status = "Generative Fill needs a selection."; return; }
+    if (config.generate_url.empty()) { status = "Generative Fill: set a server address in Preferences first."; return; }
+    if (!firn::genhttp::available()) { status = "Generative Fill needs curl, which is not installed."; return; }
+    if (job) { status = job->name + " is still running."; return; }
+
+    const size_t layer = static_cast<size_t>(active_layer());
+    gen::Request req;
+    req.name = "Generative Fill";
+    req.init = doc->layer(layer).pixels;
+    req.region = doc->selection();
+    req.disposition = gen::Disposition::IntoRegion;
+    req.feather = 6.0f;
+    req.revision = doc->revision();
+    req.layer = static_cast<int>(layer);
+    if (extra) for (const auto& [k, v] : extra->obj) req.params.set(k, v);
+    if (!prompt.empty()) req.params.set("prompt", json::Value::string(prompt));
+    req.params.set("strength", json::Value::number(generate_strength));
+    if (generate_seed >= 0) req.params.set("seed", json::Value::number(generate_seed));
+    run_generation(std::move(req), background);
+}
+
+void App::generative_edit(const std::string& prompt, bool background, const std::vector<int>& refs, const json::Value* extra) {
     if (!doc || !active_is_raster()) { status = "Generative Edit needs a raster layer."; return; }
     if (prompt.empty()) { status = "Generative Edit needs an instruction."; return; }
     if (config.generate_url.empty()) { status = "Generative Edit: set a server address in Preferences first."; return; }
@@ -739,46 +776,39 @@ void App::generative_edit(const std::string& prompt, bool background) {
     req.disposition = gen::Disposition::ReplaceLayer;   // the model returns the whole picture
     req.revision = doc->revision();
     req.layer = static_cast<int>(layer);
+    // Further layers for the model to look at. A unified model is told
+    // "the second picture" and so on, so the order here is the order the
+    // instruction can refer to.
+    for (const int i : refs)
+        if (i >= 0 && i < static_cast<int>(doc->layer_count()) && i != static_cast<int>(layer) && doc->layer(i).is_raster())
+            req.refs.push_back(doc->layer(i).pixels);
+    if (extra) for (const auto& [k, v] : extra->obj) req.params.set(k, v);
     req.params.set("prompt", json::Value::string(prompt));
     if (generate_seed >= 0) req.params.set("seed", json::Value::number(generate_seed));
+    run_generation(std::move(req), background);
+}
 
-    gen::Backend send = firn::genhttp::backend(config.generate_url);
-    if (!background) {
-        gen::Progress p;
-        gen::Result r = send(req, p);
-        if (!r.ok) { status = "Generative Edit: " + (r.error.empty() ? std::string("no result") : r.error); return; }
-        // Whole-picture: the region is empty, so this takes the frame entire
-        // after bringing it back to the layer's size.
-        Image out = req.init;
-        gen::composite_into(out, r.image, Mask(), 0.0f);
-        run(std::make_unique<AdjustCommand>(layer, "Generative Edit", [img = std::move(out)](Image& i) { i = img; }));
-        status = "Generative Edit done";
-        return;
-    }
+// Text to image: nothing goes to the model but the words, and the answer
+// arrives as a new layer. A unified model does this and an inpainting one
+// does not, which is why the panel asks the server what it is.
+void App::generate_image(const std::string& prompt, int w, int h, bool background, const json::Value* extra) {
+    if (prompt.empty()) { status = "Generate needs a prompt."; return; }
+    if (config.generate_url.empty()) { status = "Generate: set a server address in Preferences first."; return; }
+    if (!firn::genhttp::available()) { status = "Generate needs curl, which is not installed."; return; }
+    if (job) { status = job->name + " is still running."; return; }
+    if (!doc) { status = "Generate needs an image open to put the layer in."; return; }
 
-    job = std::make_unique<BackgroundJob>();
-    job->name = "Generative Edit";
-    job->layer = layer;
-    job->result = req.init;
-    BackgroundJob* j = job.get();
-    j->done = std::async(std::launch::async, [j, req = std::move(req), send = std::move(send)]() mutable {
-        gen::Progress p;
-        std::atomic<bool>* cancel = &j->cancel;
-        std::thread relay([&p, cancel, j] {
-            while (p.status.load() != gen::Status::Done && p.status.load() != gen::Status::Failed) {
-                if (cancel->load()) p.cancel.store(true);
-                j->progress.store(std::max(0.0f, p.fraction.load()), std::memory_order_relaxed);
-                std::this_thread::sleep_for(std::chrono::milliseconds(100));
-            }
-        });
-        gen::Result r = send(req, p);
-        p.status.store(gen::Status::Done);
-        relay.join();
-        if (!r.ok) { j->error = r.error; return false; }
-        gen::composite_into(j->result, r.image, Mask(), 0.0f);
-        return true;
-    });
-    status = "Asking the model...";
+    gen::Request req;
+    req.name = "Generate";
+    req.width = w > 0 ? w : doc->width();
+    req.height = h > 0 ? h : doc->height();
+    req.disposition = gen::Disposition::NewLayer;
+    req.revision = doc->revision();
+    req.layer = active_layer();
+    if (extra) for (const auto& [k, v] : extra->obj) req.params.set(k, v);
+    req.params.set("prompt", json::Value::string(prompt));
+    if (generate_seed >= 0) req.params.set("seed", json::Value::number(generate_seed));
+    run_generation(std::move(req), background);
 }
 
 void App::draw_background_job() {
@@ -818,6 +848,13 @@ void App::draw_background_job() {
             config.last_directory = file_dialog.directory();
             status = "Opened " + job->path;
             for (const std::string& w : job->warnings) status += "\n" + w;
+        }
+    } else if (job->kind == BackgroundJob::Kind::NewLayer) {
+        if (!finished) status = job->error.empty() ? job->name + " cancelled" : job->name + ": " + job->error;
+        else if (!doc) status = job->name + ": the image is gone";
+        else {
+            run(std::make_unique<PasteLayerCommand>(job->layer_name, std::move(job->result), false, job->name));
+            status = job->name + " done";
         }
     } else {
         const size_t layer = job->layer;
