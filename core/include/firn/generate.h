@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "firn/image.h"
+#include "firn/raster.h"
 #include "firn/json.h"
 #include "firn/mask.h"
 
@@ -63,6 +64,18 @@ struct Request {
     std::vector<Image> refs;
     Conditioning conditioning = Conditioning::Init;
     Mask region;                     // where it applies; empty means the whole image
+    // When the request was built from a window of the layer rather than the
+    // whole of it, the part of the layer it came from and the region, in
+    // layer pixels, to composite the answer through. `region` above is what
+    // the model is told; these are what the document is told. Empty means
+    // the request is about the whole layer and `region` serves for both.
+    raster::Rect place;
+    Mask place_region;
+    // Take the model's overall shift in exposure back out before compositing
+    // (see match_surroundings). Off makes sense only when the answer is
+    // meant to look different from its surroundings.
+    bool match_tone = true;
+
     // What size to ask for when there is no picture to take it from. A
     // unified model generates as well as edits, and a request with neither
     // an init image nor a reference is a text-to-image request, which has
@@ -154,6 +167,39 @@ private:
     struct Impl;
     std::unique_ptr<Impl> impl_;
 };
+
+// The window of a layer sent to the model for a masked edit, and the size it
+// is sent at.
+//
+// Sending the whole layer is what makes a small fix in a big photograph come
+// back soft: the service resizes the frame to what the model works at, so a
+// 200 pixel repair inside a 6000 pixel picture arrives as thirty pixels of
+// actual information. A window around the selection is sent instead, at the
+// model's own working size where the picture allows it, so the repair is
+// made at full resolution with real context around it.
+struct Window {
+    raster::Rect box;          // the part of the layer to send, in layer pixels
+    int width = 0, height = 0; // the size to send it at; smaller than the box when the box is large
+    bool scaled() const { return width != box.x1 - box.x0 || height != box.y1 - box.y0; }
+};
+
+// `target` is the size the model works at (1024 for most). The window is
+// centred on the region, holds `context` times its longest side where the
+// layer allows, never leaves the layer, and is sent at a multiple of 64.
+Window context_window(const Mask& region, int layer_w, int layer_h, int target, float context = 1.8f);
+
+// Cancels an overall shift in brightness or colour before an answer is
+// composited back.
+//
+// These models rewrite the whole frame they are given, and the rewrite is
+// rarely at quite the same exposure as the original: the part kept is then a
+// patch that is visibly darker or warmer than the picture around it, however
+// softly its edge is feathered. The shift is measured where both pictures
+// still show the same thing -- inside `window` but outside `region` -- and
+// taken back out of `answer`. Nothing happens when there is too little of
+// that left to measure, which is the case a fill covering its whole window
+// presents.
+void match_surroundings(Image& answer, const Image& original, const Mask& region, raster::Rect window = {});
 
 // Composites a generated picture into `dst` through `region`, softened by
 // `feather` pixels, so that nothing outside the region moves.

@@ -3880,6 +3880,85 @@ static void test_generate_queue() {
         CHECK(all.get(0, 0).r == 255 && all.get(63, 47).r == 255);
     }
 
+    // The window sent for a masked edit. What this is guarding against is a
+    // small repair in a large picture arriving as a handful of pixels once
+    // the service has resized the whole frame to what the model works at.
+    {
+        auto region = [](int w, int h, raster::Rect r) {
+            Mask m(w, h, 0);
+            for (int y = r.y0; y < r.y1; ++y)
+                for (int x = r.x0; x < r.x1; ++x) m.at(x, y) = 255;
+            return m;
+        };
+        // A small selection in a big picture: a full-size window at native
+        // resolution, centred on it, and nothing is scaled at all.
+        gen::Window w = gen::context_window(region(4000, 3000, {1900, 1400, 2100, 1550}), 4000, 3000, 1024);
+        CHECK(w.box.x1 - w.box.x0 == 1024 && w.box.y1 - w.box.y0 == 1024);
+        CHECK(!w.scaled());
+        CHECK(w.box.x0 < 1900 && w.box.x1 > 2100 && w.box.y0 < 1400 && w.box.y1 > 1550);
+
+        // Against an edge: pushed back inside rather than clipped, so the
+        // window keeps its size and the repair still has context.
+        w = gen::context_window(region(4000, 3000, {0, 0, 120, 90}), 4000, 3000, 1024);
+        CHECK(w.box.x0 == 0 && w.box.y0 == 0);
+        CHECK(w.box.x1 - w.box.x0 == 1024 && w.box.y1 - w.box.y0 == 1024);
+
+        // A selection larger than the model works at: the window still holds
+        // it whole, and is sent scaled down onto the latent grid.
+        w = gen::context_window(region(4000, 3000, {500, 500, 2500, 2400}), 4000, 3000, 1024);
+        CHECK(w.box.x0 <= 500 && w.box.x1 >= 2500 && w.box.y0 <= 500 && w.box.y1 >= 2400);
+        CHECK(w.scaled() && w.width <= 1024 && w.height <= 1024);
+        CHECK(w.width % 64 == 0 && w.height % 64 == 0);
+
+        // A picture smaller than the model works at is sent as it is, not
+        // blown up to fill the window.
+        w = gen::context_window(region(300, 200, {100, 80, 140, 120}), 300, 200, 1024);
+        CHECK(w.box.x0 >= 0 && w.box.y0 >= 0 && w.box.x1 <= 300 && w.box.y1 <= 200);
+        CHECK(w.box.y1 - w.box.y0 == 200);
+
+        // No selection at all means the whole layer.
+        w = gen::context_window(Mask(), 800, 600, 1024);
+        CHECK(w.box.x0 == 0 && w.box.y0 == 0 && w.box.x1 == 800 && w.box.y1 == 600);
+    }
+
+    // Taking the model's own exposure back out. Without this a fill is a
+    // patch that is visibly darker than the picture around it however softly
+    // its edge is feathered.
+    {
+        Image original(64, 64, {120, 130, 140, 255});
+        Mask region(64, 64, 0);
+        for (int y = 24; y < 40; ++y)
+            for (int x = 24; x < 40; ++x) region.at(x, y) = 255;
+        // What such a model hands back: the whole frame 20 levels darker,
+        // with something different inside the selection.
+        Image answer(64, 64, {100, 110, 120, 255});
+        for (int y = 24; y < 40; ++y)
+            for (int x = 24; x < 40; ++x) answer.set(x, y, {200, 60, 60, 255});
+
+        Image fixed = answer;
+        gen::match_surroundings(fixed, original, region);
+        CHECK(fixed.get(2, 2).r == 120 && fixed.get(2, 2).g == 130 && fixed.get(2, 2).b == 140);
+        // The filled part moves by the same amount, not to the same value.
+        CHECK(fixed.get(30, 30).r == 220 && fixed.get(30, 30).g == 80 && fixed.get(30, 30).b == 80);
+
+        // Measured only inside the window it is given.
+        Image windowed = answer;
+        gen::match_surroundings(windowed, original, region, {16, 16, 48, 48});
+        CHECK(windowed.get(20, 20).r == 120);
+        CHECK(windowed.get(2, 2).r == 100);   // outside the window, untouched
+
+        // A selection covering everything leaves nothing to measure, and
+        // must not invent a correction from the filled pixels themselves.
+        Image all = answer;
+        gen::match_surroundings(all, original, Mask(64, 64, 255));
+        CHECK(all.get(2, 2).r == 100 && all.get(30, 30).r == 200);
+
+        // Nothing to correct is not an error.
+        Image same = original;
+        gen::match_surroundings(same, original, region);
+        CHECK(same.get(2, 2).r == 120);
+    }
+
     // Several at once, which is the reason a queue exists rather than one
     // slot: the interface stays responsive and the document is free to move.
     {

@@ -662,6 +662,18 @@ struct App {
     firn::Image fit_to_document(const firn::Image& generated) const;
     float generate_strength = 0.9f;   // how far from the original to go
     int generate_seed = -1;           // -1 asks for a fresh one each time
+    // A masked fill sends a window around the selection rather than the whole
+    // layer (firn::gen::context_window), so the repair is made at the model's
+    // own resolution however large the picture is.
+    int generate_context = 1024;      // the size that window is sent at
+    float generate_feather = 0.0f;    // how far the answer is softened back in; 0 = in proportion to the selection
+    bool generate_match_tone = true;  // take the model's own shift in exposure back out first
+    bool generate_new_layer = false;  // put the answer on its own layer instead of into this one
+    // Ask by instruction against a reference ("remove the dog") rather than
+    // by description through a mask ("wooden table"). A model that edits by
+    // instruction understands the first far better; one that only inpaints
+    // needs the second.
+    bool generate_instruct = true;
     bool generate_configured() const;
     void revert();               // reloads the file from disk, dropping every change
     bool show_revert_prompt = false;

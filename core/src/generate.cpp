@@ -41,6 +41,74 @@ const char* conditioning_name(Conditioning c) {
     return "";
 }
 
+// A square window centred on the region: square because that is what these
+// models are happiest with, centred so the thing being repaired is not up
+// against an edge with no context on one side.
+Window context_window(const Mask& region, int layer_w, int layer_h, int target, float context) {
+    Window w;
+    if (layer_w <= 0 || layer_h <= 0) return w;
+    if (target <= 0) target = 1024;
+    // No selection is not a small selection: it means the whole layer, and
+    // there is no window to choose.
+    const raster::Rect b = region.empty() ? raster::Rect{} : region.bounds();
+    if (b.empty()) { w.box = {0, 0, layer_w, layer_h}; }
+    else {
+        const int bw = b.x1 - b.x0, bh = b.y1 - b.y0;
+        // Enough room for context around the selection; and if that still
+        // fits inside the model's working size, take the whole of it, since
+        // the context is free and the repair stays at full resolution.
+        int side = static_cast<int>(std::lround(std::max(bw, bh) * context));
+        if (side <= target) side = target;
+        side = std::min(side, std::min(layer_w, layer_h));
+        side = std::max(side, 8);
+        // Centred, then pushed back inside the layer rather than clipped, so
+        // a selection near an edge still gets a full-sized window.
+        int x0 = (b.x0 + b.x1) / 2 - side / 2, y0 = (b.y0 + b.y1) / 2 - side / 2;
+        x0 = std::clamp(x0, 0, layer_w - side);
+        y0 = std::clamp(y0, 0, layer_h - side);
+        w.box = {x0, y0, x0 + side, y0 + side};
+    }
+    const int bw = w.box.x1 - w.box.x0, bh = w.box.y1 - w.box.y0;
+    // Sent at the model's size at most, and on its grid: a request that does
+    // not line up with the latent grid is rounded somewhere unseen.
+    const double shrink = std::min(1.0, static_cast<double>(target) / std::max(bw, bh));
+    auto grid = [](double v) { return std::max(64, static_cast<int>(std::lround(v / 64.0)) * 64); };
+    w.width = grid(bw * shrink);
+    w.height = grid(bh * shrink);
+    return w;
+}
+
+void match_surroundings(Image& answer, const Image& original, const Mask& region, raster::Rect window) {
+    if (answer.empty() || answer.width() != original.width() || answer.height() != original.height()) return;
+    if (window.empty()) window = {0, 0, answer.width(), answer.height()};
+    window = window.clipped(answer.width(), answer.height());
+    if (window.empty()) return;
+    const bool have_region = !region.empty() && region.width() == answer.width() && region.height() == answer.height();
+
+    double sum[3] = {0, 0, 0};
+    long long n = 0;
+    for (int y = window.y0; y < window.y1; ++y)
+        for (int x = window.x0; x < window.x1; ++x) {
+            // Only where the two pictures are meant to agree.
+            if (have_region && region.at(x, y) > 8) continue;
+            const Color a = answer.get(x, y), o = original.get(x, y);
+            sum[0] += static_cast<double>(a.r) - o.r;
+            sum[1] += static_cast<double>(a.g) - o.g;
+            sum[2] += static_cast<double>(a.b) - o.b;
+            ++n;
+        }
+    // Too little agreement left to measure anything from.
+    if (n < 256) return;
+    const double dr = sum[0] / n, dg = sum[1] / n, db = sum[2] / n;
+    if (std::abs(dr) < 0.5 && std::abs(dg) < 0.5 && std::abs(db) < 0.5) return;
+    auto fix = [](int v, double d) { return static_cast<uint8_t>(std::clamp(v - d, 0.0, 255.0)); };
+    for (int y = window.y0; y < window.y1; ++y)
+        for (int x = window.x0; x < window.x1; ++x) {
+            Color c = answer.get(x, y);
+            answer.set(x, y, {fix(c.r, dr), fix(c.g, dg), fix(c.b, db), c.a});
+        }
+}
+
 void composite_into(Image& dst, const Image& generated, const Mask& region, float feather) {
     if (dst.empty() || generated.empty()) return;
     const int w = dst.width(), h = dst.height();

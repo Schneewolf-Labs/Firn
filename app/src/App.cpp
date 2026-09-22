@@ -666,6 +666,40 @@ bool App::generate_configured() const {
     return !config.generate_url.empty() && firn::genhttp::available();
 }
 
+// The model's answer, put back where it belongs. A windowed request gets its
+// answer scaled back to the size of the window, dropped into the layer at the
+// window's position, and composited through the selection so that nothing
+// outside it moves -- which is the whole point of sending a window: the model
+// rewrites its entire frame, and only the selection is wanted.
+static Image place_answer(const firn::gen::Request& req, const Image& before, Image answer, bool onto_nothing) {
+    using namespace firn;
+    Image dst = onto_nothing ? Image(before.width(), before.height(), {0, 0, 0, 0}) : before;
+    if (req.place.empty()) {
+        gen::composite_into(dst, answer, onto_nothing ? req.place_region : req.region, req.feather);
+        return dst;
+    }
+    const int bw = req.place.x1 - req.place.x0, bh = req.place.y1 - req.place.y0;
+    if (answer.width() != bw || answer.height() != bh)
+        answer = raster::resample(answer, bw, bh, raster::Filter::Bicubic);
+    // The answer covers only the window, so the rest of the frame handed to
+    // composite_into is the picture as it was.
+    Image framed = before;
+    for (int y = 0; y < bh; ++y) {
+        const int dy = req.place.y0 + y;
+        if (dy < 0 || dy >= framed.height()) continue;
+        for (int x = 0; x < bw; ++x) {
+            const int dx = req.place.x0 + x;
+            if (dx < 0 || dx >= framed.width()) continue;
+            framed.set(dx, dy, answer.get(x, y));
+        }
+    }
+    // The model's own exposure taken back out, measured where the window
+    // still agrees with the picture.
+    if (req.match_tone) gen::match_surroundings(framed, before, req.place_region, req.place);
+    gen::composite_into(dst, framed, req.place_region, req.feather);
+    return dst;
+}
+
 // The plumbing every generation request shares: hand it to the backend on a
 // worker, relay progress and cancellation both ways, and leave the answer
 // where draw_background_job can put it into the document. The three things
@@ -675,7 +709,9 @@ void App::run_generation(gen::Request req, bool background) {
     const bool new_layer = req.disposition == gen::Disposition::NewLayer;
     const size_t layer = req.layer >= 0 ? static_cast<size_t>(req.layer) : 0;
     const std::string name = req.name;
-    Image before = req.init;
+    // What the answer is composited onto. For a windowed request that is the
+    // whole layer, not the window that was sent.
+    Image before = !req.place.empty() && doc && layer < doc->layer_count() ? doc->layer(layer).pixels : req.init;
     gen::Backend send = firn::genhttp::backend(config.generate_url);
 
     if (!background) {
@@ -683,12 +719,13 @@ void App::run_generation(gen::Request req, bool background) {
         gen::Progress p;
         gen::Result r = send(req, p);
         if (!r.ok) { fail(name + ": " + (r.error.empty() ? std::string("no result") : r.error)); return; }
-        if (new_layer) {
+        if (new_layer && req.place.empty() && req.place_region.empty()) {
             run(std::make_unique<PasteLayerCommand>(name, fit_to_document(r.image), false, name));
+        } else if (new_layer) {
+            run(std::make_unique<PasteLayerCommand>(name, place_answer(req, before, std::move(r.image), true), false, name));
         } else {
-            Image out = std::move(before);
-            gen::composite_into(out, r.image, req.region, req.feather);
-            run(std::make_unique<AdjustCommand>(layer, name, [img = std::move(out)](Image& i) { i = img; }));
+            run(std::make_unique<AdjustCommand>(layer, name,
+                [img = place_answer(req, before, std::move(r.image), false)](Image& i) { i = img; }));
         }
         say(name + " done");
         return;
@@ -717,8 +754,8 @@ void App::run_generation(gen::Request req, bool background) {
         p.status.store(gen::Status::Done);
         relay.join();
         if (!r.ok) { j->error = r.error; return false; }
-        if (new_layer) j->result = fit_to_document(r.image);
-        else gen::composite_into(j->result, r.image, req.region, req.feather);
+        if (new_layer && req.place.empty() && req.place_region.empty()) j->result = fit_to_document(r.image);
+        else j->result = place_answer(req, j->result, std::move(r.image), new_layer);
         return true;
     });
     status = "Asking the model...";
@@ -746,12 +783,49 @@ void App::generative_fill(const std::string& prompt, bool background, const json
     if (job) { status = job->name + " is still running."; return; }
 
     const size_t layer = static_cast<size_t>(active_layer());
+    const Image& pixels = doc->layer(layer).pixels;
+    const Mask& sel = doc->selection();
+
+    // A window around the selection rather than the whole layer. Sending the
+    // whole of a big photograph means the service resizes it to what the
+    // model works at, and a small repair comes back with a fraction of the
+    // detail it went out with.
+    const gen::Window w = gen::context_window(sel, pixels.width(), pixels.height(), generate_context);
+    Image crop = raster::crop(pixels, w.box);
+    Mask crop_mask(w.box.x1 - w.box.x0, w.box.y1 - w.box.y0, 0);
+    for (int y = 0; y < crop_mask.height(); ++y)
+        for (int x = 0; x < crop_mask.width(); ++x) {
+            const int sx = w.box.x0 + x, sy = w.box.y0 + y;
+            if (sx >= 0 && sy >= 0 && sx < sel.width() && sy < sel.height()) crop_mask.at(x, y) = sel.at(sx, sy);
+        }
+    if (w.scaled()) {
+        crop = raster::resample(crop, w.width, w.height, raster::Filter::Bicubic);
+        Mask scaled(w.width, w.height, 0);
+        raster::resample_mask(crop_mask.data(), crop_mask.width(), crop_mask.height(),
+                              scaled.data(), scaled.width(), scaled.height());
+        crop_mask = std::move(scaled);
+    }
+
     gen::Request req;
     req.name = "Generative Fill";
-    req.init = doc->layer(layer).pixels;
-    req.region = doc->selection();
-    req.disposition = gen::Disposition::IntoRegion;
-    req.feather = 6.0f;
+    req.init = std::move(crop);
+    req.region = std::move(crop_mask);   // the mask the model is told about, in window pixels
+    req.place = w.box;                   // and where the answer goes back
+    req.place_region = sel;
+    // An instruction model is far better at "remove the dog" than at being
+    // told what should be there through a mask, and the answer is composited
+    // through the selection either way, so its habit of rewriting the whole
+    // frame costs nothing.
+    req.conditioning = generate_instruct ? gen::Conditioning::Reference : gen::Conditioning::Init;
+    req.disposition = generate_new_layer ? gen::Disposition::NewLayer : gen::Disposition::IntoRegion;
+    // Zero asks for a feather in proportion to the selection: eight pixels
+    // is a soft edge on a small repair and nothing at all on one six hundred
+    // pixels across.
+    const raster::Rect sb = sel.bounds();
+    req.feather = generate_feather > 0.0f
+                      ? generate_feather
+                      : std::clamp(0.02f * std::min(sb.x1 - sb.x0, sb.y1 - sb.y0), 4.0f, 48.0f);
+    req.match_tone = generate_match_tone;
     req.revision = doc->revision();
     req.layer = static_cast<int>(layer);
     if (extra) for (const auto& [k, v] : extra->obj) req.params.set(k, v);

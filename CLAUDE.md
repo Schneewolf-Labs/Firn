@@ -531,6 +531,26 @@ docs/    notes on the original: command inventory, module mapping, FORMAT.md
   work is out, so a `Request` records the `revision` and `layer` it was built
   from; a result that comes back to a document that moved must degrade
   visibly rather than paint into the wrong place.
+- **A masked fill sends a window, not the layer**
+  (`gen::context_window`, used by `App::generative_fill`). The service
+  resizes whatever it is given to the model's working size, so sending a
+  6000 pixel photograph to repair 200 pixels of it throws away almost
+  everything that mattered. The window is square, centred on the selection,
+  pushed back inside the layer rather than clipped at an edge, and sized to
+  the model's own resolution where the picture allows; `Request::place` and
+  `place_region` say where the answer goes back and what to composite it
+  through, because `region` by then means the mask the *model* was told
+  about, in window pixels. Two things that are not optional: the answer is
+  composited through the selection (these models rewrite their whole frame),
+  and `gen::match_surroundings` takes out the exposure shift first, measured
+  where the window still agrees with the picture -- without it the fill is a
+  visibly darker patch however softly its edge is feathered.
+  **Asking by instruction beats asking by description** on a model that
+  edits by instruction: "remove the dog" against a reference got a coherent
+  rebuild where `init_image` plus a mask and a description of what should be
+  there got literal, flatly-lit content. Both are offered
+  (`App::generate_instruct`) because an inpainting-only model needs the
+  second.
 - **The Generate palette** (`app/src/ui/GeneratePanel.cpp`, state in
   `ui/GenerateState.h`) asks the server what it is
   (`genhttp::capabilities`, `GET /sdcpp/v1/capabilities`) and builds itself

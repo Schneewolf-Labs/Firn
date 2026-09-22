@@ -247,6 +247,41 @@ void draw_generate_panel(App& app) {
         }
         ImGui::EndTable();
     }
+    // How a masked fill is done. These only affect Fill, so they sit with
+    // the rest of the settings rather than beside the buttons.
+    if (has_selection) {
+        ImGui::SeparatorText("Fill");
+        ImGui::BeginDisabled(!g.caps.takes_refs);
+        if (ImGui::Checkbox("By instruction", &app.generate_instruct) && !g.caps.takes_refs)
+            app.generate_instruct = false;
+        ImGui::EndDisabled();
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+            ImGui::SetTooltip(g.caps.takes_refs
+                ? "On: say what to do (\"remove the dog\"). A model that edits by instruction\nunderstands this far better. Off: say what should be there, through a mask."
+                : "This model does not take a reference image, so it has to be told\nwhat should be there rather than what to do.");
+        ImGui::SetNextItemWidth(110);
+        ImGui::DragFloat("Feather", &app.generate_feather, 0.2f, 0.0f, 64.0f,
+                         app.generate_feather > 0.0f ? "%.0f px" : "automatic");
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("How far the answer is softened back into the picture at the edge of\nthe selection. Automatic scales with the selection, since eight pixels\nis a soft edge on a small repair and nothing at all on a large one.");
+        ImGui::Checkbox("Match exposure", &app.generate_match_tone);
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("These models rewrite the whole window at their own exposure, which\nleaves the filled part visibly darker or warmer. The difference is\nmeasured where the window still agrees with the picture and taken out.");
+        ImGui::Checkbox("On its own layer", &app.generate_new_layer);
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("The answer arrives as a layer of its own, to blend or mask by hand,\nrather than being painted into this one.");
+        // What is actually sent, which is the thing that makes a small repair
+        // in a large picture work at all.
+        if (app.doc && app.active_is_raster()) {
+            const firn::Image& px = app.doc->layer(static_cast<size_t>(app.active_layer())).pixels;
+            const gen::Window w = gen::context_window(app.doc->selection(), px.width(), px.height(), app.generate_context);
+            ImGui::TextDisabled("Sends %dx%d of the picture at %dx%d", w.box.x1 - w.box.x0, w.box.y1 - w.box.y0, w.width, w.height);
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("A window around the selection, not the whole layer: that is what\nkeeps a small repair in a big picture at full resolution.");
+        }
+        ImGui::Separator();
+    }
+
     ImGui::BeginDisabled(!app.doc);
     if (ImGui::SmallButton("Match image") && app.doc) {
         g.width = snap_size(app.doc->width(), g.caps, true);

@@ -6,6 +6,26 @@ section into the next version.
 
 ## Unreleased
 
+### Changed
+- Generative Fill sends a window around the selection instead of the whole
+  layer. The service resizes whatever it is given to what the model works
+  at, so a 500 pixel repair inside a 3000 pixel photograph used to arrive
+  with a sixth of the detail it went out with. A 1024 window centred on the
+  selection is sent instead, at full resolution wherever the picture allows
+  it, and only the selection is taken from the answer. Measured on a 3000px
+  picture: 2.6% of the frame changed, exactly the selection, and the rest
+  is untouched to the byte.
+- A fill can be asked by instruction rather than by description. "Remove the
+  duck" is a far better question for a model that edits by instruction than
+  a description of what should be there, and since only the selection is
+  kept, its habit of rewriting the whole window costs nothing.
+- Fill blending: the feather now scales with the selection unless you set
+  it (eight pixels is a soft edge on a small repair and nothing at all on a
+  large one), the answer can arrive on a layer of its own to blend by hand,
+  and the model's own shift in exposure is measured against the part of the
+  window it did not change and taken back out, which is what otherwise
+  leaves a filled area visibly darker than the picture around it.
+
 ## 0.9.0 (2026-09-22)
 
 ### Added
