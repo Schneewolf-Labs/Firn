@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <cmath>
 #include <cfloat>
 #include <cstdio>
 #include <fstream>
@@ -1004,13 +1005,120 @@ void App::draw_dialogs() {
 
     if (ImGui::BeginPopupModal("New Image", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
         escape();
-        ImGui::InputInt("Width", &new_w);
-        ImGui::InputInt("Height", &new_h);
-        if (new_w < 1) new_w = 1;
-        if (new_h < 1) new_h = 1;
-        if (ImGui::Button("OK") || enter()) { new_document(new_w, new_h); ImGui::CloseCurrentPopup(); }
+        MenuState& ms = *menu_state;
+        // The original's dialog, in the shape Firn can actually back: a
+        // preset list, dimensions in real units against a resolution, what
+        // the first layer is, and what it is filled with -- and the size in
+        // pixels and in memory, which is the number that decides whether an
+        // idea is going to work at all.
+        struct Preset { const char* name; int w, h; float dpi; };
+        static const Preset presets[] = {
+            {"Last used", 0, 0, 0},
+            {"1280 x 720 (720p)", 1280, 720, 96},
+            {"1920 x 1080 (1080p)", 1920, 1080, 96},
+            {"3840 x 2160 (4K)", 3840, 2160, 96},
+            {"1024 x 1024", 1024, 1024, 96},
+            {"512 x 512", 512, 512, 96},
+            {"A4 at 300 dpi", 2480, 3508, 300},
+            {"A4 at 150 dpi", 1240, 1754, 150},
+            {"Letter at 300 dpi", 2550, 3300, 300},
+            {"6 x 4 photo at 300 dpi", 1800, 1200, 300},
+            {"Business card at 300 dpi", 1050, 600, 300},
+        };
+        static const char* unit_names[] = {"Pixels", "Inches", "Centimetres"};
+
+        // Pixels are what the document is made of; the other units are a way
+        // of saying how many, through the resolution.
+        auto per_unit = [&](int units) {
+            const float per_inch = ms.new_res_units == 0 ? ms.new_resolution : ms.new_resolution * 2.54f;
+            return units == 1 ? per_inch : units == 2 ? per_inch / 2.54f : 1.0f;
+        };
+        auto to_pixels = [&](float v) { return std::max(1, static_cast<int>(std::lround(v * per_unit(ms.new_units)))); };
+
+        ImGui::SetNextItemWidth(260);
+        if (ImGui::Combo("Presets", &ms.new_preset, [](void*, int i, const char** out) {
+                *out = presets[i].name; return true; }, nullptr, IM_ARRAYSIZE(presets))) {
+            const Preset& p = presets[ms.new_preset];
+            if (p.w > 0) {
+                ms.new_units = 0;
+                ms.new_res_units = 0;
+                ms.new_resolution = p.dpi;
+                ms.new_dim_w = static_cast<float>(p.w);
+                ms.new_dim_h = static_cast<float>(p.h);
+            } else {
+                ms.new_units = 0;
+                ms.new_dim_w = static_cast<float>(config.new_width);
+                ms.new_dim_h = static_cast<float>(config.new_height);
+            }
+        }
+
+        ImGui::SeparatorText("Image dimensions");
+        const char* fmt = ms.new_units == 0 ? "%.0f" : "%.2f";
+        ImGui::SetNextItemWidth(120);
+        if (ImGui::InputFloat("Width", &ms.new_dim_w, 0, 0, fmt)) ms.new_preset = 0;
         ImGui::SameLine();
-        if (ImGui::Button("Cancel")) ImGui::CloseCurrentPopup();
+        ImGui::SetNextItemWidth(130);
+        if (ImGui::Combo("Units", &ms.new_units, unit_names, 3)) {
+            // Changing units keeps the picture the same size rather than
+            // reinterpreting the number, which would silently resize it.
+            const float px_w = ms.new_dim_w * per_unit(ms.new_units == 0 ? 1 : 0);
+            (void)px_w;
+        }
+        ImGui::SetNextItemWidth(120);
+        if (ImGui::InputFloat("Height", &ms.new_dim_h, 0, 0, fmt)) ms.new_preset = 0;
+        ImGui::SetNextItemWidth(120);
+        if (ImGui::InputFloat("Resolution", &ms.new_resolution, 0, 0, "%.0f")) ms.new_preset = 0;
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(130);
+        ImGui::Combo("##resunits", &ms.new_res_units, "Pixels/inch\0Pixels/cm\0");
+        ms.new_resolution = std::clamp(ms.new_resolution, 1.0f, 10000.0f);
+        ms.new_dim_w = std::max(ms.new_dim_w, 0.01f);
+        ms.new_dim_h = std::max(ms.new_dim_h, 0.01f);
+
+        const int px_w = std::min(to_pixels(ms.new_dim_w), 30000);
+        const int px_h = std::min(to_pixels(ms.new_dim_h), 30000);
+
+        ImGui::SeparatorText("Image characteristics");
+        ImGui::RadioButton("Raster background", &ms.new_background, 0);
+        ImGui::SameLine();
+        ImGui::RadioButton("Vector background", &ms.new_background, 1);
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("A vector layer above the background, ready to draw shapes on.");
+        ImGui::SetNextItemWidth(190);
+        ImGui::Combo("Depth", &ms.new_depth, "8 bits a channel\0" "16 bits a channel\0");
+        ImGui::Checkbox("Transparent", &ms.new_transparent);
+        if (!ms.new_transparent) {
+            ImGui::SameLine();
+            ImGui::ColorEdit3("Colour", ms.new_color, ImGuiColorEditFlags_NoInputs);
+        }
+
+        // What it costs. The original shows this and it is the number that
+        // decides whether an idea is going to work at all.
+        const double bytes = static_cast<double>(px_w) * px_h * 4.0 * (ms.new_depth == 1 ? 2.0 : 1.0) *
+                             (ms.new_background == 1 ? 2.0 : 1.0);
+        ImGui::Separator();
+        ImGui::Text("%d x %d pixels", px_w, px_h);
+        ImGui::SameLine();
+        ImGui::TextDisabled(bytes >= 1024.0 * 1024.0 ? "   %.1f MB" : "   %.0f kB",
+                            bytes >= 1024.0 * 1024.0 ? bytes / (1024.0 * 1024.0) : bytes / 1024.0);
+        if (ms.new_units != 0)
+            ImGui::TextDisabled("%.2f x %.2f %s at %.0f %s", ms.new_dim_w, ms.new_dim_h,
+                                ms.new_units == 1 ? "in" : "cm", ms.new_resolution,
+                                ms.new_res_units == 0 ? "per inch" : "per cm");
+
+        ImGui::Separator();
+        if (ImGui::Button("OK", ImVec2(90, 0)) || enter()) {
+            auto c = [](float f) { return static_cast<uint8_t>(std::clamp(f, 0.0f, 1.0f) * 255.0f + 0.5f); };
+            const Color fill = ms.new_transparent ? Color{0, 0, 0, 0}
+                                                  : Color{c(ms.new_color[0]), c(ms.new_color[1]), c(ms.new_color[2]), 255};
+            new_document(px_w, px_h, fill, ms.new_background == 1, ms.new_depth == 1 ? 16 : 8);
+            config.new_width = px_w;
+            config.new_height = px_h;
+            new_w = px_w;
+            new_h = px_h;
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel", ImVec2(90, 0))) ImGui::CloseCurrentPopup();
         ImGui::EndPopup();
     }
 

@@ -73,21 +73,28 @@ std::vector<Action> build() {
     };
 
     // --- documents ---
-    add("file.new", "Create an image", {{"width", "number", "pixels", false, nullptr, "800"}, {"height", "number", "pixels", false, nullptr, "600"}, {"color", "string", "#RRGGBB background, or transparent", false, nullptr, "white"}},
+    add("file.new", "Create an image",
+        {{"width", "number", "pixels", false, nullptr, "800"},
+         {"height", "number", "pixels", false, nullptr, "600"},
+         {"color", "string", "#RRGGBB background, or transparent", false, nullptr, "white"},
+         {"vector", "boolean", "Start with a vector layer above the background", false, nullptr, "false"},
+         {"depth", "number", "Bits a channel, 8 or 16", false, nullptr, "8", R"({"minimum":8,"maximum":16})"}},
         [](App& app, const Value& p, bool*) {
-            app.new_document(std::max(1, num(p, "width", 800)), std::max(1, num(p, "height", 600)));
+            // The colour decides the first layer, so it is settled before the
+            // document is made rather than painted over afterwards: a
+            // transparent image must not end up with a Background layer,
+            // which is the one layer that cannot hold transparency.
             const std::string c = str(p, "color");
-            if (app.doc && !c.empty()) {
-                firn::Layer& L = app.doc->layer(0);
-                if (c == "transparent") { L.pixels = firn::Image(app.doc->width(), app.doc->height(), {0, 0, 0, 0}); L.background = false; }
-                else {
-                    unsigned v = 0;
-                    if (std::sscanf(c.c_str() + (c[0] == '#' ? 1 : 0), "%6x", &v) == 1)
-                        L.pixels = firn::Image(app.doc->width(), app.doc->height(),
-                                               {static_cast<uint8_t>(v >> 16), static_cast<uint8_t>(v >> 8), static_cast<uint8_t>(v), 255});
-                }
-                app.doc->touch();
+            firn::Color fill{255, 255, 255, 255};
+            if (c == "transparent") fill = {0, 0, 0, 0};
+            else if (!c.empty() && c != "white") {
+                unsigned v = 0;
+                if (std::sscanf(c.c_str() + (c[0] == '#' ? 1 : 0), "%6x", &v) == 1)
+                    fill = {static_cast<uint8_t>(v >> 16), static_cast<uint8_t>(v >> 8), static_cast<uint8_t>(v), 255};
             }
+            app.new_document(std::max(1, num(p, "width", 800)), std::max(1, num(p, "height", 600)), fill,
+                             p.get("vector").as_bool(false),
+                             static_cast<int>(p.get("depth").as_number(8)) == 16 ? 16 : 8);
             return ok_json();
         });
     add("file.open", "Open an image file", {{"path", "string", "file to open", true}},

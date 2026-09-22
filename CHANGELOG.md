@@ -7,6 +7,15 @@ section into the next version.
 ## Unreleased
 
 ### Added
+- The New Image dialog asks what the original's did. Presets for the sizes
+  people actually start from, dimensions in inches or centimetres against a
+  resolution as well as in pixels, a choice of a raster or a vector first
+  layer, eight or sixteen bits a channel, a background colour or
+  transparency -- and the size in pixels and in memory, which is the number
+  that decides whether an idea is going to work at all. It had been two
+  boxes and an OK button. `file.new` takes `vector` and `depth` to match,
+  and a transparent image no longer ends up with a Background layer, which
+  is the one layer that cannot hold transparency.
 - Image > Upscale with Model enlarges the picture with an ESRGAN model on
   the image model server -- 512 to 2048 in about two seconds a layer, and
   far better than any filter on drawn and anime artwork. Every raster layer

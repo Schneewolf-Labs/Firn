@@ -53,6 +53,8 @@ Batch-safe: no.
 | `width` | number | no | `800` | pixels |
 | `height` | number | no | `600` | pixels |
 | `color` | string | no | `"white"` | #RRGGBB background, or transparent |
+| `vector` | boolean | no | `false` | Start with a vector layer above the background |
+| `depth` | number | no | `8` | Bits a channel, 8 or 16 |
 
 
 ### `file.open`

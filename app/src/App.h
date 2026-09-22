@@ -611,7 +611,9 @@ struct App {
     bool quit = false;
 
     // Actions (implemented in App.cpp)
-    void new_document(int w, int h);
+    // `fill` with zero alpha makes the first layer transparent rather than a
+    // Background layer, which is what the original's Transparent box does.
+    void new_document(int w, int h, firn::Color fill = {255, 255, 255, 255}, bool vector = false, int bits = 8);
     bool open_document(const std::string& path);
     bool save_document(const std::string& path);
     // The same save with the writing on a worker thread, for the places a

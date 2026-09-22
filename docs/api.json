@@ -10,10 +10,22 @@
             "description": "#RRGGBB background, or transparent",
             "type": "string"
           },
+          "depth": {
+            "default": 8,
+            "description": "Bits a channel, 8 or 16",
+            "maximum": 16,
+            "minimum": 8,
+            "type": "number"
+          },
           "height": {
             "default": 600,
             "description": "pixels",
             "type": "number"
+          },
+          "vector": {
+            "default": false,
+            "description": "Start with a vector layer above the background",
+            "type": "boolean"
           },
           "width": {
             "default": 800,

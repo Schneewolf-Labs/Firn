@@ -26,4 +26,16 @@ struct MenuState {
     bool generate_whole = false;        // instruction editing rather than filling a selection
     firn::io::TubeInfo tube_export{};
     bool tube_export_ready = false;     // the grid has been sized to this image
+    // File > New. The original's dialog in the shape Firn can actually back:
+    // a preset list, dimensions in real units against a resolution, what the
+    // first layer is, and what it is filled with.
+    int new_preset = 0;
+    int new_units = 0;          // 0 pixels, 1 inches, 2 centimetres
+    float new_dim_w = 800, new_dim_h = 600;   // in `new_units`
+    float new_resolution = 96.0f;
+    int new_res_units = 0;      // 0 per inch, 1 per centimetre
+    int new_background = 0;     // 0 raster, 1 vector
+    int new_depth = 0;          // 0 eight bits a channel, 1 sixteen
+    bool new_transparent = false;
+    float new_color[3] = {1.0f, 1.0f, 1.0f};
 };

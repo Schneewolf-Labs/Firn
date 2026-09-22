@@ -260,11 +260,24 @@ void App::request_quit() {
     quit = true;
 }
 
-void App::new_document(int w, int h) {
+void App::new_document(int w, int h, Color fill, bool vector, int bits) {
     auto d = std::make_unique<Document>(w, h);
-    Layer& bg = d->add_layer("Background");
-    bg.background = true;
-    bg.pixels.fill({255, 255, 255, 255});
+    // A transparent first layer is not a Background layer: the Background is
+    // the one thing in the stack that cannot hold transparency, so asking for
+    // both is a contradiction.
+    const bool opaque = fill.a == 255;
+    Layer& bg = d->add_layer(opaque ? "Background" : "Raster 1");
+    bg.background = opaque;
+    bg.pixels.fill(fill);
+    if (bits == 16) d->set_bit_depth(16);
+    if (vector) {
+        auto v = std::make_unique<Layer>();
+        v->name = "Vector 1";
+        v->type = LayerType::Vector;
+        v->pixels = Image(w, h, {0, 0, 0, 0});
+        d->insert_layer(std::move(v), d->layer_count());
+        d->set_active_layer(static_cast<int>(d->layer_count()) - 1);
+    }
     add_document(std::move(d), "");
     status = "New image " + std::to_string(w) + "x" + std::to_string(h);
 }

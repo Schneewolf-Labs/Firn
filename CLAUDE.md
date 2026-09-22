@@ -531,6 +531,14 @@ docs/    notes on the original: command inventory, module mapping, FORMAT.md
   work is out, so a `Request` records the `revision` and `layer` it was built
   from; a result that comes back to a document that moved must degrade
   visibly rather than paint into the wrong place.
+- **The Background layer cannot hold transparency**, so "transparent" and
+  "Background" are a contradiction: `App::new_document` names the first
+  layer "Raster 1" and clears `Layer::background` when the fill has no
+  alpha. The New Image dialog (Menu.cpp) is modelled on the original's,
+  measured from it rather than remembered -- presets, dimensions in real
+  units against a resolution, the first layer's kind, depth, fill, and the
+  memory it will take. Units are a way of saying how many pixels: the
+  resolution is not stored on the Document, which has no notion of one.
 - **Upscaling with a model** (`App::upscale_image`, `genhttp::upscale`) goes
   to `POST /sdcpp/v1/upscale`, which is **a route this project added to
   stable-diffusion.cpp** (branch `upscale-endpoint` in the local checkout);
