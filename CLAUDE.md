@@ -551,8 +551,11 @@ docs/    notes on the original: command inventory, module mapping, FORMAT.md
   resampled here and put back; and because undo and redo run a command's
   `transform` again, the round trips all happen first and
   `ResizeToCommand` only hands the finished pixels over.
-  The `upscalers` list in capabilities also carries the plain scaling
-  filters, so take only the entries marked `"model": true`.
+  The `upscalers` list in capabilities also carries the plain scaling filters
+  and model-backed entries that are not RGB ESRGAN models, so take the ones
+  marked `"image_upscale": true` -- `"model": true` is the older, coarser
+  flag and only separates models from filters, not compatible models from
+  incompatible ones.
 - **A masked fill sends a window, not the layer**
   (`gen::context_window`, used by `App::generative_fill`). The service
   resizes whatever it is given to the model's working size, so sending a

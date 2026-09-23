@@ -183,12 +183,17 @@ bool capabilities(const std::string& base, Capabilities* out, std::string* err) 
         }
     };
     strings(v.get("samplers"), &out->samplers, "name");
-    // Only the model-backed ones: the list also carries the plain scaling
-    // filters ("None", "Lanczos", the latent modes), which are choices for
-    // the second stage of a generation and not things to run on their own.
+    // Only the ones that can be run on a picture by themselves. The list
+    // also carries the plain scaling filters ("None", "Lanczos", the latent
+    // modes), which are choices for the second stage of a generation, and
+    // model-backed entries that are not RGB ESRGAN models and so cannot do
+    // this either. `image_upscale` is the server's answer to exactly that
+    // question and is preferred; `model` is the older, coarser flag.
     for (size_t i = 0; i < v.get("upscalers").size(); ++i) {
         const json::Value& e = v.get("upscalers")[i];
-        if (!e.get("model").as_bool(false)) continue;
+        const bool usable = e.find("image_upscale") ? e.get("image_upscale").as_bool(false)
+                                                    : e.get("model").as_bool(false);
+        if (!usable) continue;
         if (std::string name = e.get("name").as_string(""); !name.empty()) out->upscalers.push_back(std::move(name));
     }
     out->can_upscale = v.get("upscale").as_bool(false) && !out->upscalers.empty();
